@@ -1,0 +1,33 @@
+{% extends 'core/base.html' %}
+
+{% block title %}Home{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto">
+    <h1 class="text-3xl font-bold mb-8">Welcome to Athlete Platform</h1>
+    
+    {% if user.is_authenticated %}
+        {% if user.role == 'COACH' %}
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div class="bg-white p-6 rounded-lg shadow">
+                    <h2 class="text-xl font-semibold mb-4">Your Teams</h2>
+                    {% if user.coached_teams.all %}
+                        <ul class="space-y-2">
+                        {% for team in user.coached_teams.all %}
+                            <li class="p-2 hover:bg-gray-50 rounded">
+                                {{ team.name }}
+                            </li>
+                        {% endfor %}
+                        </ul>
+                    {% else %}
+                        <p class="text-gray-600">No teams yet.</p>
+                    {% endif %}
+                    <a href="#" class="mt-4 inline-block bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">
+                        Create New Team
+                    </a>
+                </div>
+            </div>
+        {% endif %}
+    {% endif %}
+</div>
+{% endblock %} 

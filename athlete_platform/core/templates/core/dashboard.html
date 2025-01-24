@@ -1,0 +1,64 @@
+{% extends 'core/base.html' %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    {% if messages %}
+    <div class="mb-8">
+        {% for message in messages %}
+        <div class="p-4 mb-4 rounded-md {% if message.tags == 'error' %}bg-red-50 text-red-700{% elif message.tags == 'info' %}bg-blue-50 text-blue-700{% else %}bg-green-50 text-green-700{% endif %}">
+            {{ message }}
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <!-- Update Data Button -->
+    <div class="flex justify-end mb-6">
+        <button id="updateDataBtn" class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded flex items-center">
+            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+            Update Data
+        </button>
+    </div>
+
+    <!-- Biometric Data Display -->
+    {% if biometric_data %}
+    <div class="bg-white shadow overflow-hidden sm:rounded-lg">
+        <div class="px-4 py-5 sm:px-6">
+            <h3 class="text-lg leading-6 font-medium text-gray-900">Latest Biometric Data</h3>
+            <p class="mt-1 max-w-2xl text-sm text-gray-500">Recorded on {{ biometric_data.date }}</p>
+        </div>
+        <div class="border-t border-gray-200">
+            <dl>
+                <!-- Add your biometric data display here -->
+            </dl>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<script>
+document.getElementById('updateDataBtn').addEventListener('click', async function() {
+    try {
+        const response = await fetch('/update-data/', {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
+            },
+        });
+        
+        const data = await response.json();
+        
+        if (response.ok) {
+            location.reload();
+        } else {
+            alert(`Error: ${data.error}\n${data.details || ''}`);
+        }
+    } catch (error) {
+        alert('Failed to update data. Please try again.');
+        console.error('Update error:', error);
+    }
+});
+</script>
+{% endblock %} 

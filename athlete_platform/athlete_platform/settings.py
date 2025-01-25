@@ -56,6 +56,7 @@ INSTALLED_APPS = [
     'crispy_tailwind',
 
     'corsheaders',
+    'storages',  # Make sure this is here
 ]
 
 MIDDLEWARE = [
@@ -145,16 +146,29 @@ AWS_ACCESS_KEY_ID = os.getenv('AWS_ACCESS_KEY_ID')
 AWS_SECRET_ACCESS_KEY = os.getenv('AWS_SECRET_ACCESS_KEY')
 AWS_STORAGE_BUCKET_NAME = os.getenv('AWS_STORAGE_BUCKET_NAME')
 AWS_S3_REGION_NAME = os.getenv('AWS_S3_REGION_NAME', 'us-east-1')
-AWS_DEFAULT_ACL = None
+AWS_S3_CUSTOM_DOMAIN = f'{AWS_STORAGE_BUCKET_NAME}.s3.amazonaws.com'
+AWS_DEFAULT_ACL = 'public-read'
 AWS_S3_OBJECT_PARAMETERS = {'CacheControl': 'max-age=86400'}
+
+# Static files configuration
+STATIC_URL = f'https://{AWS_S3_CUSTOM_DOMAIN}/static/'
+STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
+STATICFILES_DIRS = [
+    os.path.join(BASE_DIR, 'static'),
+]
 
 # Garmin Settings
 GARMIN_USERNAME = os.getenv('GARMIN_USERNAME')
 GARMIN_PASSWORD = os.getenv('GARMIN_PASSWORD')
 
-# S3 Static settings
-STATICFILES_STORAGE = 'storages.backends.s3boto3.S3Boto3Storage'
-STATIC_URL = f'https://{AWS_STORAGE_BUCKET_NAME}.s3.amazonaws.com/static/'
+# Use different storage for development and production
+if DEBUG:
+    # Use local storage for development
+    STATICFILES_STORAGE = 'django.contrib.staticfiles.storage.StaticFilesStorage'
+else:
+    # Use S3 for production
+    STATICFILES_STORAGE = 'storages.backends.s3boto3.S3Boto3Storage'
+    STATICFILES_LOCATION = 'static'
 
 # S3 Media settings
 DEFAULT_FILE_STORAGE = 'storages.backends.s3boto3.S3Boto3Storage'
@@ -231,6 +245,15 @@ CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",  # Vite default port
 ]
+
+CSRF_TRUSTED_ORIGINS = [
+    "http://localhost:5173",  # Vite default port
+]
+
+CORS_ALLOWED_ORIGIN_REGEXES = [
+    r"^http://localhost:\d+$",  # Allows all localhost ports
+]
+
 CORS_ALLOW_METHODS = [
     'DELETE',
     'GET',
@@ -252,6 +275,8 @@ CORS_ALLOW_HEADERS = [
 ]
 
 # Cookie settings
+CSRF_COOKIE_NAME = "csrftoken"
+CSRF_COOKIE_HTTPONLY = False  # Must be False to access it via JavaScript
 CSRF_COOKIE_SAMESITE = 'Lax'
 SESSION_COOKIE_SAMESITE = 'Lax'
 CSRF_COOKIE_HTTPONLY = False

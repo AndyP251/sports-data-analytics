@@ -18,6 +18,8 @@ from django.contrib import admin
 from django.urls import path, include
 from django.contrib.auth import views as auth_views
 from core import views as core_views
+from django.conf import settings
+from django.conf.urls.static import static
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -27,5 +29,9 @@ urlpatterns = [
     path('register/', core_views.register, name='register'),
     path('accounts/', include('allauth.urls')),
     path('update-data/', core_views.update_athlete_data, name='update_athlete_data'),
-    path('', include('core.urls')),  # This will include all your API endpoints
+    path('', include('core.urls')),  # API endpoints
 ]
+
+# debug check to ensure static files are served in development
+if settings.DEBUG:
+    urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)

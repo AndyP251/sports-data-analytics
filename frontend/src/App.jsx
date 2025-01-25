@@ -1,64 +1,9 @@
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom'
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
 import { useState } from 'react'
-
-function Login({ setIsAuthenticated }) {
-  const [formData, setFormData] = useState({
-    username: '',
-    password: '',
-  })
-  const [error, setError] = useState('')
-
-  const handleSubmit = async (e) => {
-    e.preventDefault()
-    try {
-      const response = await fetch('http://localhost:8000/api/login/', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        credentials: 'include',
-        body: JSON.stringify(formData)
-      })
-      
-      if (response.ok) {
-        setIsAuthenticated(true)
-      } else {
-        const data = await response.json()
-        setError(data.error || 'Login failed')
-      }
-    } catch (error) {
-      setError('Login failed')
-    }
-  }
-
-  return (
-    <div className="login-container">
-      <h2>Welcome Back</h2>
-      {error && <div className="error-message">{error}</div>}
-      <form onSubmit={handleSubmit}>
-        <div>
-          <label>Username</label>
-          <input
-            type="text"
-            value={formData.username}
-            onChange={(e) => setFormData({...formData, username: e.target.value})}
-            placeholder="Enter your username"
-          />
-        </div>
-        <div>
-          <label>Password</label>
-          <input
-            type="password"
-            value={formData.password}
-            onChange={(e) => setFormData({...formData, password: e.target.value})}
-            placeholder="Enter your password"
-          />
-        </div>
-        <button type="submit">Sign In</button>
-      </form>
-    </div>
-  )
-}
+import Login from './components/Login'
+import Dashboard from './components/Dashboard'
+import './styles/Auth.css'
+import './styles/Dashboard.css'
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false)
@@ -67,8 +12,24 @@ function App() {
     <Router>
       <Routes>
         <Route 
+          path="/login" 
+          element={
+            isAuthenticated ? 
+              <Navigate to="/dashboard" /> : 
+              <Login setIsAuthenticated={setIsAuthenticated} />
+          } 
+        />
+        <Route 
+          path="/dashboard" 
+          element={
+            isAuthenticated ? 
+              <Dashboard /> : 
+              <Navigate to="/login" />
+          } 
+        />
+        <Route 
           path="/" 
-          element={<Login setIsAuthenticated={setIsAuthenticated} />} 
+          element={<Navigate to={isAuthenticated ? "/dashboard" : "/login"} />} 
         />
       </Routes>
     </Router>

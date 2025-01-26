@@ -4,11 +4,15 @@ from django.conf import settings
 from .models import User, Athlete
 from .services.storage_service import UserStorageService
 
+
 @receiver(post_save, sender=User)
 def create_athlete_profile(sender, instance, created, **kwargs):
-    if created and instance.role == 'ATHLETE':
-        Athlete.objects.create(user=instance) 
+    if created:
+        Athlete.objects.create(user=instance)
 
+@receiver(post_save, sender=User)
+def save_athlete_profile(sender, instance, **kwargs):
+    instance.athlete.save()
 
 @receiver(post_save, sender=User)
 def create_user_storage(sender, instance, created, **kwargs):

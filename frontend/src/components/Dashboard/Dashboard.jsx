@@ -1,6 +1,35 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import './Dashboard.css';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Line } from 'react-chartjs-2';
+import { 
+    Chart as ChartJS, 
+    CategoryScale, 
+    LinearScale, 
+    PointElement, 
+    LineElement,
+    Title,
+    Tooltip,
+    Legend 
+} from 'chart.js';
+import { FaHeartbeat, FaBed, FaRunning, FaWeight, FaChartLine } from 'react-icons/fa';
+import { BiRefresh } from 'react-icons/bi';
+import LoadingSpinner from '../common/LoadingSpinner';
+import MetricCard from './components/MetricCard';
+import HealthScore from './components/HealthScore';
+import WeeklyProgress from './components/WeeklyProgress';
+
+// Register ChartJS components
+ChartJS.register(
+    CategoryScale,
+    LinearScale,
+    PointElement,
+    LineElement,
+    Title,
+    Tooltip,
+    Legend
+);
 
 // Add this function to get CSRF token from cookie
 function getCookie(name) {
@@ -27,6 +56,8 @@ const Dashboard = () => {
     const [biometricData, setBiometricData] = useState(null);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState(null);
+    const [activeTab, setActiveTab] = useState('overview');
+    const [showUpdateAnimation, setShowUpdateAnimation] = useState(false);
 
     const fetchDashboardData = async () => {
         console.log('Fetching dashboard data...');
@@ -84,57 +115,126 @@ const Dashboard = () => {
         }
     };
 
+    const calculateHealthScore = (data) => {
+        if (!data) return 0;
+        // Calculate a health score based on various metrics
+        let score = 0;
+        if (data.heart_rate?.latest) score += 25;
+        if (data.sleep?.duration >= 7) score += 25;
+        if (data.activity?.steps > 8000) score += 25;
+        if (data.heart_rate?.average) score += 25;
+        return score;
+    };
+
     useEffect(() => {
         fetchDashboardData();
     }, []);
 
     return (
-        <div className="dashboard-container">
+        <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="dashboard-container"
+        >
+            {/* Header Section */}
             <div className="dashboard-header">
-                <h1>Athlete Dashboard</h1>
-                <button 
+                <div className="header-left">
+                    <h1>Athlete Dashboard</h1>
+                    <p className="subtitle">Welcome back, {biometricData?.athlete_name}</p>
+                </div>
+                <motion.button 
                     className="update-button"
                     onClick={handleUpdateData}
                     disabled={isLoading}
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
                 >
-                    {isLoading ? 'Updating...' : 'Update Garmin Data'}
-                </button>
+                    <BiRefresh className={`refresh-icon ${isLoading ? 'spinning' : ''}`} />
+                    {isLoading ? 'Updating...' : 'Update Data'}
+                </motion.button>
             </div>
 
-            {error && (
-                <div className="error-message">
-                    {error}
-                </div>
-            )}
+            {/* Error Message */}
+            <AnimatePresence>
+                {error && (
+                    <motion.div 
+                        className="error-message"
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: 'auto', opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                    >
+                        {error}
+                    </motion.div>
+                )}
+            </AnimatePresence>
 
+            {/* Main Content */}
             {biometricData ? (
-                <div className="dashboard-grid">
-                    <div className="data-card">
-                        <h3>Heart Rate</h3>
-                        <p>Latest: {biometricData.heart_rate?.latest || 'N/A'} bpm</p>
-                        <p>Average: {biometricData.heart_rate?.average || 'N/A'} bpm</p>
-                    </div>
-                    
-                    <div className="data-card">
-                        <h3>Sleep</h3>
-                        <p>Duration: {biometricData.sleep?.duration || 'N/A'} hours</p>
-                        <p>Quality: {biometricData.sleep?.quality || 'N/A'}</p>
+                <div className="dashboard-content">
+                    {/* Health Score Section */}
+                    <div className="health-score-section">
+                        <HealthScore 
+                            score={calculateHealthScore(biometricData)}
+                            className="health-score-widget"
+                        />
                     </div>
 
-                    <div className="data-card">
-                        <h3>Activity</h3>
-                        <p>Steps: {biometricData.activity?.steps || 'N/A'}</p>
-                        <p>Distance: {biometricData.activity?.distance || 'N/A'} km</p>
+                    {/* Metrics Grid */}
+                    <div className="metrics-grid">
+                        <MetricCard
+                            icon={<FaHeartbeat />}
+                            title="Heart Rate"
+                            mainValue={`${biometricData.heart_rate?.latest || 'N/A'}`}
+                            unit="bpm"
+                            subValue={`Avg: ${biometricData.heart_rate?.average || 'N/A'} bpm`}
+                            trend={+5}
+                        />
+                        <MetricCard
+                            icon={<FaBed />}
+                            title="Sleep"
+                            mainValue={`${biometricData.sleep?.duration || 'N/A'}`}
+                            unit="hours"
+                            subValue={`Quality: ${biometricData.sleep?.quality || 'N/A'}`}
+                            trend={-2}
+                        />
+                        <MetricCard
+                            icon={<FaRunning />}
+                            title="Activity"
+                            mainValue={`${biometricData.activity?.steps || 'N/A'}`}
+                            unit="steps"
+                            subValue={`${biometricData.activity?.distance || 'N/A'} km`}
+                            trend={+12}
+                        />
                     </div>
 
-                    {/* Add more data cards as needed */}
+                    {/* Weekly Progress Chart */}
+                    <WeeklyProgress data={biometricData.weekly_data} />
+
+                    {/* Detailed Stats Tabs */}
+                    <div className="detailed-stats">
+                        <div className="tabs">
+                            {['overview', 'performance', 'recovery', 'nutrition'].map(tab => (
+                                <button
+                                    key={tab}
+                                    className={`tab ${activeTab === tab ? 'active' : ''}`}
+                                    onClick={() => setActiveTab(tab)}
+                                >
+                                    {tab.charAt(0).toUpperCase() + tab.slice(1)}
+                                </button>
+                            ))}
+                        </div>
+                        <div className="tab-content">
+                            {/* Tab content will be rendered based on activeTab */}
+                        </div>
+                    </div>
                 </div>
             ) : !error && (
-                <div className="loading">
-                    Loading dashboard data...
+                <div className="loading-container">
+                    <LoadingSpinner />
+                    <p>Loading your dashboard...</p>
                 </div>
             )}
-        </div>
+        </motion.div>
     );
 };
 

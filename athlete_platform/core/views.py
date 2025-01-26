@@ -7,7 +7,7 @@ from .utils.s3_utils import S3Utils
 from .models import Athlete, BiometricData
 from django.http import JsonResponse
 from .utils.garmin_utils import GarminDataCollector
-from django.views.decorators.http import require_POST
+from django.views.decorators.http import require_POST, require_http_methods
 from datetime import datetime
 from django.contrib.auth import get_user_model
 from django.contrib.auth import authenticate
@@ -16,6 +16,11 @@ import logging
 import boto3
 from botocore.exceptions import ClientError
 import json
+from .services.athlete_service import AthleteDataSyncService
+from .services.data_pipeline_service import DataPipelineService
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import IsAuthenticated
+from django.views.decorators.csrf import ensure_csrf_cookie
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -45,38 +50,23 @@ def register(request):
     return render(request, 'registration/register.html', {'form': form})
 
 @login_required
-def dashboard(request):
-    context = {}
+def dashboard_view(request):
     try:
-        # Try to get the athlete data
-        athlete = Athlete.objects.get(user=request.user)
-        latest_biometric = BiometricData.objects.filter(athlete=athlete).first()
+        athlete = request.user.athlete
         
-        if latest_biometric:
-            context['biometric_data'] = latest_biometric
-        else:
-            messages.info(request, "No biometric data found. Please update your data.")
-            
-        # Try to get historical data from S3
-        try:
-            historical_data = get_s3_data(athlete)
-            context['historical_data'] = historical_data
-        except ClientError as e:
-            if e.response['Error']['Code'] == 'NoSuchKey':
-                messages.info(request, "No historical data found. Starting fresh tracking.")
-                logger.info(f"No historical data found for athlete {athlete.id}")
-            else:
-                messages.error(request, "Error retrieving historical data. Please try again later.")
-                logger.error(f"S3 error for athlete {athlete.id}: {str(e)}")
+        # Initialize the sync service and get dashboard data
+        sync_service = AthleteDataSyncService()
+        dashboard_data = sync_service.sync_athlete_data(athlete)
         
-    except Athlete.DoesNotExist:
-        messages.error(request, "Athlete profile not found. Please contact support.")
-        logger.error(f"No athlete profile found for user {request.user.id}")
-    except Exception as e:
-        messages.error(request, "An unexpected error occurred. Please try again later.")
-        logger.error(f"Dashboard error for user {request.user.id}: {str(e)}")
-    
-    return render(request, 'core/dashboard.html', context)
+        return render(request, 'core/dashboard.html', {
+            'biometric_data': dashboard_data['biometric_data'],
+            'performance_data': dashboard_data['performance_data']
+        })
+    except AttributeError:
+        # Handle case where user doesn't have an associated athlete
+        return render(request, 'core/error.html', {
+            'error_message': 'No athlete profile found for this user.'
+        })
 
 def get_s3_data(athlete):
     """Retrieve athlete data from S3"""
@@ -203,4 +193,72 @@ def update_data(request):
         return JsonResponse({
             'error': 'An unexpected error occurred',
             'details': str(e)
+        }, status=500)
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def dashboard_data(request):
+    logger.info(f"Dashboard data requested for user: {request.user.id}")
+    try:
+        athlete = request.user.athlete
+        logger.info(f"Found athlete profile for user: {request.user.id}")
+        
+        # Fetch the latest biometric data
+        latest_data = BiometricData.objects.filter(athlete=athlete).order_by('-date').first()
+        
+        if latest_data:
+            logger.info(f"Found latest biometric data for athlete: {athlete.id}")
+            data = {
+                'heart_rate': {
+                    'latest': latest_data.resting_heart_rate,
+                    'average': latest_data.hrv,
+                },
+                'sleep': {
+                    'duration': float(latest_data.sleep_hours),
+                    'quality': 'Good' if latest_data.sleep_hours >= 7 else 'Poor',
+                },
+                'activity': {
+                    'steps': 0,
+                    'distance': 0,
+                }
+            }
+        else:
+            logger.warning(f"No biometric data found for athlete: {athlete.id}")
+            data = {
+                'heart_rate': {'latest': None, 'average': None},
+                'sleep': {'duration': None, 'quality': None},
+                'activity': {'steps': None, 'distance': None}
+            }
+            
+        return JsonResponse({'success': True, 'data': data})
+    except Exception as e:
+        logger.error(f"Error fetching dashboard data: {str(e)}", exc_info=True)
+        return JsonResponse({'success': False, 'error': str(e)}, status=500)
+
+@ensure_csrf_cookie
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def update_garmin_data(request):
+    logger.info(f"Garmin data update requested for user: {request.user.id}")
+    try:
+        athlete = request.user.athlete
+        logger.info(f"Found athlete profile, initiating data pipeline for athlete: {athlete.id}")
+        
+        pipeline_service = DataPipelineService(athlete)
+        success, message = pipeline_service.update_athlete_data()
+        
+        if success:
+            logger.info(f"Successfully updated Garmin data for athlete: {athlete.id}")
+        else:
+            logger.error(f"Failed to update Garmin data for athlete: {athlete.id}. Message: {message}")
+        
+        return JsonResponse({
+            'success': success,
+            'message': message
+        })
+    except Exception as e:
+        logger.error(f"Error updating Garmin data: {str(e)}", exc_info=True)
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
         }, status=500)

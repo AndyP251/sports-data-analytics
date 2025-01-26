@@ -2,14 +2,22 @@ from django.contrib.auth.models import AbstractUser
 from django.db import models
 from django.core.validators import MinValueValidator, MaxValueValidator
 from django.utils import timezone
+import uuid
 
 class User(AbstractUser):
+   
+
+    id = models.UUIDField(
+        primary_key=True,
+        default=uuid.uuid4,
+        editable=False,
+        help_text="Unique identifier for the user"
+    )
     ROLE_CHOICES = [
         ('ATHLETE', 'Athlete'),
         ('COACH', 'Coach'),
         ('ADMIN', 'Admin'),
     ]
-    
     role = models.CharField(max_length=10, choices=ROLE_CHOICES, default='ATHLETE')
     phone_number = models.CharField(max_length=15, blank=True, null=True)
     date_of_birth = models.DateField(null=True, blank=True)
@@ -32,6 +40,29 @@ class User(AbstractUser):
 
     def __str__(self):
         return f"{self.username} ({self.get_role_display()})"
+    
+        
+    # S3 Paths for user data storage 
+
+    def get_s3_base_path(self):
+        """Returns the base S3 path for this user's data"""
+        return f'accounts/{self.id}'
+
+    def get_biometric_data_path(self):
+        """Returns the S3 path for user's biometric data"""
+        return f'{self.get_s3_base_path()}/biometric-data'
+
+    def get_metadata_path(self):
+        """Returns the S3 path for user's metadata"""
+        return f'{self.get_s3_base_path()}/metadata'
+
+    def get_performance_data_path(self):
+        """Returns the S3 path for user's performance data"""
+        return f'{self.get_s3_base_path()}/performance-data'
+
+    # Add this to handle admin log entries
+    class Meta:
+        db_table = 'core_user'
 
 class Team(models.Model):
     name = models.CharField(max_length=100)

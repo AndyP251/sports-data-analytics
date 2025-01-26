@@ -6,11 +6,11 @@ from django.views.decorators.http import require_POST, require_http_methods
 from .models import User  # Import your custom User model from core
 import json
 import logging
-from enum import Enum
+from enum import IntEnum
 
 logger = logging.getLogger(__name__)
 
-class DebugLevel(Enum):
+class DebugLevel(IntEnum):
     LOW = 1     # Basic operation logging
     MEDIUM = 2  # More detailed operation logging
     EXTREME = 3 # Full debug output with database dumps

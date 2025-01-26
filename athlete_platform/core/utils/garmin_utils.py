@@ -5,9 +5,14 @@ from .s3_utils import S3Utils
 import json
 
 class GarminDataCollector:
-    def __init__(self):
-        self.username = settings.GARMIN_USERNAME
-        self.password = settings.GARMIN_PASSWORD
+    def __init__(self, user_credentials=None):
+        # If user_credentials is provided, use those instead of default settings
+        if user_credentials:
+            self.username = user_credentials.get('username')
+            self.password = user_credentials.get('password')
+        else:
+            self.username = settings.GARMIN_USERNAME
+            self.password = settings.GARMIN_PASSWORD
         self.s3_utils = S3Utils()
         
     def get_formatted_data(self, garmin, date):

@@ -16,6 +16,7 @@ import logging
 import boto3
 from botocore.exceptions import ClientError
 import json
+from .services.data_sync_service import AthleteDataSyncService
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -46,37 +47,49 @@ def register(request):
 
 @login_required
 def dashboard(request):
-    context = {}
-    try:
-        # Try to get the athlete data
-        athlete = Athlete.objects.get(user=request.user)
-        latest_biometric = BiometricData.objects.filter(athlete=athlete).first()
+    # context = {}
+    # try:
+    #     # Try to get the athlete data
+    #     athlete = Athlete.objects.get(user=request.user)
+    #     latest_biometric = BiometricData.objects.filter(athlete=athlete).first()
         
-        if latest_biometric:
-            context['biometric_data'] = latest_biometric
-        else:
-            messages.info(request, "No biometric data found. Please update your data.")
+    #     if latest_biometric:
+    #         context['biometric_data'] = latest_biometric
+    #     else:
+    #         messages.info(request, "No biometric data found. Please update your data.")
             
-        # Try to get historical data from S3
-        try:
-            historical_data = get_s3_data(athlete)
-            context['historical_data'] = historical_data
-        except ClientError as e:
-            if e.response['Error']['Code'] == 'NoSuchKey':
-                messages.info(request, "No historical data found. Starting fresh tracking.")
-                logger.info(f"No historical data found for athlete {athlete.id}")
-            else:
-                messages.error(request, "Error retrieving historical data. Please try again later.")
-                logger.error(f"S3 error for athlete {athlete.id}: {str(e)}")
+    #     # Try to get historical data from S3
+    #     try:
+    #         historical_data = get_s3_data(athlete)
+    #         context['historical_data'] = historical_data
+    #     except ClientError as e:
+    #         if e.response['Error']['Code'] == 'NoSuchKey':
+    #             messages.info(request, "No historical data found. Starting fresh tracking.")
+    #             logger.info(f"No historical data found for athlete {athlete.id}")
+    #         else:
+    #             messages.error(request, "Error retrieving historical data. Please try again later.")
+    #             logger.error(f"S3 error for athlete {athlete.id}: {str(e)}")
         
-    except Athlete.DoesNotExist:
-        messages.error(request, "Athlete profile not found. Please contact support.")
-        logger.error(f"No athlete profile found for user {request.user.id}")
-    except Exception as e:
-        messages.error(request, "An unexpected error occurred. Please try again later.")
-        logger.error(f"Dashboard error for user {request.user.id}: {str(e)}")
+    # except Athlete.DoesNotExist:
+    #     messages.error(request, "Athlete profile not found. Please contact support.")
+    #     logger.error(f"No athlete profile found for user {request.user.id}")
+    # except Exception as e:
+    #     messages.error(request, "An unexpected error occurred. Please try again later.")
+    #     logger.error(f"Dashboard error for user {request.user.id}: {str(e)}")
     
-    return render(request, 'core/dashboard.html', context)
+    # return render(request, 'core/dashboard.html', context)
+    
+    athlete = request.user.athlete  # Assuming you have this relationship set up
+    
+    # Initialize the sync service and get dashboard data
+    sync_service = AthleteDataSyncService()
+    dashboard_data = sync_service.sync_athlete_data(athlete)
+    
+    return render(request, 'core/dashboard.html', {
+        'biometric_data': dashboard_data['biometric_data'],
+        'performance_data': dashboard_data['performance_data']
+    })
+
 
 def get_s3_data(athlete):
     """Retrieve athlete data from S3"""

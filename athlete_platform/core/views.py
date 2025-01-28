@@ -16,11 +16,16 @@ import logging
 import boto3
 from botocore.exceptions import ClientError
 import json
-from .services.athlete_service import AthleteDataSyncService
+from .services.data_sync_service import DataSyncService
 from .services.data_pipeline_service import DataPipelineService
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from django.views.decorators.csrf import ensure_csrf_cookie
+from rest_framework.response import Response
+from datetime import timedelta
+from django.contrib.auth import login as auth_login
+from django.contrib.auth.signals import user_logged_in
+from django.dispatch import receiver
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -55,7 +60,7 @@ def dashboard_view(request):
         athlete = request.user.athlete
         
         # Initialize the sync service and get dashboard data
-        sync_service = AthleteDataSyncService()
+        sync_service = DataSyncService()
         dashboard_data = sync_service.sync_athlete_data(athlete)
         
         return render(request, 'core/dashboard.html', {
@@ -207,7 +212,7 @@ def dashboard_data(request):
         latest_data = BiometricData.objects.filter(athlete=athlete).order_by('-date').first()
         
         if latest_data:
-            logger.info(f"Found latest biometric data for athlete: {athlete.id}")
+            logger.info(f"Found latest biometric data for athlete: {athlete.id}, under path accounts/{athlete.user.id}/biometric-data/garmin")
             data = {
                 'heart_rate': {
                     'latest': latest_data.resting_heart_rate,
@@ -262,3 +267,94 @@ def update_garmin_data(request):
             'success': False,
             'error': str(e)
         }, status=500)
+
+@receiver(user_logged_in)
+def sync_on_login(sender, user, request, **kwargs):
+    """Trigger sync when user logs in"""
+    try:
+        if hasattr(user, 'athlete'):
+            sync_service = DataSyncService(user.athlete)
+            sync_service.sync_data()
+    except Exception as e:
+        logger.error(f"Error syncing data on login: {e}")
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def sync_biometric_data(request):
+    """Manual sync endpoint"""
+    logger.info(f"Sync requested for user: {request.user.id}")
+    try:
+        sync_service = DataSyncService(request.user.athlete)
+        success = sync_service.sync_data()
+        logger.info(f"Sync completed with success: {success}")
+        
+        if success:
+            data = BiometricData.objects.filter(
+                athlete=request.user.athlete
+            ).order_by('-date')[:7]
+            logger.info(f"Found {data.count()} records after sync")
+            return Response({
+                'success': True,
+                'message': 'Data synced successfully',
+                'data': [item.to_dict() for item in data]
+            })
+        return Response({
+            'success': False,
+            'message': 'Sync failed'
+        }, status=400)
+    except Exception as e:
+        logger.error(f"Error in sync_biometric_data: {e}", exc_info=True)
+        return Response({
+            'success': False,
+            'message': str(e)
+        }, status=500)
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_biometric_data(request):
+    """Get biometric data endpoint"""
+    logger.info(f"Data requested for user: {request.user.id}")
+    try:
+        sync_service = DataSyncService(request.user.athlete)
+        sync_result = sync_service.sync_data()
+        logger.info(f"Initial sync completed with success: {sync_result}")
+        
+        days = int(request.query_params.get('days', 7))
+        end_date = datetime.now().date()
+        start_date = end_date - timedelta(days=days)
+        
+        data = BiometricData.objects.filter(
+            athlete=request.user.athlete,
+            date__range=[start_date, end_date]
+        ).order_by('date')
+        
+        logger.info(f"Found {data.count()} records for date range {start_date} to {end_date}")
+        
+        if not data:
+            return Response({
+                'message': 'No data found',
+                'data': []
+            })
+            
+        return Response([{
+            'date': item.date,
+            'sleep_hours': item.sleep_hours,
+            'deep_sleep': item.deep_sleep,
+            'light_sleep': item.light_sleep,
+            'rem_sleep': item.rem_sleep,
+            'sleep_score': item.sleep_score,
+            'resting_heart_rate': item.resting_heart_rate,
+            'max_heart_rate': item.max_heart_rate,
+            'avg_heart_rate': item.avg_heart_rate,
+            'hrv': item.hrv,
+            'steps': item.steps,
+            'calories_active': item.calories_active,
+            'calories_total': item.calories_total,
+            'weight': item.weight,
+            'body_fat_percentage': item.body_fat_percentage,
+            'bmi': item.bmi,
+            'stress_level': item.stress_level,
+        } for item in data])
+    except Exception as e:
+        logger.error(f"Error in get_biometric_data: {e}", exc_info=True)
+        return Response({'error': str(e)}, status=500)

@@ -174,7 +174,7 @@ else:
 DEFAULT_FILE_STORAGE = 'storages.backends.s3boto3.S3Boto3Storage'
 MEDIA_URL = f'https://{AWS_STORAGE_BUCKET_NAME}.s3.amazonaws.com/media/'
 
-# Crispy Forms settings
+# Crispy Forms settings (Adds Tailwind support to Django forms for styling)
 CRISPY_ALLOWED_TEMPLATE_PACKS = "tailwind"
 CRISPY_TEMPLATE_PACK = "tailwind"
 
@@ -194,20 +194,20 @@ REST_FRAMEWORK = {
     ],
 }
 
-# Celery Configuration
+# Celery Configuration (Enables background tasks for long-running operations)
 CELERY_BROKER_URL = os.getenv('REDIS_URL')
 CELERY_RESULT_BACKEND = os.getenv('REDIS_URL')
 
-# Custom User Model
+# Custom User Model (Defines the custom user model for the project)
 AUTH_USER_MODEL = 'core.User'
 
-# Authentication Backends
+# Authentication Backends (Defines the authentication backends for the project)
 AUTHENTICATION_BACKENDS = [
     'django.contrib.auth.backends.ModelBackend',
     'allauth.account.auth_backends.AuthenticationBackend',
 ]
 
-# Django AllAuth settings
+# Django AllAuth settings (Configures AllAuth for user authentication)
 ACCOUNT_AUTHENTICATION_METHOD = 'username_email'
 ACCOUNT_EMAIL_REQUIRED = True
 ACCOUNT_EMAIL_VERIFICATION = 'none'  # Change to 'mandatory' if you want email verification
@@ -296,3 +296,9 @@ CSRF_COOKIE_SAMESITE = 'Lax'
 SESSION_COOKIE_SAMESITE = 'Lax'
 CSRF_COOKIE_HTTPONLY = False
 SESSION_COOKIE_HTTPONLY = True
+
+# WHOOP Settings
+WHOOP_CLIENT_ID = os.getenv('WHOOP_CLIENT_ID')
+WHOOP_CLIENT_SECRET = os.getenv('WHOOP_CLIENT_SECRET')
+WHOOP_REDIRECT_URI = os.getenv('WHOOP_REDIRECT_URI')  # e.g., https://yourdomain.com/oauth/whoop/callback
+ENCRYPTION_KEY = os.getenv('ENCRYPTION_KEY')  # Generate using: Fernet.generate_key() 

@@ -129,93 +129,57 @@ class WorkoutData(models.Model):
         return f"{self.athlete.user.username} - {self.workout_type} on {self.date}"
 
 class BiometricData(models.Model):
-    athlete = models.ForeignKey(Athlete, on_delete=models.CASCADE, related_name='biometric_data')
-    date = models.DateField(default=timezone.now)
+    athlete = models.ForeignKey('Athlete', on_delete=models.CASCADE)
+    date = models.DateField()
     
-    # Basic measurements with reasonable defaults and validation
-    weight = models.DecimalField(
-        max_digits=5, 
-        decimal_places=2,
-        validators=[MinValueValidator(30), MaxValueValidator(200)],
-        help_text='Weight in kg',
-        default=70.00
-    )
-    height = models.DecimalField(
-        max_digits=5, 
-        decimal_places=2,
-        validators=[MinValueValidator(100), MaxValueValidator(250)],
-        help_text='Height in cm',
-        default=170.00
-    )
+    # Sleep metrics
+    sleep_hours = models.FloatField(default=0)
+    deep_sleep = models.FloatField(default=0)
+    light_sleep = models.FloatField(default=0)
+    rem_sleep = models.FloatField(default=0)
+    awake_time = models.FloatField(default=0)
+    sleep_score = models.IntegerField(default=0)
     
-    # Vital signs with validation
-    resting_heart_rate = models.IntegerField(
-        validators=[MinValueValidator(30), MaxValueValidator(200)],
-        default=60,
-        help_text='Beats per minute'
-    )
-    blood_pressure_systolic = models.IntegerField(
-        validators=[MinValueValidator(70), MaxValueValidator(200)],
-        default=120,
-        help_text='Systolic blood pressure'
-    )
-    blood_pressure_diastolic = models.IntegerField(
-        validators=[MinValueValidator(40), MaxValueValidator(130)],
-        default=80,
-        help_text='Diastolic blood pressure'
-    )
+    # Heart rate metrics
+    resting_heart_rate = models.IntegerField(default=0)
+    max_heart_rate = models.IntegerField(default=0)
+    avg_heart_rate = models.IntegerField(default=0)
+    hrv = models.FloatField(default=0)
     
-    # Optional measurements
-    body_fat_percentage = models.DecimalField(
-        max_digits=4,
-        decimal_places=1,
-        validators=[MinValueValidator(3), MaxValueValidator(50)],
-        null=True,
-        blank=True,
-        help_text='Body fat percentage'
-    )
-    hrv = models.IntegerField(
-        null=True,
-        blank=True,
-        validators=[MinValueValidator(0), MaxValueValidator(200)],
-        help_text='Heart Rate Variability'
-    )
+    # Activity metrics
+    steps = models.IntegerField(default=0)
+    calories_active = models.IntegerField(default=0)
+    calories_total = models.IntegerField(default=0)
+    distance_meters = models.FloatField(default=0)
+    intensity_minutes = models.IntegerField(default=0)
     
-    # Sleep and recovery
-    sleep_hours = models.DecimalField(
-        max_digits=4,
-        decimal_places=2,
-        validators=[MinValueValidator(0), MaxValueValidator(24)],
-        default=8.00,
-        help_text='Hours of sleep'
-    )
-    stress_level = models.IntegerField(
-        validators=[MinValueValidator(1), MaxValueValidator(10)],
-        default=5,
-        help_text='Stress level from 1-10'
-    )
+    # Body metrics
+    weight = models.FloatField(default=0)
+    body_fat_percentage = models.FloatField(default=0)
+    bmi = models.FloatField(default=0)
     
+    # Stress and recovery
+    stress_level = models.IntegerField(default=0)
+    recovery_time = models.IntegerField(default=0)
+
     # Metadata
-    notes = models.TextField(blank=True, default='')
     created_at = models.DateTimeField(default=timezone.now)
-    updated_at = models.DateTimeField(auto_now=True)
-    
+    updated_at = models.DateTimeField(default=timezone.now)
+
     class Meta:
-        ordering = ['-date']
-        verbose_name = 'Biometric Data'
-        verbose_name_plural = 'Biometric Data'
-        unique_together = ['athlete', 'date']  # Prevent duplicate entries for same day
+        unique_together = ['athlete', 'date']
+        indexes = [
+            models.Index(fields=['-date']),
+            models.Index(fields=['athlete', '-date']),
+        ]
 
     def __str__(self):
         return f"{self.athlete.user.username} - {self.date}"
 
     def save(self, *args, **kwargs):
-        # Set default values for optional fields if they're None
-        if self.body_fat_percentage is None:
-            self.body_fat_percentage = 15.0
-        if self.hrv is None:
-            self.hrv = 50
-            
+        if not self.pk:  # Only set created_at for new instances
+            self.created_at = timezone.now()
+        self.updated_at = timezone.now()
         super().save(*args, **kwargs)
 
 class InjuryRecord(models.Model):

@@ -223,41 +223,116 @@ const BiometricsDashboard = () => {
             </Card>
           </Grid>
 
-          {/* Sleep Overview Card */}
-          <Grid item xs={12} md={6}>
-            <Card sx={{ p: 2 }}>
-              <Typography variant="h6" gutterBottom>Sleep Analysis</Typography>
+          {/* Sleep Analysis Card */}
+          <Grid item xs={12} md={8}>
+            <Card sx={{ 
+              p: 3, 
+              borderRadius: '12px',
+              boxShadow: '0 4px 6px rgba(0,0,0,0.1)'
+            }}>
+              <Typography variant="h5" gutterBottom>Sleep Analysis</Typography>
               <ResponsiveContainer width="100%" height={300}>
                 <AreaChart data={biometricData}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="date" />
-                  <YAxis />
-                  <Tooltip />
+                  <CartesianGrid strokeDasharray="3 3" stroke={`${colors.primary}15`} />
+                  <XAxis dataKey="date" stroke={colors.text} />
+                  <YAxis stroke={colors.text} />
+                  <Tooltip 
+                    contentStyle={{ 
+                      backgroundColor: colors.background,
+                      border: `1px solid ${colors.primary}` 
+                    }}
+                  />
                   <Legend />
-                  <Area type="monotone" dataKey="deep_sleep" name="Deep Sleep" stackId="1" fill="#8884d8" />
-                  <Area type="monotone" dataKey="light_sleep" name="Light Sleep" stackId="1" fill="#82ca9d" />
-                  <Area type="monotone" dataKey="rem_sleep" name="REM Sleep" stackId="1" fill="#ffc658" />
+                  <Area 
+                    type="monotone" 
+                    dataKey="deep_sleep" 
+                    name="Deep Sleep" 
+                    stackId="1" 
+                    fill={colors.primary} 
+                    stroke={colors.primary}
+                    fillOpacity={0.8}
+                  />
+                  <Area 
+                    type="monotone" 
+                    dataKey="light_sleep" 
+                    name="Light Sleep" 
+                    stackId="1" 
+                    fill={colors.secondary} 
+                    stroke={colors.secondary}
+                    fillOpacity={0.6}
+                  />
+                  <Area 
+                    type="monotone" 
+                    dataKey="rem_sleep" 
+                    name="REM Sleep" 
+                    stackId="1" 
+                    fill={colors.accent1} 
+                    stroke={colors.accent1}
+                    fillOpacity={0.4}
+                  />
                 </AreaChart>
               </ResponsiveContainer>
+              <Box sx={{ mt: 2, display: 'flex', justifyContent: 'space-around' }}>
+                <Typography variant="body2" color="textSecondary">
+                  Sleep Score: {biometricData[biometricData.length - 1]?.sleep_score || 0}
+                </Typography>
+                <Typography variant="body2" color="textSecondary">
+                  Total Sleep: {biometricData[biometricData.length - 1]?.sleep_hours || 0}hrs
+                </Typography>
+              </Box>
             </Card>
           </Grid>
 
           {/* Heart Rate Card */}
           <Grid item xs={12} md={6}>
-            <Card sx={{ p: 2 }}>
-              <Typography variant="h6" gutterBottom>Heart Rate Metrics</Typography>
+            <Card sx={{ p: 3, borderRadius: '12px', boxShadow: '0 4px 6px rgba(0,0,0,0.1)' }}>
+              <Typography variant="h5" gutterBottom>Heart Rate Metrics</Typography>
               <ResponsiveContainer width="100%" height={300}>
                 <LineChart data={biometricData}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="date" />
-                  <YAxis />
-                  <Tooltip />
+                  <CartesianGrid strokeDasharray="3 3" stroke={`${colors.primary}15`} />
+                  <XAxis dataKey="date" stroke={colors.text} />
+                  <YAxis stroke={colors.text} />
+                  <Tooltip 
+                    contentStyle={{ 
+                      backgroundColor: colors.background,
+                      border: `1px solid ${colors.primary}` 
+                    }}
+                  />
                   <Legend />
-                  <Line type="monotone" dataKey="resting_heart_rate" name="Resting HR" stroke="#8884d8" />
-                  <Line type="monotone" dataKey="avg_heart_rate" name="Average HR" stroke="#82ca9d" />
-                  <Line type="monotone" dataKey="max_heart_rate" name="Max HR" stroke="#ff7300" />
+                  <Line 
+                    type="monotone" 
+                    dataKey="resting_heart_rate" 
+                    name="Resting HR" 
+                    stroke={colors.primary}
+                    strokeWidth={3}
+                    dot={false}
+                  />
+                  <Line 
+                    type="monotone" 
+                    dataKey="avg_heart_rate" 
+                    name="Average HR" 
+                    stroke={colors.secondary}
+                    strokeWidth={2}
+                    dot={false}
+                  />
+                  <Line 
+                    type="monotone" 
+                    dataKey="max_heart_rate" 
+                    name="Max HR" 
+                    stroke={colors.accent2}
+                    strokeWidth={3}
+                    dot={false}
+                  />
                 </LineChart>
               </ResponsiveContainer>
+              <Box sx={{ mt: 2, display: 'flex', justifyContent: 'space-around' }}>
+                <Typography variant="body2" color="textSecondary">
+                  HRV: {biometricData[biometricData.length - 1]?.hrv || 0}ms
+                </Typography>
+                <Typography variant="body2" color="textSecondary">
+                  Recovery Score: {biometricData[biometricData.length - 1]?.recovery_score || 0}%
+                </Typography>
+              </Box>
             </Card>
           </Grid>
 
@@ -281,19 +356,35 @@ const BiometricsDashboard = () => {
           </Grid>
 
           {/* Body Composition Card */}
-          <Grid item xs={12} md={6}>
-            <Card sx={{ p: 2 }}>
-              <Typography variant="h6" gutterBottom>Body Composition</Typography>
+          <Grid item xs={12}>
+            <Card sx={{ p: 3, borderRadius: '12px', boxShadow: '0 4px 6px rgba(0,0,0,0.1)' }}>
+              <Typography variant="h5" gutterBottom>Body Composition Trends</Typography>
               <ResponsiveContainer width="100%" height={300}>
                 <LineChart data={biometricData}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="date" />
-                  <YAxis />
-                  <Tooltip />
+                  <CartesianGrid strokeDasharray="3 3" stroke={`${colors.primary}15`} />
+                  <XAxis dataKey="date" stroke={colors.text} />
+                  <YAxis stroke={colors.text} />
+                  <Tooltip 
+                    contentStyle={{ 
+                      backgroundColor: colors.background,
+                      border: `1px solid ${colors.primary}` 
+                    }}
+                  />
                   <Legend />
-                  <Line type="monotone" dataKey="weight" name="Weight" stroke="#8884d8" />
-                  <Line type="monotone" dataKey="body_fat_percentage" name="Body Fat %" stroke="#82ca9d" />
-                  <Line type="monotone" dataKey="bmi" name="BMI" stroke="#ffc658" />
+                  <Line 
+                    type="monotone" 
+                    dataKey="weight" 
+                    name="Weight (kg)" 
+                    stroke={colors.primary}
+                    strokeWidth={2}
+                  />
+                  <Line 
+                    type="monotone" 
+                    dataKey="body_fat_percentage" 
+                    name="Body Fat %" 
+                    stroke={colors.secondary}
+                    strokeWidth={2}
+                  />
                 </LineChart>
               </ResponsiveContainer>
             </Card>

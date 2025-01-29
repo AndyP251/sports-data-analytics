@@ -20,7 +20,7 @@ from .services.data_sync_service import DataSyncService
 from .services.data_pipeline_service import DataPipelineService
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
-from django.views.decorators.csrf import ensure_csrf_cookie
+from django.views.decorators.csrf import ensure_csrf_cookie, csrf_exempt
 from rest_framework.response import Response
 from datetime import timedelta
 from django.contrib.auth import login as auth_login
@@ -279,31 +279,31 @@ def sync_on_login(sender, user, request, **kwargs):
         logger.error(f"Error syncing data on login: {e}")
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@csrf_exempt
+@login_required
 def sync_biometric_data(request):
-    """Manual sync endpoint"""
-    logger.info(f"Sync requested for user: {request.user.id}")
+    """Sync biometric data endpoint"""
     try:
-        sync_service = DataSyncService(request.user.athlete)
-        success = sync_service.sync_data()
-        logger.info(f"Sync completed with success: {success}")
+        # Debug logging
+        print(f"User authenticated: {request.user.is_authenticated}")
+        print(f"User: {request.user}")
         
-        if success:
-            data = BiometricData.objects.filter(
-                athlete=request.user.athlete
-            ).order_by('-date')[:7]
-            logger.info(f"Found {data.count()} records after sync")
+        if not hasattr(request.user, 'athlete'):
             return Response({
-                'success': True,
-                'message': 'Data synced successfully',
-                'data': [item.to_dict() for item in data]
-            })
+                'success': False,
+                'message': 'No athlete profile found for user'
+            }, status=400)
+
+        athlete = request.user.athlete
+        sync_service = DataSyncService(athlete)
+        success = sync_service.sync_data()
+        
         return Response({
-            'success': False,
-            'message': 'Sync failed'
-        }, status=400)
+            'success': success,
+            'message': 'Sync completed successfully' if success else 'Sync failed'
+        })
     except Exception as e:
-        logger.error(f"Error in sync_biometric_data: {e}", exc_info=True)
+        print(f"Error in sync_biometric_data: {str(e)}")
         return Response({
             'success': False,
             'message': str(e)

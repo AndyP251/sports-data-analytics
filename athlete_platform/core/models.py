@@ -3,6 +3,10 @@ from django.db import models
 from django.core.validators import MinValueValidator, MaxValueValidator
 from django.utils import timezone
 import uuid
+from django.core.exceptions import ValidationError
+import logging
+
+logger = logging.getLogger(__name__)
 
 class User(AbstractUser):
    
@@ -128,10 +132,147 @@ class WorkoutData(models.Model):
     def __str__(self):
         return f"{self.athlete.user.username} - {self.workout_type} on {self.date}"
 
+
+# soon to be deprecated
 class BiometricData(models.Model):
+    """
+    Core model for storing athlete biometric data.
+    Combines all fields into a single, comprehensive model.
+    """
+    uuid = models.UUIDField(default=uuid.uuid4, editable=False)
     athlete = models.ForeignKey('Athlete', on_delete=models.CASCADE)
     date = models.DateField()
     
+    # Sleep metrics
+    sleep_hours = models.FloatField(null=True, blank=True)
+    deep_sleep = models.FloatField(null=True, blank=True)
+    light_sleep = models.FloatField(null=True, blank=True)
+    rem_sleep = models.FloatField(null=True, blank=True)
+    awake_time = models.FloatField(null=True, blank=True)
+    sleep_score = models.IntegerField(null=True, blank=True)
+    
+    # Detailed sleep metrics in seconds
+    total_sleep_seconds = models.IntegerField(null=True, blank=True)
+    deep_sleep_seconds = models.IntegerField(null=True, blank=True)
+    light_sleep_seconds = models.IntegerField(null=True, blank=True)
+    rem_sleep_seconds = models.IntegerField(null=True, blank=True)
+    awake_seconds = models.IntegerField(null=True, blank=True)
+    average_respiration = models.FloatField(null=True, blank=True)
+    
+    # Heart rate metrics
+    resting_heart_rate = models.IntegerField(null=True, blank=True)
+    max_heart_rate = models.IntegerField(null=True, blank=True)
+    avg_heart_rate = models.IntegerField(null=True, blank=True)
+    hrv = models.FloatField(null=True, blank=True)
+    
+    # Activity metrics
+    steps = models.IntegerField(null=True, blank=True)
+    calories_active = models.IntegerField(null=True, blank=True)
+    calories_total = models.IntegerField(null=True, blank=True)
+    distance_meters = models.FloatField(null=True, blank=True)
+    intensity_minutes = models.IntegerField(null=True, blank=True)
+    
+    # Body composition metrics
+    weight = models.FloatField(null=True, blank=True)
+    body_fat_percentage = models.FloatField(null=True, blank=True)
+    bmi = models.FloatField(null=True, blank=True)
+    
+    # Recovery metrics
+    stress_level = models.IntegerField(null=True, blank=True)
+    recovery_time = models.IntegerField(null=True, blank=True)
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'biometric_data'
+        unique_together = ['athlete', 'date']
+        indexes = [
+            models.Index(fields=['-date']),
+            models.Index(fields=['athlete', '-date']),
+        ]
+
+    def __str__(self):
+        return f"{self.athlete.user.username} - {self.date}"
+
+def create_biometric_data(athlete, date, data_dict):
+    """Create or update biometric data for an athlete on a specific date"""
+    try:
+        # Clean the data dictionary to match model fields
+        processed_data = {
+            'uuid': athlete.user.id,
+            'athlete': athlete,
+            'date': date,
+            **{k: v for k, v in data_dict.items() if v is not None}  # Only include non-None values
+        }
+        
+        # Try to update existing record
+        try:
+            biometric = BiometricData.objects.get(athlete=athlete, date=date)
+            for key, value in processed_data.items():
+                if hasattr(biometric, key):  # Only set if field exists
+                    setattr(biometric, key, value)
+            biometric.save()
+        except BiometricData.DoesNotExist:
+            # Create new record
+            BiometricData.objects.create(**processed_data)
+        
+        return True
+    except Exception as e:
+        logger.error(f"Error in create_biometric_data: {str(e)}")
+        return False
+
+def get_athlete_biometrics(athlete, date):
+    """Retrieves biometric data for an athlete on a specific date"""
+    try:
+        return BiometricData.objects.get(
+            athlete=athlete,
+            date=date
+        )
+    except BiometricData.DoesNotExist:
+        return None
+
+class InjuryRecord(models.Model):
+    SEVERITY_CHOICES = [
+        ('MINOR', 'Minor'),
+        ('MODERATE', 'Moderate'),
+        ('SEVERE', 'Severe'),
+    ]
+
+    athlete = models.ForeignKey(Athlete, on_delete=models.CASCADE, related_name='injuries')
+    injury_date = models.DateField()
+    return_date = models.DateField(null=True, blank=True)
+    injury_type = models.CharField(max_length=100)
+    severity = models.CharField(max_length=10, choices=SEVERITY_CHOICES)
+    description = models.TextField()
+    treatment_notes = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.athlete.user.username} - {self.injury_type} on {self.injury_date}"
+
+class CoreBiometricData(models.Model):
+    uuid = models.UUIDField(
+        primary_key=True,
+        editable=False,
+        help_text="UUID must match the athlete's user.id from core_user table"
+    )
+    athlete = models.ForeignKey('Athlete', on_delete=models.CASCADE)
+    date = models.DateField()
+
+    def clean(self):
+        # Validate that the UUID matches the athlete's user ID
+        if self.uuid != self.athlete.user.id:
+            raise ValidationError("UUID must match the athlete's user ID")
+
+    def save(self, *args, **kwargs):
+        self.full_clean()  # This will run the validation
+        if not self.pk:  # Only set created_at for new instances
+            self.created_at = timezone.now()
+        self.updated_at = timezone.now()
+        super().save(*args, **kwargs)
+
     # Sleep metrics
     sleep_hours = models.FloatField(default=0)
     deep_sleep = models.FloatField(default=0)
@@ -162,11 +303,20 @@ class BiometricData(models.Model):
     stress_level = models.IntegerField(default=0)
     recovery_time = models.IntegerField(default=0)
 
+    # New sleep-related fields
+    total_sleep_seconds = models.IntegerField(null=True, blank=True)
+    deep_sleep_seconds = models.IntegerField(null=True, blank=True)
+    light_sleep_seconds = models.IntegerField(null=True, blank=True)
+    rem_sleep_seconds = models.IntegerField(null=True, blank=True)
+    awake_seconds = models.IntegerField(null=True, blank=True)
+    average_respiration = models.FloatField(null=True, blank=True)
+
     # Metadata
     created_at = models.DateTimeField(default=timezone.now)
     updated_at = models.DateTimeField(default=timezone.now)
 
     class Meta:
+        db_table = 'core_biometric_data'
         unique_together = ['athlete', 'date']
         indexes = [
             models.Index(fields=['-date']),
@@ -175,29 +325,3 @@ class BiometricData(models.Model):
 
     def __str__(self):
         return f"{self.athlete.user.username} - {self.date}"
-
-    def save(self, *args, **kwargs):
-        if not self.pk:  # Only set created_at for new instances
-            self.created_at = timezone.now()
-        self.updated_at = timezone.now()
-        super().save(*args, **kwargs)
-
-class InjuryRecord(models.Model):
-    SEVERITY_CHOICES = [
-        ('MINOR', 'Minor'),
-        ('MODERATE', 'Moderate'),
-        ('SEVERE', 'Severe'),
-    ]
-
-    athlete = models.ForeignKey(Athlete, on_delete=models.CASCADE, related_name='injuries')
-    injury_date = models.DateField()
-    return_date = models.DateField(null=True, blank=True)
-    injury_type = models.CharField(max_length=100)
-    severity = models.CharField(max_length=10, choices=SEVERITY_CHOICES)
-    description = models.TextField()
-    treatment_notes = models.TextField(blank=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    def __str__(self):
-        return f"{self.athlete.user.username} - {self.injury_type} on {self.injury_date}"

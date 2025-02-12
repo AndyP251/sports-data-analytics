@@ -10,6 +10,7 @@ import {
 } from '@mui/material';
 import { format } from 'date-fns';
 import SyncIcon from '@mui/icons-material/Sync';
+import HeartRateMetrics from '../HeartRateMetrics';
 
 // Modern, professional color palette
 const colors = {
@@ -44,7 +45,22 @@ const BiometricsDashboard = () => {
       } else {
         setBiometricData(data.map(item => ({
           ...item,
-          date: format(new Date(item.date), 'MM/dd')
+          date: format(new Date(item.date), 'MM/dd'),
+          // Ensure numeric values are not null/undefined
+          sleep_hours: item.sleep_hours || 0,
+          deep_sleep: item.deep_sleep || 0,
+          light_sleep: item.light_sleep || 0,
+          rem_sleep: item.rem_sleep || 0,
+          resting_heart_rate: item.resting_heart_rate || 0,
+          max_heart_rate: item.max_heart_rate || 0,
+          avg_heart_rate: item.avg_heart_rate || 0,
+          calories_active: item.calories_active || 0,
+          calories_total: item.calories_total || 0,
+          steps: item.steps || 0,
+          weight: item.weight || 0,
+          body_fat_percentage: item.body_fat_percentage || 0,
+          stress_level: item.stress_level || 0,
+          hrv: item.hrv || 0
         })));
       }
     } catch (error) {
@@ -55,27 +71,31 @@ const BiometricsDashboard = () => {
   };
 
   const syncData = async () => {
+    setLoading(true);
+    setError(null);
+    setSyncMessage('Syncing data...');
+
     try {
-      setLoading(true);
-      setError(null);
-      setSyncMessage('Syncing data...');
-      
-      const response = await fetch('/api/biometrics/sync/', { 
+      const response = await fetch('/api/biometrics/sync/', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-        }
+          'X-CSRFToken': document.cookie.split('csrftoken=')[1]?.split(';')[0],
+          'Authorization': `Token ${localStorage.getItem('authToken')}`,
+        },
+        credentials: 'include',
       });
-      
-      const result = await response.json();
-      if (result.success) {
-        setSyncMessage('Sync successful!');
-        await fetchBiometricData();
-      } else {
-        throw new Error(result.message || 'Sync failed');
+
+      if (!response.ok) {
+        throw new Error(`Sync failed: ${response.statusText}`);
       }
-    } catch (error) {
-      setError('Error syncing data: ' + error.message);
+
+      const data = await response.json();
+      setSyncMessage('Data synced successfully!');
+      fetchBiometricData();
+    } catch (err) {
+      setError(`Error syncing data: ${err.message}`);
+      console.error('Sync error:', err);
     } finally {
       setLoading(false);
     }
@@ -84,15 +104,37 @@ const BiometricsDashboard = () => {
   // Calculate health score based on various metrics
   const calculateHealthScore = (data) => {
     if (!data || data.length === 0) return 0;
+    
     const latestData = data[data.length - 1];
+    const maxScore = 100;
     
-    // Normalize and weight different factors
-    const sleepScore = (latestData.sleep_hours / 8) * 100 * 0.3;
-    const hrvScore = (latestData.hrv / 100) * 100 * 0.2;
-    const stressScore = ((100 - latestData.stress_level) / 100) * 100 * 0.2;
-    const activityScore = (latestData.calories_active / 1000) * 100 * 0.3;
+    // Weight factors for different metrics
+    const weights = {
+      sleep: 0.3,
+      activity: 0.3,
+      stress: 0.2,
+      heartRate: 0.2
+    };
     
-    return Math.min(Math.round(sleepScore + hrvScore + stressScore + activityScore), 100);
+    // Calculate sleep score
+    const sleepScore = (latestData.sleep_hours / 8) * 100 * weights.sleep;
+    
+    // Calculate activity score
+    const activityScore = Math.min((latestData.steps / 10000) * 100, 100) * weights.activity;
+    
+    // Calculate stress score
+    const stressScore = (100 - latestData.stress_level) * weights.stress;
+    
+    // Calculate heart rate score
+    const hrvScore = (latestData.hrv / 100) * 100 * weights.heartRate;
+    
+    // Calculate total score
+    const totalScore = Math.min(
+      Math.round(sleepScore + activityScore + stressScore + hrvScore),
+      maxScore
+    );
+    
+    return totalScore;
   };
 
   useEffect(() => {
@@ -120,7 +162,7 @@ const BiometricsDashboard = () => {
             letterSpacing: '-0.5px'
           }}
         >
-          Athlete Biometric Analytics
+          Individual Biometric Analytics
         </Typography>
         <Button 
           variant="contained" 
@@ -187,38 +229,36 @@ const BiometricsDashboard = () => {
                 alignItems: 'center',
                 height: '250px'
               }}>
-                <RadialBarChart 
-                  width={250} 
-                  height={250} 
-                  innerRadius="60%" 
-                  outerRadius="100%" 
-                  data={[{
-                    name: 'Health Score',
-                    value: calculateHealthScore(biometricData),
-                    fill: colors.accent3
-                  }]} 
-                  startAngle={90} 
-                  endAngle={-270}
-                >
-                  <RadialBar
-                    background
-                    dataKey="value"
-                    cornerRadius={30}
+                <Box sx={{ position: 'relative', display: 'inline-flex' }}>
+                  <CircularProgress
+                    variant="determinate"
+                    value={calculateHealthScore(biometricData)}
+                    size={120}
+                    thickness={4}
+                    sx={{
+                      color: theme.palette.success.main,
+                      '& .MuiCircularProgress-circle': {
+                        strokeLinecap: 'round',
+                      },
+                    }}
                   />
-                  <text
-                    x="50%"
-                    y="50%"
-                    textAnchor="middle"
-                    dominantBaseline="middle"
-                    style={{
-                      fontSize: '2rem',
-                      fill: 'white',
-                      fontWeight: 'bold'
+                  <Box
+                    sx={{
+                      top: 0,
+                      left: 0,
+                      bottom: 0,
+                      right: 0,
+                      position: 'absolute',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
                     }}
                   >
-                    {calculateHealthScore(biometricData)}%
-                  </text>
-                </RadialBarChart>
+                    <Typography variant="h4" component="div" color="text.primary">
+                      {`${calculateHealthScore(biometricData)}%`}
+                    </Typography>
+                  </Box>
+                </Box>
               </Box>
             </Card>
           </Grid>
@@ -409,6 +449,13 @@ const BiometricsDashboard = () => {
           </Grid>
         </Grid>
       )}
+
+      {/* Heart Rate Metrics component */}
+      <HeartRateMetrics 
+        resting={biometricData?.resting_heart_rate || 0}
+        average={biometricData?.avg_heart_rate || 0}
+        max={biometricData?.max_heart_rate || 0}
+      />
     </Box>
   );
 };

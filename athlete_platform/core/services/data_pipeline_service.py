@@ -1,7 +1,7 @@
 from ..utils.garmin_utils import GarminDataCollector
 from ..utils.whoop_utils import WhoopDataCollector
-from ..models import BiometricData
-from datetime import datetime
+from ..models import BiometricData, CoreBiometricData, create_biometric_data, get_athlete_biometrics
+from datetime import datetime, timedelta
 from django.utils import timezone
 import logging
 import boto3
@@ -16,9 +16,11 @@ class DataPipelineService:
         self.s3_client = boto3.client('s3')
         self.bucket_name = settings.AWS_STORAGE_BUCKET_NAME
 
-    def upload_to_s3(self, data, file_name):
-        """Upload data to S3 bucket"""
+    def upload_to_s3(self, data, date):
+        """Upload data to S3 bucket with date-specific filename"""
         try:
+            timestamp = datetime.now().strftime('%H%M%S')
+            file_name = f"{date.strftime('%Y%m%d')}_{timestamp}.json"
             file_path = f"accounts/{str(self.athlete.user.id)}/biometric-data/garmin/{file_name}"
             
             # Ensure data is properly serialized as JSON
@@ -37,110 +39,214 @@ class DataPipelineService:
             logger.error(f"Failed to upload to S3: {str(e)}")
             return False
 
-    def process_and_store_garmin_data(self, raw_data):
-        """Process raw Garmin data and store in database"""
+    def get_latest_s3_data(self):
+        """Get all data from S3 for the past week"""
         try:
-            for daily_data in raw_data:
-                date = datetime.strptime(daily_data['date'], '%Y-%m-%d').date()
-                daily_stats = daily_data.get('daily_stats', {})
-                
-                sleep_data = daily_stats.get('sleep', {})
-                hr_data = daily_stats.get('heart_rate', {})
-                body_comp = daily_stats.get('body_composition', {})
-                steps_data = daily_stats.get('steps', {})
-                user_summary = daily_stats.get('user_summary', {})
-                
-                # Helper function to safely get nested values
-                def get_nested(data, *keys, default=0):
-                    current = data
-                    for key in keys:
-                        if not isinstance(current, dict):
-                            return default
-                        current = current.get(key, default)
-                    return current if current is not None else default
-
-                data = {
-                    'date': date,
-                    # Sleep metrics
-                    'sleep_hours': get_nested(sleep_data, 'totalSleepTime', default=0) / 3600,
-                    'deep_sleep': get_nested(sleep_data, 'deepSleepSeconds', default=0) / 3600,
-                    'light_sleep': get_nested(sleep_data, 'lightSleepSeconds', default=0) / 3600,
-                    'rem_sleep': get_nested(sleep_data, 'remSleepSeconds', default=0) / 3600,
-                    'awake_time': get_nested(sleep_data, 'awakeSleepSeconds', default=0) / 3600,
-                    'sleep_score': get_nested(sleep_data, 'sleepScore', default=0),
-                    
-                    # Heart rate metrics
-                    'resting_heart_rate': get_nested(hr_data, 'restingHeartRate', default=0),
-                    'max_heart_rate': get_nested(hr_data, 'maxHeartRate', default=0),
-                    'avg_heart_rate': get_nested(hr_data, 'averageHeartRate', default=0),
-                    'hrv': get_nested(hr_data, 'hrvAverage', default=0),
-                    
-                    # Activity metrics
-                    'steps': get_nested(steps_data, 'steps', default=0),
-                    'calories_active': get_nested(user_summary, 'activeKilocalories', default=0),
-                    'calories_total': get_nested(user_summary, 'totalKilocalories', default=0),
-                    'distance_meters': get_nested(user_summary, 'distanceInMeters', default=0),
-                    'intensity_minutes': get_nested(user_summary, 'intensityMinutes', default=0),
-                    
-                    # Body metrics
-                    'weight': get_nested(body_comp, 'weight', default=0),
-                    'body_fat_percentage': get_nested(body_comp, 'bodyFat', default=0),
-                    'bmi': get_nested(body_comp, 'bmi', default=0),
-                    
-                    # Stress and recovery
-                    'stress_level': get_nested(user_summary, 'averageStressLevel', default=0),
-                    'recovery_time': get_nested(user_summary, 'recoveryTime', default=0),
-                }
-                
-                biometric_data, created = BiometricData.objects.update_or_create(
-                    athlete=self.athlete,
-                    date=date,
-                    defaults=data
-                )
+            prefix = f"accounts/{str(self.athlete.user.id)}/biometric-data/garmin/"
+            end_date = timezone.now().date()
+            start_date = end_date - timedelta(days=7)
             
-            return True
+            response = self.s3_client.list_objects_v2(
+                Bucket=self.bucket_name,
+                Prefix=prefix
+            )
+            
+            if 'Contents' not in response:
+                logger.info("No S3 data found, will fetch from API")
+                return None
+                
+            all_data = []
+            found_dates = set()  # Track which dates we've found
+            
+            # First, get all available files from S3
+            for obj in response['Contents']:
+                try:
+                    filename = obj['Key'].split('/')[-1]
+                    if not filename[0].isdigit():
+                        continue
+                        
+                    file_date = datetime.strptime(filename.split('_')[0], '%Y%m%d').date()
+                    if start_date <= file_date <= end_date:
+                        file_response = self.s3_client.get_object(
+                            Bucket=self.bucket_name,
+                            Key=obj['Key']
+                        )
+                        file_data = json.loads(file_response['Body'].read().decode('utf-8'))
+                        logger.info(f"Retrieved data from S3 for date: {file_date}")
+                        
+                        if isinstance(file_data, list):
+                            for item in file_data:
+                                if isinstance(item, dict):
+                                    item_date = datetime.strptime(item.get('date', ''), '%Y-%m-%d').date()
+                                    if item_date not in found_dates:
+                                        all_data.append(item)
+                                        found_dates.add(item_date)
+                        elif isinstance(file_data, dict):
+                            data_date = datetime.strptime(file_data.get('date', ''), '%Y-%m-%d').date()
+                            if data_date not in found_dates:
+                                all_data.append(file_data)
+                                found_dates.add(data_date)
+                            
+                except (ValueError, IndexError) as e:
+                    logger.warning(f"Skipping malformed filename: {obj['Key']}: {e}")
+                    continue
+                except Exception as e:
+                    logger.error(f"Error processing S3 file {obj['Key']}: {e}")
+                    continue
+            
+            # Check if we have all the dates we need
+            needed_dates = set(start_date + timedelta(days=x) for x in range((end_date - start_date).days + 1))
+            missing_dates = needed_dates - found_dates
+            
+            if missing_dates:
+                logger.info(f"Missing data for dates: {missing_dates}. Will fetch from API.")
+                return None
+            
+            logger.info(f"Retrieved {len(all_data)} complete records from S3")
+            return all_data
         except Exception as e:
-            logger.error(f"Error processing Garmin data: {e}")
-            return False
+            logger.error(f"Error getting S3 data: {e}")
+            return None
 
-    def update_athlete_data(self):
-        """Update both Garmin and WHOOP data"""
-        success_messages = []
-        error_messages = []
-
-        # Update Garmin Data
+    def fetch_and_store_new_data(self):
+        """Fetch new data from Garmin API and store in S3"""
         try:
             garmin_collector = GarminDataCollector()
             raw_data = garmin_collector.collect_data()
             
-            if raw_data:
-                # Use ISO format timestamp
-                timestamp = datetime.now().isoformat().replace(':', '-').replace('.', '-')
-                if self.upload_to_s3(raw_data, f"garmin_data_{timestamp}.json"):
-                    success_messages.append("Raw Garmin data uploaded to S3 successfully")
-                    
-                    # Process and store in database
-                    if self.process_and_store_garmin_data(raw_data):
-                        success_messages.append("Garmin data processed and stored in DB successfully")
-                    else:
-                        error_messages.append("Failed to process and store Garmin data in DB")
-                else:
-                    error_messages.append("Failed to upload raw Garmin data to S3")
-            else:
-                error_messages.append("Failed to collect Garmin data")
+            if not raw_data:
+                logger.error("No data received from Garmin API")
+                return None
+
+            logger.debug(f"Raw data type: {type(raw_data)}")
+            logger.debug(f"Raw data first item type: {type(raw_data[0]) if raw_data else 'None'}")
+
+            # Store each day's data separately in S3
+            for daily_data in raw_data:
+                date = datetime.strptime(daily_data['date'], '%Y-%m-%d').date()
+                if not self.upload_to_s3(daily_data, date):
+                    logger.error(f"Failed to upload data for {date} to S3")
+            
+            return raw_data
         except Exception as e:
-            error_messages.append(f"Garmin error: {str(e)}")
+            logger.error(f"Error fetching new data: {e}")
+            return None
 
-        # Update WHOOP Data
-        # try:
-        #     whoop_collector = WhoopDataCollector(self.athlete.user.id)
-        #     if whoop_collector.collect_and_store_data():
-        #         success_messages.append("WHOOP data updated successfully")
-        #     else:
-        #         error_messages.append("Failed to update WHOOP data")
-        # except Exception as e:
-        #     error_messages.append(f"WHOOP error: {str(e)}")
+    def process_and_store_garmin_data(self, data):
+        """Process and store Garmin data"""
+        try:
+            if not data:
+                logger.error("No data to process")
+                return False
+            
+            success = False
+            
+            # Handle both list and dict data structures
+            if isinstance(data, list):
+                data_items = data
+            elif isinstance(data, dict):
+                data_items = data.items()
+            else:
+                logger.error(f"Unexpected data type: {type(data)}")
+                return False
+            
+            for daily_data in data_items:
+                try:
+                    # Handle both data structures
+                    if isinstance(daily_data, tuple):  # If data is dict.items()
+                        date_str, daily_data = daily_data
+                    else:  # If data is list
+                        date_str = daily_data.get('date')
+                        if not date_str:
+                            logger.error("No date found in daily data")
+                            continue
+                    
+                    date = datetime.strptime(date_str, '%Y-%m-%d').date()
+                    logger.debug(f"Processing data for date: {date}")
+                    
+                    # Extract sleep data
+                    sleep_data = daily_data.get('sleep', {}).get('dailySleepDTO', {})
+                    
+                    # Extract stress data
+                    stress_data = daily_data.get('stressDetails', {})
+                    
+                    # Extract body composition data
+                    body_comp = daily_data.get('bodyComps', {})
+                    
+                    # Process sleep metrics - convert to hours for the old fields
+                    sleep_seconds = sleep_data.get('sleepTimeSeconds', 0)
+                    deep_sleep_seconds = sleep_data.get('deepSleepSeconds', 0)
+                    light_sleep_seconds = sleep_data.get('lightSleepSeconds', 0)
+                    rem_sleep_seconds = sleep_data.get('remSleepSeconds', 0)
+                    awake_seconds = sleep_data.get('awakeSleepSeconds', 0)
+                    
+                    processed_data = {
+                        # Body metrics
+                        'weight': body_comp.get('weight', 0),
+                        'body_fat_percentage': body_comp.get('bodyFat', 0),
+                        'bmi': body_comp.get('bmi', 0),
+                        'stress_level': stress_data.get('stressLevel', 0),
+                        
+                        # Sleep metrics in hours (for backward compatibility)
+                        'sleep_hours': sleep_seconds / 3600 if sleep_seconds else 0,
+                        'deep_sleep': deep_sleep_seconds / 3600 if deep_sleep_seconds else 0,
+                        'light_sleep': light_sleep_seconds / 3600 if light_sleep_seconds else 0,
+                        'rem_sleep': rem_sleep_seconds / 3600 if rem_sleep_seconds else 0,
+                        'awake_time': awake_seconds / 3600 if awake_seconds else 0,
+                        
+                        # Sleep metrics in seconds (new fields)
+                        'total_sleep_seconds': sleep_seconds,
+                        'deep_sleep_seconds': deep_sleep_seconds,
+                        'light_sleep_seconds': light_sleep_seconds,
+                        'rem_sleep_seconds': rem_sleep_seconds,
+                        'awake_seconds': awake_seconds,
+                        'average_respiration': sleep_data.get('averageRespirationValue', 0),
+                    }
+                    
+                    # Check for existing data
+                    existing_data = CoreBiometricData.objects.filter(
+                        athlete=self.athlete,
+                        date=date
+                    ).first()
+                    
+                    if existing_data:
+                        logger.info(f"Updating existing data for {date}")
+                        for key, value in processed_data.items():
+                            if hasattr(existing_data, key) and value:  # Only update if field exists and value is not 0/None
+                                setattr(existing_data, key, value)
+                        existing_data.save()
+                    else:
+                        logger.info(f"Creating new data for {date}")
+                        create_biometric_data(self.athlete, date, processed_data)
+                    
+                    success = True
+                    logger.info(f"Successfully processed data for {date}")
+                    
+                except Exception as e:
+                    logger.error(f"Error processing daily data: {str(e)}")
+                    logger.error(f"Date: {date_str if 'date_str' in locals() else 'unknown'}")
+                    continue
+            
+            return success
+            
+        except Exception as e:
+            logger.error(f"Error processing Garmin data: {str(e)}")
+            return False
 
-        if error_messages:
-            return False, " | ".join(error_messages)
-        return True, " | ".join(success_messages) 
+    def update_athlete_data(self):
+        """Main method to update athlete data"""
+        try:
+            # First try to get data from S3
+            data = self.get_latest_s3_data()
+            
+            # If no S3 data, fetch from API
+            if not data:
+                data = self.fetch_and_store_new_data()
+                
+            if data:
+                return self.process_and_store_garmin_data(data)
+            
+            return False
+        except Exception as e:
+            logger.error(f"Error updating athlete data: {e}")
+            return False 

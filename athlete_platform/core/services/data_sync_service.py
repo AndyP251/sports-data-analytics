@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta
 from ..utils.garmin_utils import GarminDataCollector
-from ..models import BiometricData, Athlete
+from ..models import BiometricData, Athlete, CoreBiometricData, create_biometric_data, get_athlete_biometrics
 from .storage_service import UserStorageService
 import json
 import boto3
@@ -23,91 +23,81 @@ class DataSyncService:
             aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY
         )
         self.bucket = 'athlete-platform-bucket'
+        self.garmin_collector = GarminDataCollector()
 
     def sync_data(self):
+        """Sync data from Garmin"""
         try:
-            # Get latest file from S3
-            prefix = f'accounts/{self.athlete.user.id}/biometric-data/garmin/'
-            response = self.s3.list_objects_v2(
-                Bucket=self.bucket,
-                Prefix=prefix
-            )
-
-            if 'Contents' not in response:
-                logger.warning(f"No files found for athlete {self.athlete.user.id}")
-                return False
-
-            # Get most recent file
-            latest_file = max(response['Contents'], key=lambda x: x['LastModified'])
-            
-            # Get file content
-            file_response = self.s3.get_object(
-                Bucket=self.bucket,
-                Key=latest_file['Key']
-            )
-            
-            # Load and process the data
-            raw_data = json.loads(file_response['Body'].read().decode('utf-8'))
+            raw_data = self.garmin_collector.collect_data()
             if not raw_data:
-                logger.error("No data found in file")
+                logger.error("No data received from Garmin")
                 return False
-
-            # Process and save the data
-            return self._process_and_save_data(raw_data[0])
-
+            
+            # Process each day's data
+            success = False
+            for daily_data in raw_data:
+                if self._process_and_save_data(daily_data):
+                    success = True
+                
+            return success
         except Exception as e:
-            logger.error(f"Error in sync_data: {str(e)}", exc_info=True)
+            logger.error(f"Error in sync_data: {e}", exc_info=True)
             return False
 
     def _process_and_save_data(self, data):
+        """Process and save a single day's data"""
         try:
-            daily_stats = data['daily_stats']
+            if not isinstance(data, dict):
+                logger.debug(f"Data structure received: {type(data)}")
+                # If it's a list of dictionaries, process each dictionary
+                if isinstance(data, list):
+                    success = False
+                    for item in data:
+                        if isinstance(item, dict) and self._process_single_day_data(item):
+                            success = True
+                    return success
+                logger.error(f"Invalid data format: {type(data)}")
+                return False
             
-            # Process sleep data
-            sleep_data = daily_stats['sleep']['dailySleepDTO']
-            processed_sleep = {
-                'total_sleep': sleep_data['sleepTimeSeconds'] / 3600,  # Convert to hours
-                'deep_sleep': sleep_data['deepSleepSeconds'] / 3600,
-                'light_sleep': sleep_data['lightSleepSeconds'] / 3600,
-                'rem_sleep': sleep_data['remSleepSeconds'] / 3600,
-                'awake_time': sleep_data['awakeSleepSeconds'] / 3600
-            }
-
-            # Process activity data
-            activities = data.get('activities', {})
-            activity_data = {
-                'calories_active': activities.get('calories', 0),
-                'calories_total': activities.get('calories', 0) + activities.get('bmrCalories', 0),
-                'avg_heart_rate': activities.get('averageHR', 0),
-                'max_heart_rate': activities.get('maxHR', 0),
-                'intensity_minutes': (
-                    activities.get('moderateIntensityMinutes', 0) +
-                    activities.get('vigorousIntensityMinutes', 0)
-                )
-            }
-
-            # Save to database
-            BiometricData.objects.update_or_create(
-                date=data['date'],
-                athlete=self.athlete,
-                defaults={
-                    'sleep_hours': processed_sleep['total_sleep'],
-                    'deep_sleep': processed_sleep['deep_sleep'],
-                    'light_sleep': processed_sleep['light_sleep'],
-                    'rem_sleep': processed_sleep['rem_sleep'],
-                    'awake_time': processed_sleep['awake_time'],
-                    'calories_active': activity_data['calories_active'],
-                    'calories_total': activity_data['calories_total'],
-                    'avg_heart_rate': activity_data['avg_heart_rate'],
-                    'max_heart_rate': activity_data['max_heart_rate'],
-                    'intensity_minutes': activity_data['intensity_minutes']
-                }
-            )
-
-            return True
-
+            return self._process_single_day_data(data)
+            
         except Exception as e:
-            logger.error(f"Error processing data: {str(e)}", exc_info=True)
+            logger.error(f"Error processing data: {e}")
+            return False
+
+    def _process_single_day_data(self, daily_data):
+        """Process a single day's data dictionary"""
+        try:
+            # Extract date from the data
+            date = datetime.strptime(daily_data.get('date'), '%Y-%m-%d').date()
+            
+            # Process the data
+            processed_data = {
+                'sleep_hours': daily_data.get('sleep', {}).get('totalSleepTime', 0),
+                'deep_sleep': daily_data.get('sleep', {}).get('deepSleepSeconds', 0),
+                'light_sleep': daily_data.get('sleep', {}).get('lightSleepSeconds', 0),
+                'rem_sleep': daily_data.get('sleep', {}).get('remSleepSeconds', 0),
+                'sleep_score': daily_data.get('sleep', {}).get('sleepScore', 0),
+                'resting_heart_rate': daily_data.get('heart_rate', {}).get('restingHeartRate', 0),
+                'max_heart_rate': daily_data.get('heart_rate', {}).get('maxHeartRate', 0),
+                'avg_heart_rate': daily_data.get('heart_rate', {}).get('avgHeartRate', 0),
+                'hrv': daily_data.get('heart_rate', {}).get('hrv', 0),
+                'steps': daily_data.get('steps', {}).get('steps', 0),
+                'calories_active': daily_data.get('user_summary', {}).get('activeCalories', 0),
+                'calories_total': daily_data.get('user_summary', {}).get('totalCalories', 0),
+                'weight': daily_data.get('body_comp', {}).get('weight', 0),
+                'body_fat_percentage': daily_data.get('body_comp', {}).get('bodyFat', 0),
+                'bmi': daily_data.get('body_comp', {}).get('bmi', 0),
+                'stress_level': daily_data.get('stress', {}).get('stressLevel', 0),
+            }
+            
+            # Save to database
+            create_biometric_data(self.athlete, date, processed_data)
+            logger.info(f"Successfully processed and saved data for {date}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error processing single day data: {e}")
             return False
 
     def get_latest_data(self) -> Dict[str, Any]:
@@ -225,30 +215,51 @@ class DataSyncService:
         """Save all processed data to appropriate database models"""
         try:
             # Update BiometricData model
-            BiometricData.objects.update_or_create(
-                date=processed_data['date'],
-                athlete=self.athlete,
-                defaults={
-                    'resting_heart_rate': processed_data['heart_rate']['resting'],
-                    'min_heart_rate': processed_data['heart_rate']['min'],
-                    'max_heart_rate': processed_data['heart_rate']['max'],
-                    'avg_heart_rate': processed_data['heart_rate']['avg'],
-                    'sleep_hours': processed_data['sleep']['total_sleep'],
-                    'deep_sleep': processed_data['sleep']['deep_sleep'],
-                    'light_sleep': processed_data['sleep']['light_sleep'],
-                    'rem_sleep': processed_data['sleep']['rem_sleep'],
-                    'awake_time': processed_data['sleep']['awake_time'],
-                    'stress_level': processed_data['stress']['average_level'],
-                    'calories_active': processed_data['activity']['calories']['active'],
-                    'calories_total': processed_data['activity']['calories']['total'],
-                    'steps': processed_data['activity']['total_steps'],
-                    'distance_meters': processed_data['activity']['distance_meters'],
-                    'intensity_minutes': (
-                        processed_data['activity']['intensity_minutes']['moderate'] +
-                        processed_data['activity']['intensity_minutes']['vigorous']
-                    )
-                }
-            )
+
+            biometric_data = create_biometric_data(self.athlete, processed_data['date'], {
+                'resting_heart_rate': processed_data['heart_rate']['resting'],
+                'min_heart_rate': processed_data['heart_rate']['min'],
+                'max_heart_rate': processed_data['heart_rate']['max'],
+                'avg_heart_rate': processed_data['heart_rate']['avg'],
+                'sleep_hours': processed_data['sleep']['total_sleep'],
+                'deep_sleep': processed_data['sleep']['deep_sleep'],
+                'light_sleep': processed_data['sleep']['light_sleep'],
+                'rem_sleep': processed_data['sleep']['rem_sleep'],
+                'awake_time': processed_data['sleep']['awake_time'],
+                'calories_active': processed_data['activity']['calories']['active'],
+                'calories_total': processed_data['activity']['calories']['total'],
+                'steps': processed_data['activity']['total_steps'],
+                'distance_meters': processed_data['activity']['distance_meters'],
+                'intensity_minutes': (
+                    processed_data['activity']['intensity_minutes']['moderate'] +
+                    processed_data['activity']['intensity_minutes']['vigorous']
+                )
+            })
+
+            # BiometricData.objects.update_or_create(
+            #     date=processed_data['date'],
+            #     athlete=self.athlete,
+            #     defaults={
+            #         'resting_heart_rate': processed_data['heart_rate']['resting'],
+            #         'min_heart_rate': processed_data['heart_rate']['min'],
+            #         'max_heart_rate': processed_data['heart_rate']['max'],
+            #         'avg_heart_rate': processed_data['heart_rate']['avg'],
+            #         'sleep_hours': processed_data['sleep']['total_sleep'],
+            #         'deep_sleep': processed_data['sleep']['deep_sleep'],
+            #         'light_sleep': processed_data['sleep']['light_sleep'],
+            #         'rem_sleep': processed_data['sleep']['rem_sleep'],
+            #         'awake_time': processed_data['sleep']['awake_time'],
+            #         'stress_level': processed_data['stress']['average_level'],
+            #         'calories_active': processed_data['activity']['calories']['active'],
+            #         'calories_total': processed_data['activity']['calories']['total'],
+            #         'steps': processed_data['activity']['total_steps'],
+            #         'distance_meters': processed_data['activity']['distance_meters'],
+            #         'intensity_minutes': (
+            #             processed_data['activity']['intensity_minutes']['moderate'] +
+            #             processed_data['activity']['intensity_minutes']['vigorous']
+            #         )
+            #     }
+            # )
 
             # Save detailed data to other models as needed
             self._save_detailed_sleep(processed_data['sleep'])

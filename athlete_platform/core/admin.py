@@ -1,6 +1,6 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
-from .models import User, Team, Athlete, WorkoutData, BiometricData
+from .models import User, Team, Athlete, WorkoutData, BiometricData, CoreBiometricData
 
 # Customize the User admin
 class CustomUserAdmin(UserAdmin):
@@ -29,3 +29,4 @@ admin.site.register(Athlete, AthleteAdmin)
 admin.site.register(WorkoutData, WorkoutDataAdmin)
 
 admin.site.register(BiometricData)
+admin.site.register(CoreBiometricData)

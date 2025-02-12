@@ -49,6 +49,7 @@ INSTALLED_APPS = [
     
     # Third party apps
     'rest_framework',
+    'rest_framework.authtoken',
     'allauth',
     'allauth.account',
     'allauth.socialaccount',
@@ -226,30 +227,42 @@ LOGGING = {
     'version': 1,
     'disable_existing_loggers': False,
     'formatters': {
-        'verbose': {
-            'format': '{levelname} {asctime} {module} {process:d} {thread:d} {message}',
+        'simple': {
+            'format': '[{asctime}] {levelname}: {message}',
             'style': '{',
+            'datefmt': '%Y-%m-%d %H:%M:%S'
         },
     },
     'handlers': {
         'console': {
             'class': 'logging.StreamHandler',
-            'formatter': 'verbose',
+            'formatter': 'simple',
         },
         'file': {
             'class': 'logging.FileHandler',
-            'filename': 'debug.log',
-            'formatter': 'verbose',
+            'filename': 'app.log',
+            'formatter': 'simple',
         },
     },
     'loggers': {
-        '': {  # Root logger
-            'handlers': ['console', 'file'],
-            'level': 'DEBUG',
-        },
         'core': {  # Your app logger
             'handlers': ['console', 'file'],
-            'level': 'DEBUG',
+            'level': 'INFO',  # Changed from DEBUG to INFO
+            'propagate': False,
+        },
+        'django.db.backends': {  # Database queries
+            'handlers': ['console'],
+            'level': 'WARNING',  # Only log database warnings and errors
+            'propagate': False,
+        },
+        'boto3': {
+            'handlers': ['console'],
+            'level': 'WARNING',  # Reduce AWS SDK noise
+            'propagate': False,
+        },
+        'botocore': {
+            'handlers': ['console'],
+            'level': 'WARNING',  # Reduce AWS SDK noise
             'propagate': False,
         },
     },
@@ -293,6 +306,7 @@ CORS_ALLOW_HEADERS = [
 CSRF_COOKIE_NAME = "csrftoken"
 CSRF_COOKIE_HTTPONLY = False  # Must be False to access it via JavaScript
 CSRF_COOKIE_SAMESITE = 'Lax'
+CSRF_HEADER_NAME = 'HTTP_X_CSRFTOKEN'
 SESSION_COOKIE_SAMESITE = 'Lax'
 CSRF_COOKIE_HTTPONLY = False
 SESSION_COOKIE_HTTPONLY = True

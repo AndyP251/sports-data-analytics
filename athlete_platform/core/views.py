@@ -4,7 +4,7 @@ from django.contrib.auth import login, logout
 from django.contrib import messages
 from .forms import CustomUserCreationForm
 from .utils.s3_utils import S3Utils
-from .models import Athlete, BiometricData
+from .models import Athlete, BiometricData, CoreBiometricData, create_biometric_data, get_athlete_biometrics
 from django.http import JsonResponse
 from .utils.garmin_utils import GarminDataCollector
 from django.views.decorators.http import require_POST, require_http_methods
@@ -26,9 +26,14 @@ from datetime import timedelta
 from django.contrib.auth import login as auth_login
 from django.contrib.auth.signals import user_logged_in
 from django.dispatch import receiver
+import warnings  # Python's built-in warnings module
+from django.conf import settings
 
 # Set up logging
 logger = logging.getLogger(__name__)
+
+# Define threshold constant - could also be moved to settings.py
+MINIMUM_RECORDS_THRESHOLD = 4
 
 # Create your views here.
 
@@ -132,12 +137,13 @@ def update_athlete_data(request):
                 latest_data = raw_data[0]  # Most recent data
                 
                 # Update BiometricData
-                BiometricData.objects.create(
-                    athlete=athlete,
-                    date=datetime.strptime(latest_data['date'], '%Y-%m-%d').date(),
-                    resting_heart_rate=latest_data['daily_stats']['heart_rate'].get('restingHeartRate'),
-                    # Add other relevant fields
-                )
+                create_biometric_data(athlete, datetime.strptime(latest_data['date'], '%Y-%m-%d').date(), latest_data)
+                # BiometricData.objects.create(
+                #     athlete=athlete,
+                #     date=datetime.strptime(latest_data['date'], '%Y-%m-%d').date(),
+                #     resting_heart_rate=latest_data['daily_stats']['heart_rate'].get('restingHeartRate'),
+                #     # Add other relevant fields
+                # )
             
             return JsonResponse({'success': True})
         else:
@@ -155,10 +161,11 @@ def update_data(request):
         athlete = Athlete.objects.get(user=request.user)
         
         # Create new biometric data with defaults
-        biometric_data = BiometricData.objects.create(
-            athlete=athlete,
-            date=timezone.now().date()
-        )
+        biometric_data = create_biometric_data(athlete, timezone.now().date(), {})
+        # biometric_data = BiometricData.objects.create(
+        #     athlete=athlete,
+        #     date=timezone.now().date()
+        # )
         
         # Update S3 with new data
         try:
@@ -209,7 +216,10 @@ def dashboard_data(request):
         logger.info(f"Found athlete profile for user: {request.user.id}")
         
         # Fetch the latest biometric data
-        latest_data = BiometricData.objects.filter(athlete=athlete).order_by('-date').first()
+        # latest_data = BiometricData.objects.filter(athlete=athlete).order_by('-date').first()
+
+        # Fetch the latest biometric data from CoreBiometricData
+        latest_data = get_athlete_biometrics(athlete, timezone.now().date())
         
         if latest_data:
             logger.info(f"Found latest biometric data for athlete: {athlete.id}, under path accounts/{athlete.user.id}/biometric-data/garmin")
@@ -279,15 +289,10 @@ def sync_on_login(sender, user, request, **kwargs):
         logger.error(f"Error syncing data on login: {e}")
 
 @api_view(['POST'])
-@csrf_exempt
-@login_required
+@permission_classes([IsAuthenticated])
 def sync_biometric_data(request):
     """Sync biometric data endpoint"""
     try:
-        # Debug logging
-        print(f"User authenticated: {request.user.is_authenticated}")
-        print(f"User: {request.user}")
-        
         if not hasattr(request.user, 'athlete'):
             return Response({
                 'success': False,
@@ -303,7 +308,7 @@ def sync_biometric_data(request):
             'message': 'Sync completed successfully' if success else 'Sync failed'
         })
     except Exception as e:
-        print(f"Error in sync_biometric_data: {str(e)}")
+        logger.error(f"Error in sync_biometric_data: {str(e)}")
         return Response({
             'success': False,
             'message': str(e)
@@ -312,30 +317,40 @@ def sync_biometric_data(request):
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def get_biometric_data(request):
-    """Get biometric data endpoint"""
-    logger.info(f"Data requested for user: {request.user.id}")
     try:
-        sync_service = DataSyncService(request.user.athlete)
-        sync_result = sync_service.sync_data()
-        logger.info(f"Initial sync completed with success: {sync_result}")
+        athlete = request.user.athlete
+        logger.info(f"Data requested for user: {request.user.id}")
         
-        days = int(request.query_params.get('days', 7))
-        end_date = datetime.now().date()
-        start_date = end_date - timedelta(days=days)
+        end_date = timezone.now().date()
+        start_date = end_date - timedelta(days=7)
         
         data = BiometricData.objects.filter(
-            athlete=request.user.athlete,
+            athlete=athlete,
             date__range=[start_date, end_date]
         ).order_by('date')
         
+        if not data.exists():
+            logger.warning("No data found")
+            total_records = BiometricData.objects.filter(
+                athlete=athlete,
+                date__range=[start_date, end_date]
+            ).count()
+            
+            if total_records < MINIMUM_RECORDS_THRESHOLD:
+                logger.info(f"Found only {total_records} records, below threshold of {MINIMUM_RECORDS_THRESHOLD}. Triggering API sync.")
+                pipeline_service = DataPipelineService(athlete)
+                pipeline_service.update_athlete_data()
+                
+                data = BiometricData.objects.filter(
+                    athlete=athlete,
+                    date__range=[start_date, end_date]
+                ).order_by('date')
+            
+            if not data.exists():
+                return Response([])
+            
         logger.info(f"Found {data.count()} records for date range {start_date} to {end_date}")
         
-        if not data:
-            return Response({
-                'message': 'No data found',
-                'data': []
-            })
-            
         return Response([{
             'date': item.date,
             'sleep_hours': item.sleep_hours,
@@ -354,7 +369,16 @@ def get_biometric_data(request):
             'body_fat_percentage': item.body_fat_percentage,
             'bmi': item.bmi,
             'stress_level': item.stress_level,
+            'recovery_time': item.recovery_time,
+            # Include detailed sleep metrics
+            'total_sleep_seconds': item.total_sleep_seconds,
+            'deep_sleep_seconds': item.deep_sleep_seconds,
+            'light_sleep_seconds': item.light_sleep_seconds,
+            'rem_sleep_seconds': item.rem_sleep_seconds,
+            'awake_seconds': item.awake_seconds,
+            'average_respiration': item.average_respiration,
         } for item in data])
+        
     except Exception as e:
         logger.error(f"Error in get_biometric_data: {e}", exc_info=True)
         return Response({'error': str(e)}, status=500)

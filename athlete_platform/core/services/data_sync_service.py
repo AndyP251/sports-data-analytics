@@ -70,26 +70,59 @@ class DataSyncService:
         try:
             # Extract date from the data
             date = datetime.strptime(daily_data.get('date'), '%Y-%m-%d').date()
+            daily_stats = daily_data.get('daily_stats', {})
             
+            if daily_stats == {}:
+                logger.error(f"No daily stats found for {date}")
+                return False
+
             # Process the data
             processed_data = {
-                'sleep_hours': daily_data.get('sleep', {}).get('totalSleepTime', 0),
-                'deep_sleep': daily_data.get('sleep', {}).get('deepSleepSeconds', 0),
-                'light_sleep': daily_data.get('sleep', {}).get('lightSleepSeconds', 0),
-                'rem_sleep': daily_data.get('sleep', {}).get('remSleepSeconds', 0),
-                'sleep_score': daily_data.get('sleep', {}).get('sleepScore', 0),
-                'resting_heart_rate': daily_data.get('heart_rate', {}).get('restingHeartRate', 0),
-                'max_heart_rate': daily_data.get('heart_rate', {}).get('maxHeartRate', 0),
-                'avg_heart_rate': daily_data.get('heart_rate', {}).get('avgHeartRate', 0),
-                'hrv': daily_data.get('heart_rate', {}).get('hrv', 0),
-                'steps': daily_data.get('steps', {}).get('steps', 0),
-                'calories_active': daily_data.get('user_summary', {}).get('activeCalories', 0),
-                'calories_total': daily_data.get('user_summary', {}).get('totalCalories', 0),
-                'weight': daily_data.get('body_comp', {}).get('weight', 0),
-                'body_fat_percentage': daily_data.get('body_comp', {}).get('bodyFat', 0),
-                'bmi': daily_data.get('body_comp', {}).get('bmi', 0),
-                'stress_level': daily_data.get('stress', {}).get('stressLevel', 0),
-            }
+                # Initial Sleep Data
+                'sleep_hours': daily_stats.get('sleep', {}).get('sleepTimeSeconds', 0),
+                'deep_sleep': daily_stats.get('sleep', {}).get('deepSleepSeconds', 0),
+                'light_sleep': daily_stats.get('sleep', {}).get('lightSleepSeconds', 0),
+                'rem_sleep': daily_stats.get('sleep', {}).get('remSleepSeconds', 0),
+                'awake_sleep': daily_stats.get('sleep', {}).get('awakeSleepSeconds', 0),
+                'average_respiration': daily_stats.get('sleep', {}).get('averageRespirationValue', 0),
+                'lowest_respiration': daily_stats.get('sleep', {}).get('lowestRespirationValue', 0),
+                'highest_respiration': daily_stats.get('sleep', {}).get('highestRespirationValue', 0),
+                # list of dictionaries {"value", "startGMT"}
+                'sleep_heart_rate': daily_stats.get('sleep', {}).get('sleepHeartRate', {}),
+                'sleep_stress': daily_stats.get('sleep', {}).get('sleepStress', {}),
+                'sleep_body_battery': daily_stats.get('sleep', {}).get('sleepBodyBattery', {}),
+                # Last Sleep Data
+                'body_battery_change': daily_stats.get('sleep', {}).get('bodyBatteryChange', 0),
+                'sleep_resting_heart_rate': daily_stats.get('sleep', {}).get('sleepRestingHeartRate', 0),
+                # Step Data
+                'steps': daily_stats.get('steps', {}).get('steps', {}),
+                # Heart Rate Data
+                'resting_heart_rate': daily_stats.get('heart_rate', {}).get('restingHeartRate', 0),
+                'max_heart_rate': daily_stats.get('heart_rate', {}).get('maxHeartRate', 0),
+                'min_heart_rate': daily_stats.get('heart_rate', {}).get('minHeartRate', 0),
+                'last_seven_days_avg_resting_heart_rate': daily_stats.get('heart_rate', {}).get('lastSevenDaysAvgRestingHeartRate', 0),
+                'resting_heart_rate': daily_stats.get('heart_rate', {}).get('restingHeartRate', 0),
+                # list of list, [timestamp, value], e.g. [[1712985600000, 55], [1713072000000, 56], ...]
+                "heart_rate_values": daily_stats.get('heart_rate', {}).get('heartRateValues', {}),
+                # User Summary Data
+                'total_calories': daily_stats.get('user_summary', {}).get('totalKilocalories', 0),
+                'active_calories': daily_stats.get('user_summary', {}).get('activeKilocalories', 0),
+                'bmr_calories': daily_stats.get('user_summary', {}).get('bmrKilocalories', 0),
+                'net_calorie_goal': daily_stats.get('user_summary', {}).get('netCalorieGoal', 0),
+                'total_distance_meters': daily_stats.get('user_summary', {}).get('totalDistanceMeters', 0),
+                'total_steps': daily_stats.get('user_summary', {}).get('totalSteps', 0),
+                'daily_step_goal': daily_stats.get('user_summary', {}).get('dailyStepGoal', 0),
+                'highly_active_seconds': daily_stats.get('user_summary', {}).get('highlyActiveSeconds', 0),
+                'sedentary_seconds': daily_stats.get('user_summary', {}).get('sedentarySeconds', 0),
+                'average_stress_level': daily_stats.get('user_summary', {}).get('averageStressLevel', 0),
+                'max_stress_level': daily_stats.get('user_summary', {}).get('maxStressLevel', 0),
+                'stress_duration': daily_stats.get('user_summary', {}).get('stressDuration', 0),
+                'rest_stress_duration': daily_stats.get('user_summary', {}).get('restStressDuration', 0),
+                'activity_stress_duration': daily_stats.get('user_summary', {}).get('activityStressDuration', 0),
+                'low_stress_percentage': daily_stats.get('user_summary', {}).get('lowStressPercentage', 0),
+                'medium_stress_percentage': daily_stats.get('user_summary', {}).get('mediumStressPercentage', 0),
+                'high_stress_percentage': daily_stats.get('user_summary', {}).get('highStressPercentage', 0),
+                }
             
             # Save to database
             create_biometric_data(self.athlete, date, processed_data)

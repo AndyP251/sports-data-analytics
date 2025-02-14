@@ -4,7 +4,7 @@ from django.contrib.auth import login, logout
 from django.contrib import messages
 from .forms import CustomUserCreationForm
 from .utils.s3_utils import S3Utils
-from .models import Athlete, BiometricData, CoreBiometricData, create_biometric_data, get_athlete_biometrics
+from .models import Athlete, CoreBiometricData, create_biometric_data, get_athlete_biometrics
 from django.http import JsonResponse
 from .utils.garmin_utils import GarminDataCollector
 from django.views.decorators.http import require_POST, require_http_methods
@@ -136,9 +136,9 @@ def update_athlete_data(request):
             if raw_data and len(raw_data) > 0:
                 latest_data = raw_data[0]  # Most recent data
                 
-                # Update BiometricData
+                # Update CoreBiometricData
                 create_biometric_data(athlete, datetime.strptime(latest_data['date'], '%Y-%m-%d').date(), latest_data)
-                # BiometricData.objects.create(
+                # CoreBiometricData.objects.create(
                 #     athlete=athlete,
                 #     date=datetime.strptime(latest_data['date'], '%Y-%m-%d').date(),
                 #     resting_heart_rate=latest_data['daily_stats']['heart_rate'].get('restingHeartRate'),
@@ -162,7 +162,7 @@ def update_data(request):
         
         # Create new biometric data with defaults
         biometric_data = create_biometric_data(athlete, timezone.now().date(), {})
-        # biometric_data = BiometricData.objects.create(
+        # biometric_data = CoreBiometricData.objects.create(
         #     athlete=athlete,
         #     date=timezone.now().date()
         # )
@@ -216,7 +216,7 @@ def dashboard_data(request):
         logger.info(f"Found athlete profile for user: {request.user.id}")
         
         # Fetch the latest biometric data
-        # latest_data = BiometricData.objects.filter(athlete=athlete).order_by('-date').first()
+        # latest_data = CoreBiometricData.objects.filter(athlete=athlete).order_by('-date').first()
 
         # Fetch the latest biometric data from CoreBiometricData
         latest_data = get_athlete_biometrics(athlete, timezone.now().date())
@@ -324,14 +324,14 @@ def get_biometric_data(request):
         end_date = timezone.now().date()
         start_date = end_date - timedelta(days=7)
         
-        data = BiometricData.objects.filter(
+        data = CoreBiometricData.objects.filter(
             athlete=athlete,
             date__range=[start_date, end_date]
         ).order_by('date')
         
         if not data.exists():
             logger.warning("No data found")
-            total_records = BiometricData.objects.filter(
+            total_records = CoreBiometricData.objects.filter(
                 athlete=athlete,
                 date__range=[start_date, end_date]
             ).count()
@@ -341,7 +341,7 @@ def get_biometric_data(request):
                 pipeline_service = DataPipelineService(athlete)
                 pipeline_service.update_athlete_data()
                 
-                data = BiometricData.objects.filter(
+                data = CoreBiometricData.objects.filter(
                     athlete=athlete,
                     date__range=[start_date, end_date]
                 ).order_by('date')
@@ -353,32 +353,56 @@ def get_biometric_data(request):
         
         return Response([{
             'date': item.date,
-            'sleep_hours': item.sleep_hours,
-            'deep_sleep': item.deep_sleep,
-            'light_sleep': item.light_sleep,
-            'rem_sleep': item.rem_sleep,
-            'sleep_score': item.sleep_score,
-            'resting_heart_rate': item.resting_heart_rate,
-            'max_heart_rate': item.max_heart_rate,
-            'avg_heart_rate': item.avg_heart_rate,
-            'hrv': item.hrv,
-            'steps': item.steps,
-            'calories_active': item.calories_active,
-            'calories_total': item.calories_total,
-            'weight': item.weight,
-            'body_fat_percentage': item.body_fat_percentage,
-            'bmi': item.bmi,
-            'stress_level': item.stress_level,
-            'recovery_time': item.recovery_time,
-            # Include detailed sleep metrics
-            'total_sleep_seconds': item.total_sleep_seconds,
+            # Sleep metrics
+            'sleep_time_seconds': item.sleep_time_seconds,
             'deep_sleep_seconds': item.deep_sleep_seconds,
             'light_sleep_seconds': item.light_sleep_seconds,
             'rem_sleep_seconds': item.rem_sleep_seconds,
-            'awake_seconds': item.awake_seconds,
+            'awake_sleep': item.awake_sleep,
             'average_respiration': item.average_respiration,
+            'lowest_respiration': item.lowest_respiration,
+            'highest_respiration': item.highest_respiration,
+            'sleep_heart_rate': item.sleep_heart_rate,
+            'sleep_stress': item.sleep_stress,
+            'sleep_body_battery': item.sleep_body_battery,
+            'body_battery_change': item.body_battery_change,
+            'sleep_resting_heart_rate': item.sleep_resting_heart_rate,
+            
+            # Heart rate metrics
+            'resting_heart_rate': item.resting_heart_rate,
+            'max_heart_rate': item.max_heart_rate,
+            'min_heart_rate': item.min_heart_rate,
+            'last_seven_days_avg_resting_heart_rate': item.last_seven_days_avg_resting_heart_rate,
+            'heart_rate_values': item.heart_rate_values,
+            
+            # Activity metrics
+            'total_calories': item.total_calories,
+            'active_calories': item.active_calories,
+            'bmr_calories': item.bmr_calories,
+            'net_calorie_goal': item.net_calorie_goal,
+            'total_steps': item.total_steps,
+            'total_distance_meters': item.total_distance_meters,
+            'daily_step_goal': item.daily_step_goal,
+            'highly_active_seconds': item.highly_active_seconds,
+            'sedentary_seconds': item.sedentary_seconds,
+            
+            # Stress metrics
+            'average_stress_level': item.average_stress_level,
+            'max_stress_level': item.max_stress_level,
+            'stress_duration': item.stress_duration,
+            'rest_stress_duration': item.rest_stress_duration,
+            'activity_stress_duration': item.activity_stress_duration,
+            'low_stress_percentage': item.low_stress_percentage,
+            'medium_stress_percentage': item.medium_stress_percentage,
+            'high_stress_percentage': item.high_stress_percentage,
         } for item in data])
         
     except Exception as e:
         logger.error(f"Error in get_biometric_data: {e}", exc_info=True)
         return Response({'error': str(e)}, status=500)
+
+def get_current_user(request):
+    if request.user.is_authenticated:
+        return JsonResponse({'username': request.user.username})
+    return JsonResponse({'username': 'AnonymousUser'}, status=401)
+

@@ -3,7 +3,7 @@ from .api_views.auth import (
     check_auth, login_view, register_view, 
     logout_view, get_data
 )
-from .views import dashboard_data,update_garmin_data, sync_biometric_data, get_biometric_data
+from .views import dashboard_data,update_garmin_data, sync_biometric_data, get_biometric_data, get_current_user
 from .api_views.oauth import (
     WhoopOAuthView, WhoopCallbackView, WhoopWebhookView
 )
@@ -19,6 +19,7 @@ urlpatterns = [
     path('api/update-garmin-data/', update_garmin_data, name='update_garmin_data'),
     path('api/biometrics/sync/', sync_biometric_data, name='sync_biometric_data'),
     path('api/biometrics/', get_biometric_data, name='get_biometric_data'),
+    path('api/current_user/', get_current_user, name='get_current_user'),
     
 
     

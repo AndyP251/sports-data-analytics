@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta
+import traceback
 from ..utils.garmin_utils import GarminDataCollector
-from ..models import BiometricData, Athlete, CoreBiometricData, create_biometric_data, get_athlete_biometrics
+from ..models import Athlete, CoreBiometricData, create_biometric_data, get_athlete_biometrics
 from .storage_service import UserStorageService
 import json
 import boto3
@@ -10,38 +11,119 @@ import logging
 from scipy import stats
 import pandas as pd
 from typing import Dict, Any, List
+from django.core.cache import cache
+from functools import wraps
 
 logger = logging.getLogger(__name__)
+
+def sync_lock(timeout=300):
+    def decorator(func):
+        @wraps(func)
+        def wrapper(self, *args, **kwargs):
+            lock_id = f"sync_lock_{self.athlete.id}"
+            
+            # Check if sync is already running
+            if cache.get(lock_id):
+                logger.warning(f"Sync already in progress for athlete {self.athlete.id}")
+                return False
+            
+            # Set lock with timeout
+            cache.set(lock_id, True, timeout)
+            
+            try:
+                result = func(self, *args, **kwargs)
+                return result
+            finally:
+                cache.delete(lock_id)
+        return wrapper
+    return decorator
 
 class DataSyncService:
     def __init__(self, athlete):
         self.athlete = athlete
         self.s3 = boto3.client(
             's3',
-            region_name='us-east-2',  # Explicitly set the correct region
+            region_name='us-east-2',
             aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
             aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY
         )
         self.bucket = 'athlete-platform-bucket'
         self.garmin_collector = GarminDataCollector()
 
-    def sync_data(self):
-        """Sync data from Garmin"""
+    def _check_s3_data_exists(self, date_str):
+        """Check if data already exists in S3 for a given date"""
+        prefix = f'accounts/{self.athlete.user.id}/biometric-data/garmin/'
         try:
+            response = self.s3.list_objects_v2(
+                Bucket=self.bucket,
+                Prefix=f"{prefix}{date_str}"
+            )
+            return 'Contents' in response and len(response['Contents']) > 0
+        except Exception as e:
+            logger.error(f"Error checking S3: {e}")
+            return False
+
+    @sync_lock()
+    def sync_data(self):
+        """Sync data from Garmin with locking mechanism."""
+        try:
+            # If you want to skip calling Garmin entirely if any day is in S3, you can check it first.
+            # For each day, if it's in S3, skip. Otherwise, pull from Garmin.
+
             raw_data = self.garmin_collector.collect_data()
             if not raw_data:
                 logger.error("No data received from Garmin")
                 return False
             
-            # Process each day's data
             success = False
+            processed_dates = set()
+
             for daily_data in raw_data:
+                date = daily_data.get('date')
+                if not date:
+                    continue
+
+                # Skip if already processed or if already on S3
+                if date in processed_dates or self._check_s3_data_exists(date):
+                    logger.info(f"Skipping data for date {date} (already on S3 or processed).")
+                    continue
+
+                # Process & save
                 if self._process_and_save_data(daily_data):
                     success = True
-                
+                    processed_dates.add(date)
+                    
+                    # Only upload once DB is updated successfully
+                    self._upload_to_s3(daily_data, date)
+
             return success
+
         except Exception as e:
             logger.error(f"Error in sync_data: {e}", exc_info=True)
+            return False
+        finally:
+            cache.delete(f"sync_lock_{self.athlete.id}")
+
+    def _upload_to_s3(self, data, date):
+        """Upload data to S3 with proper error handling"""
+        try:
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            key = f'accounts/{self.athlete.user.id}/biometric-data/garmin/{date}_{timestamp}.json'
+            
+            # Check if file already exists
+            if self._check_s3_data_exists(date):
+                logger.info(f"Data already exists in S3 for date {date}")
+                return True
+                
+            self.s3.put_object(
+                Bucket=self.bucket,
+                Key=key,
+                Body=json.dumps(data)
+            )
+            logger.info(f"Successfully uploaded {key} to S3")
+            return True
+        except Exception as e:
+            logger.error(f"Error uploading to S3: {e}")
             return False
 
     def _process_and_save_data(self, data):
@@ -65,72 +147,89 @@ class DataSyncService:
             logger.error(f"Error processing data: {e}")
             return False
 
-    def _process_single_day_data(self, daily_data):
-        """Process a single day's data dictionary"""
+    def _process_single_day_data(self, daily_data: dict):
+        """Process a single day's data dictionary and save to DB."""
         try:
             # Extract date from the data
-            date = datetime.strptime(daily_data.get('date'), '%Y-%m-%d').date()
-            daily_stats = daily_data.get('daily_stats', {})
-            
-            if daily_stats == {}:
-                logger.error(f"No daily stats found for {date}")
+            date_str = daily_data.get('date')
+            if not date_str:
+                logger.error("No date found in daily_data; skipping.")
                 return False
 
-            # Process the data
+            date = datetime.strptime(date_str, '%Y-%m-%d').date()
+
+            # Consolidate fields with safe defaults
+            user_summary = daily_data.get('user_summary', {}) or {}
+            sleep_data = daily_data.get('sleep', {}) or {}
+            heart_rate_data = daily_data.get('heart_rate', {}) or {}
+
             processed_data = {
-                # Initial Sleep Data
-                'sleep_hours': daily_stats.get('sleep', {}).get('sleepTimeSeconds', 0),
-                'deep_sleep': daily_stats.get('sleep', {}).get('deepSleepSeconds', 0),
-                'light_sleep': daily_stats.get('sleep', {}).get('lightSleepSeconds', 0),
-                'rem_sleep': daily_stats.get('sleep', {}).get('remSleepSeconds', 0),
-                'awake_sleep': daily_stats.get('sleep', {}).get('awakeSleepSeconds', 0),
-                'average_respiration': daily_stats.get('sleep', {}).get('averageRespirationValue', 0),
-                'lowest_respiration': daily_stats.get('sleep', {}).get('lowestRespirationValue', 0),
-                'highest_respiration': daily_stats.get('sleep', {}).get('highestRespirationValue', 0),
-                # list of dictionaries {"value", "startGMT"}
-                'sleep_heart_rate': daily_stats.get('sleep', {}).get('sleepHeartRate', {}),
-                'sleep_stress': daily_stats.get('sleep', {}).get('sleepStress', {}),
-                'sleep_body_battery': daily_stats.get('sleep', {}).get('sleepBodyBattery', {}),
-                # Last Sleep Data
-                'body_battery_change': daily_stats.get('sleep', {}).get('bodyBatteryChange', 0),
-                'sleep_resting_heart_rate': daily_stats.get('sleep', {}).get('sleepRestingHeartRate', 0),
-                # Step Data
-                'steps': daily_stats.get('steps', {}).get('steps', {}),
-                # Heart Rate Data
-                'resting_heart_rate': daily_stats.get('heart_rate', {}).get('restingHeartRate', 0),
-                'max_heart_rate': daily_stats.get('heart_rate', {}).get('maxHeartRate', 0),
-                'min_heart_rate': daily_stats.get('heart_rate', {}).get('minHeartRate', 0),
-                'last_seven_days_avg_resting_heart_rate': daily_stats.get('heart_rate', {}).get('lastSevenDaysAvgRestingHeartRate', 0),
-                'resting_heart_rate': daily_stats.get('heart_rate', {}).get('restingHeartRate', 0),
-                # list of list, [timestamp, value], e.g. [[1712985600000, 55], [1713072000000, 56], ...]
-                "heart_rate_values": daily_stats.get('heart_rate', {}).get('heartRateValues', {}),
-                # User Summary Data
-                'total_calories': daily_stats.get('user_summary', {}).get('totalKilocalories', 0),
-                'active_calories': daily_stats.get('user_summary', {}).get('activeKilocalories', 0),
-                'bmr_calories': daily_stats.get('user_summary', {}).get('bmrKilocalories', 0),
-                'net_calorie_goal': daily_stats.get('user_summary', {}).get('netCalorieGoal', 0),
-                'total_distance_meters': daily_stats.get('user_summary', {}).get('totalDistanceMeters', 0),
-                'total_steps': daily_stats.get('user_summary', {}).get('totalSteps', 0),
-                'daily_step_goal': daily_stats.get('user_summary', {}).get('dailyStepGoal', 0),
-                'highly_active_seconds': daily_stats.get('user_summary', {}).get('highlyActiveSeconds', 0),
-                'sedentary_seconds': daily_stats.get('user_summary', {}).get('sedentarySeconds', 0),
-                'average_stress_level': daily_stats.get('user_summary', {}).get('averageStressLevel', 0),
-                'max_stress_level': daily_stats.get('user_summary', {}).get('maxStressLevel', 0),
-                'stress_duration': daily_stats.get('user_summary', {}).get('stressDuration', 0),
-                'rest_stress_duration': daily_stats.get('user_summary', {}).get('restStressDuration', 0),
-                'activity_stress_duration': daily_stats.get('user_summary', {}).get('activityStressDuration', 0),
-                'low_stress_percentage': daily_stats.get('user_summary', {}).get('lowStressPercentage', 0),
-                'medium_stress_percentage': daily_stats.get('user_summary', {}).get('mediumStressPercentage', 0),
-                'high_stress_percentage': daily_stats.get('user_summary', {}).get('highStressPercentage', 0),
-                }
-            
-            # Save to database
-            create_biometric_data(self.athlete, date, processed_data)
-            logger.info(f"Successfully processed and saved data for {date}")
-            return True
-            
+                # Sleep Data
+                'sleep_time_seconds': sleep_data.get('sleepTimeSeconds', 0) or 0,
+                'deep_sleep_seconds': sleep_data.get('deepSleepSeconds', 0) or 0,
+                'light_sleep_seconds': sleep_data.get('lightSleepSeconds', 0) or 0,
+                'rem_sleep_seconds': sleep_data.get('remSleepSeconds', 0) or 0,
+                'awake_sleep': sleep_data.get('awakeSleepSeconds', 0) or 0,
+                'average_respiration': sleep_data.get('averageRespirationValue', 0) or 0,
+                'lowest_respiration': sleep_data.get('lowestRespirationValue', 0) or 0,
+                'highest_respiration': sleep_data.get('highestRespirationValue', 0) or 0,
+                'sleep_heart_rate': sleep_data.get('sleepHeartRate', []) or [],
+                'sleep_stress': sleep_data.get('sleepStress', []) or [],
+                'sleep_body_battery': sleep_data.get('sleepBodyBattery', []) or [],
+                'body_battery_change': sleep_data.get('bodyBatteryChange', 0) or 0,
+                'sleep_resting_heart_rate': sleep_data.get('sleepRestingHeartRate', 0) or 0,
+
+                # Steps Data
+                'steps': daily_data.get('steps', []) or [],
+
+                # Heart Rate
+                'resting_heart_rate': user_summary.get('restingHeartRate', 0) or 0,
+                'max_heart_rate': user_summary.get('maxHeartRate', 0) or 0,
+                'min_heart_rate': user_summary.get('minHeartRate', 0) or 0,
+                'last_seven_days_avg_resting_heart_rate': user_summary.get('lastSevenDaysAvgRestingHeartRate', 0) or 0,
+                'heart_rate_values': heart_rate_data.get('heartRateValues', []) or [],
+
+                # Activity / Summary
+                'total_calories': user_summary.get('totalKilocalories', 0) or 0,
+                'active_calories': user_summary.get('activeKilocalories', 0) or 0,
+                'bmr_calories': user_summary.get('bmrKilocalories', 0) or 0,
+                'net_calorie_goal': user_summary.get('netCalorieGoal', 0) or 0,
+                'total_distance_meters': user_summary.get('totalDistanceMeters', 0) or 0,
+                'total_steps': user_summary.get('totalSteps', 0) or 0,
+                'daily_step_goal': user_summary.get('dailyStepGoal', 0) or 0,
+                'highly_active_seconds': user_summary.get('highlyActiveSeconds', 0) or 0,
+                'sedentary_seconds': user_summary.get('sedentarySeconds', 0) or 0,
+                'average_stress_level': user_summary.get('averageStressLevel', 0) or 0,
+                'max_stress_level': user_summary.get('maxStressLevel', 0) or 0,
+                'stress_duration': user_summary.get('stressDuration', 0) or 0,
+                'rest_stress_duration': user_summary.get('restStressDuration', 0) or 0,
+                'activity_stress_duration': user_summary.get('activityStressDuration', 0) or 0,
+                'low_stress_percentage': user_summary.get('lowStressPercentage', 0) or 0,
+                'medium_stress_percentage': user_summary.get('mediumStressPercentage', 0) or 0,
+                'high_stress_percentage': user_summary.get('highStressPercentage', 0) or 0,
+            }
+
+            try:
+                # Create or update using the create_biometric_data helper
+                biometric_data = create_biometric_data(
+                    athlete=self.athlete,
+                    date=date,
+                    data=processed_data
+                )
+
+                if biometric_data:
+                    logger.info(f"Successfully processed data for {date}")
+                    return True
+                else:
+                    logger.error(f"Failed to save data for {date}")
+                    return False
+
+            except Exception as e:
+                logger.error(f"Error saving biometric data: {str(e)}")
+                return False
+
         except Exception as e:
-            logger.error(f"Error processing single day data: {e}")
+            logger.error(f"Error processing daily data: {str(e)}")
             return False
 
     def get_latest_data(self) -> Dict[str, Any]:
@@ -268,31 +367,6 @@ class DataSyncService:
                     processed_data['activity']['intensity_minutes']['vigorous']
                 )
             })
-
-            # BiometricData.objects.update_or_create(
-            #     date=processed_data['date'],
-            #     athlete=self.athlete,
-            #     defaults={
-            #         'resting_heart_rate': processed_data['heart_rate']['resting'],
-            #         'min_heart_rate': processed_data['heart_rate']['min'],
-            #         'max_heart_rate': processed_data['heart_rate']['max'],
-            #         'avg_heart_rate': processed_data['heart_rate']['avg'],
-            #         'sleep_hours': processed_data['sleep']['total_sleep'],
-            #         'deep_sleep': processed_data['sleep']['deep_sleep'],
-            #         'light_sleep': processed_data['sleep']['light_sleep'],
-            #         'rem_sleep': processed_data['sleep']['rem_sleep'],
-            #         'awake_time': processed_data['sleep']['awake_time'],
-            #         'stress_level': processed_data['stress']['average_level'],
-            #         'calories_active': processed_data['activity']['calories']['active'],
-            #         'calories_total': processed_data['activity']['calories']['total'],
-            #         'steps': processed_data['activity']['total_steps'],
-            #         'distance_meters': processed_data['activity']['distance_meters'],
-            #         'intensity_minutes': (
-            #             processed_data['activity']['intensity_minutes']['moderate'] +
-            #             processed_data['activity']['intensity_minutes']['vigorous']
-            #         )
-            #     }
-            # )
 
             # Save detailed data to other models as needed
             self._save_detailed_sleep(processed_data['sleep'])
@@ -507,51 +581,70 @@ class DataSyncService:
             logger.error(f"Error calculating recovery score: {e}")
             return 0
 
-    def process_raw_data(self, raw_data):
+    def _process_raw_data(self, raw_data):
+        """Process raw Garmin data into standardized format"""
         try:
-            # Extract the daily stats from the raw data
-            daily_stats = raw_data[0]['daily_stats']
+            # Extract date
+            date = datetime.strptime(raw_data.get('date'), '%Y-%m-%d').date()
             
-            # Process sleep data
-            sleep_data = daily_stats['sleep']['dailySleepDTO']
-            processed_sleep = {
+            # Get daily stats
+            daily_stats = raw_data.get('daily_stats', {})
+            if not daily_stats:
+                logger.error(f"No daily stats found for {date}, data: {raw_data}")
+                
+                return False
+
+            # Extract sleep data
+            sleep_data = daily_stats.get('sleep', {}).get('dailySleepDTO', {})
+            user_summary = daily_stats.get('user_summary', {})
+            heart_rate_data = daily_stats.get('heart_rate', {})
+            stress_data = daily_stats.get('stress', {})
+
+            processed_data = {
+                'date': date,
+                
+                # Sleep metrics
                 'total_sleep_seconds': sleep_data.get('sleepTimeSeconds', 0),
                 'deep_sleep_seconds': sleep_data.get('deepSleepSeconds', 0),
                 'light_sleep_seconds': sleep_data.get('lightSleepSeconds', 0),
                 'rem_sleep_seconds': sleep_data.get('remSleepSeconds', 0),
                 'awake_seconds': sleep_data.get('awakeSleepSeconds', 0),
-            }
-
-            # Process user summary data
-            user_summary = daily_stats['user_summary']
-            
-            # Process heart rate data - handle possible None values
-            hr_values = [hr for hr in [
-                user_summary.get('minHeartRate'),
-                user_summary.get('maxHeartRate'),
-                user_summary.get('restingHeartRate')
-            ] if hr is not None]
-
-            processed_data = {
-                'date': raw_data[0]['date'],
-                'resting_heart_rate': user_summary.get('restingHeartRate', 0),
-                'min_hr': min(hr_values) if hr_values else 0,
-                'max_hr': max(hr_values) if hr_values else 0,
-                'avg_heart_rate': user_summary.get('averageHeartRate', 0),
-                'calories_active': user_summary.get('activeKilocalories', 0),
-                'calories_total': user_summary.get('totalKilocalories', 0),
-                'steps': user_summary.get('totalSteps', 0),
-                'distance_meters': user_summary.get('totalDistanceMeters', 0),
-                'intensity_minutes': (
-                    user_summary.get('moderateIntensityMinutes', 0) + 
-                    user_summary.get('vigorousIntensityMinutes', 0)
-                ),
-                'stress_level': user_summary.get('averageStressLevel', 0),
-                'sleep_hours': processed_sleep['total_sleep_seconds'] / 3600,
-                'deep_sleep': processed_sleep['deep_sleep_seconds'] / 3600,
-                'light_sleep': processed_sleep['light_sleep_seconds'] / 3600,
-                'rem_sleep': processed_sleep['rem_sleep_seconds'] / 3600,
-                'awake_time': processed_sleep['awake_seconds'] / 3600,
+                'average_respiration': sleep_data.get('averageRespirationValue', 0),
+                'lowest_respiration': sleep_data.get('lowestRespirationValue', 0),
+                'highest_respiration': sleep_data.get('highestRespirationValue', 0),
+                'sleep_heart_rate': daily_stats.get('sleep_heart_rate', {}),
+                'sleep_stress': daily_stats.get('sleep_stress', {}),
+                'sleep_body_battery': daily_stats.get('sleep_body_battery', {}),
+                'body_battery_change': daily_stats.get('body_battery_change', 0),
+                'sleep_resting_heart_rate': sleep_data.get('sleepRestingHeartRate', 0),
+                
+                # Heart Rate Data
+                'resting_heart_rate': heart_rate_data.get('restingHeartRate', 0),
+                'max_heart_rate': heart_rate_data.get('maxHeartRate', 0),
+                'min_heart_rate': heart_rate_data.get('minHeartRate', 0),
+                'last_seven_days_avg_resting_heart_rate': heart_rate_data.get('lastSevenDaysAvgRestingHeartRate', 0),
+                'heart_rate_values': heart_rate_data.get('heartRateValues', {}),
+                
+                # Activity Data
+                'total_calories': user_summary.get('totalKilocalories', 0),
+                'active_calories': user_summary.get('activeKilocalories', 0),
+                'bmr_calories': user_summary.get('bmrKilocalories', 0),
+                'net_calorie_goal': user_summary.get('netCalorieGoal', 0),
+                'total_distance_meters': user_summary.get('totalDistanceMeters', 0),
+                'total_steps': user_summary.get('totalSteps', 0),
+                'daily_step_goal': user_summary.get('dailyStepGoal', 0),
+                'highly_active_seconds': user_summary.get('highlyActiveSeconds', 0),
+                'sedentary_seconds': user_summary.get('sedentarySeconds', 0),
+                
+                # Stress Data
+                'average_stress_level': stress_data.get('averageStressLevel', 0),
+                'max_stress_level': stress_data.get('maxStressLevel', 0),
+                'stress_duration': stress_data.get('stressDuration', 0),
+                'rest_stress_duration': stress_data.get('restStressDuration', 0),
+                'activity_stress_duration': stress_data.get('activityStressDuration', 0),
+                'low_stress_percentage': stress_data.get('lowStressPercentage', 0),
+                'medium_stress_percentage': stress_data.get('mediumStressPercentage', 0),
+                'high_stress_percentage': stress_data.get('highStressPercentage', 0),
             }
 
             return processed_data
@@ -564,7 +657,7 @@ class DataSyncService:
         """Store the processed data in the database"""
         try:
             # Get or create the BiometricData instance
-            biometric_data, created = BiometricData.objects.get_or_create(
+            biometric_data, created = CoreBiometricData.objects.get_or_create(
                 date=processed_data['date'],
                 athlete=self.athlete,
                 defaults={

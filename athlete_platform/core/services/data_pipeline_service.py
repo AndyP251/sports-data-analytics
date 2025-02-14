@@ -1,6 +1,6 @@
 from ..utils.garmin_utils import GarminDataCollector
 from ..utils.whoop_utils import WhoopDataCollector
-from ..models import BiometricData, CoreBiometricData, create_biometric_data, get_athlete_biometrics
+from ..models import CoreBiometricData, create_biometric_data, get_athlete_biometrics
 from datetime import datetime, timedelta
 from django.utils import timezone
 import logging

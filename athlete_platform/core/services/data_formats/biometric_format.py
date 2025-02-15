@@ -2,11 +2,11 @@ from typing import TypedDict, List, Optional
 from datetime import datetime
 
 class SleepMetrics(TypedDict):
-    sleep_time_seconds: int
+    total_sleep_seconds: int
     deep_sleep_seconds: int
     light_sleep_seconds: int
     rem_sleep_seconds: int
-    awake_sleep: int
+    awake_seconds: int
     average_respiration: float
     lowest_respiration: float
     highest_respiration: float
@@ -37,7 +37,7 @@ class ActivityMetrics(TypedDict):
 class StressMetrics(TypedDict):
     average_stress_level: int
     max_stress_level: int
-    stress_duration: int
+    stress_duration_seconds: int
     rest_stress_duration: int
     activity_stress_duration: int
     low_stress_percentage: float

@@ -106,7 +106,8 @@ class S3Utils:
     def get_latest_json_data(self, base_path: str, date: datetime.date) -> Optional[dict]:
         """Get latest JSON data for a given date"""
         try:
-            date_prefix = f"{base_path}/{date.strftime('%Y%m%d')}"
+            logger.info(f"Getting latest JSON data at {base_path}/{date}")
+            date_prefix = f"{base_path}/{date}"
             response = self.client.list_objects_v2(
                 Bucket=self.bucket,
                 Prefix=date_prefix
@@ -117,6 +118,7 @@ class S3Utils:
             
             # Get the latest file for this date
             latest = max(response['Contents'], key=lambda x: x['LastModified'])
+            logger.info(f"Latest file: {latest['Key']}")
             obj = self.client.get_object(
                 Bucket=self.bucket,
                 Key=latest['Key']

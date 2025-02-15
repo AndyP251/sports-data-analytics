@@ -125,9 +125,9 @@ class BaseDataProcessor(ABC):
         return self._get_from_api(date_range)
     
     @abstractmethod
-    def _get_from_db(self, date_range: List[date], profile_type: Optional[str] = None) -> Optional[List[Dict[str, Any]]]:
+    def _get_from_db(self, date_range: List[date]) -> Optional[List[Dict[str, Any]]]:
         """Get data from database"""
-        
+
         pass
     
     @abstractmethod
@@ -141,7 +141,7 @@ class BaseDataProcessor(ABC):
         pass
 
     @processing_lock()
-    def sync_data(self, start_date: Optional[date] = None, end_date: Optional[date] = None, profile_type: Optional[str] = None) -> bool:
+    def sync_data(self, start_date: Optional[date] = None, end_date: Optional[date] = None) -> bool:
         """
         Base sync logic: 
           - if no data for requested range, attempt fetching
@@ -158,13 +158,13 @@ class BaseDataProcessor(ABC):
         if not end_date:
             end_date = date.today()
 
-        data = self._get_from_db(start_date, end_date, profile_type)
+        data = self._get_from_db(start_date, end_date)
         if not data:
-            s3_freshness = self.check_s3_freshness(start_date, end_date, profile_type)
+            s3_freshness = self.check_s3_freshness(start_date, end_date)
             if s3_freshness:
-                data = self._get_from_s3(start_date, end_date, profile_type)
+                data = self._get_from_s3(start_date, end_date)
             else:
-                data = self._get_from_api(start_date, end_date, profile_type)
+                data = self._get_from_api(start_date, end_date)
         if not data:
             return False
 
@@ -173,8 +173,6 @@ class BaseDataProcessor(ABC):
             self.store_data(item, item['date'])
         return True
 
-
-        return True
 
     def clear_processing_lock(self) -> bool:
         """Clear any existing processing locks for this athlete/source"""

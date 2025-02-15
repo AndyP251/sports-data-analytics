@@ -251,29 +251,6 @@ def dashboard_data(request):
         logger.error(f"Error fetching dashboard data: {str(e)}", exc_info=True)
         return JsonResponse({'success': False, 'error': str(e)}, status=500)
 
-@ensure_csrf_cookie
-@api_view(['POST'])
-@permission_classes([IsAuthenticated])
-def update_garmin_data(request):
-    logger.info(f"Garmin data update requested for user: {request.user.id}")
-    try:
-        athlete = request.user.athlete
-        logger.info(f"Found athlete profile, initiating sync for athlete: {athlete.id}")
-        
-        sync_service = DataSyncService(athlete)
-        success = sync_service.sync_data()
-        
-        return JsonResponse({
-            'success': success,
-            'message': 'Data sync completed' if success else 'Sync failed'
-        })
-    except Exception as e:
-        logger.error(f"Error updating Garmin data: {str(e)}", exc_info=True)
-        return JsonResponse({
-            'success': False,
-            'error': str(e)
-        }, status=500)
-
 @receiver(user_logged_in)
 def sync_on_login(sender, user, request, **kwargs):
     """Trigger sync when user logs in"""
@@ -297,13 +274,8 @@ async def sync_biometric_data(request):
         athlete = await sync_to_async(Athlete.objects.get)(user=request.user)
 
         sync_service = await sync_to_async(DataSyncService)(athlete)
-        
-        # If DataSyncService.sync_data() is async, do:
-        data = await sync_to_async(sync_service.sync_data)()
-        # If DataSyncService.sync_data() is sync, you'd do:
-        # data = await sync_to_async(sync_service.sync_data)()
 
-        # data = await sync_to_async(sync_service.sync_data)()  # Example for sync pipeline
+        data = await sync_to_async(sync_service.sync_data)()
 
         return JsonResponse({'success': True, 'data': data or []})
 

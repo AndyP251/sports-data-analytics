@@ -208,20 +208,6 @@ class DataSyncService:
             logger.error(f"Error checking S3: {e}")
             return False
 
-    def _perform_sync(self):
-        """Perform the actual sync operation"""
-        try:
-            with transaction.atomic():
-                success = True
-                for processor in self.processors:
-                    if not processor.sync_data():
-                        logger.error(f"Sync failed for processor: {processor.__class__.__name__}")
-                        success = False
-                return success
-        except Exception as e:
-            logger.error(f"Error in _perform_sync: {e}", exc_info=True)
-            return False
-
     def _get_active_collectors(self):
         # Implementation of _get_active_collectors method
         pass

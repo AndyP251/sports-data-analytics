@@ -88,90 +88,22 @@ class GarminProcessor(BaseDataProcessor):
             logger.error(f"Error in data flow: {e}")
             return None
     
-    def check_s3_freshness(self, date_range: List[date]) -> bool:
-        """Check if S3 data is fresh for the given date range"""
+    def check_s3_freshness(self, date_range: List[date]) -> set[date]:
+        """Check if S3 data is fresh for the given date range, returns set of missing dates"""
+        missing_dates = set()
         try:
             for current_date in date_range:
                 # Get latest data for this date
                 data = self.s3_utils.get_latest_json_data(self.base_path, current_date)
                 if not data:
                     logger.info(f"No S3 data found for {current_date}")
-                    return False
-            return True
+                    missing_dates.add(current_date)
+            return missing_dates
             
         except Exception as e:
             logger.error(f"Error checking S3 freshness: {e}")
-            return False
+            return set(date_range)  # If error, assume all dates are missing
     
-    def process_data(self, raw_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-        """
-        Convert raw Garmin data into standardized format.
-        If 'daily stats' are missing, we skip it.
-        """
-        try:
-            if not raw_data:
-                return None
-
-            # The raw_data here is what's returned by collect_data()
-            # Make sure daily_data keys match your structure
-            date_str = raw_data['date'] if raw_data.get('date') else None
-            if isinstance(date_str, date):
-                current_date = date_str
-            else:
-                current_date = datetime.strptime(str(date_str), '%Y-%m-%d').date()
-
-            # Merge daily stats
-            daily_stats = {
-                'sleep': raw_data.get('sleep', {}),
-                'heart_rate': raw_data.get('heart_rate', {}),
-                'user_summary': raw_data.get('user_summary', {}),
-                'stress': raw_data.get('stress', {}),
-                'body_battery': raw_data.get('body_battery', {})
-            }
-
-            if not daily_stats:
-                logger.error(f"No daily stats found for {current_date}")
-                return None
-
-            # Build processed data
-            sleep_data = daily_stats['sleep']
-            heart_rate_data = daily_stats['heart_rate']
-            user_summary = daily_stats['user_summary']
-            stress_data = daily_stats['stress']
-
-            return {
-                'date': current_date,
-                'source': 'garmin',
-                'metrics': {
-                    'total_sleep_seconds': sleep_data.get('sleepTimeSeconds', 0),
-                    'deep_sleep_seconds': sleep_data.get('deepSleepSeconds', 0),
-                    'light_sleep_seconds': sleep_data.get('lightSleepSeconds', 0),
-                    'rem_sleep_seconds': sleep_data.get('remSleepSeconds', 0),
-                    'awake_seconds': sleep_data.get('awakeSleepSeconds', 0),
-
-                    'resting_heart_rate': heart_rate_data.get('restingHeartRate', 0),
-                    'max_heart_rate': heart_rate_data.get('maxHeartRate', 0),
-                    'min_heart_rate': heart_rate_data.get('minHeartRate', 0),
-
-                    'total_calories': user_summary.get('totalKilocalories', 0),
-                    'active_calories': user_summary.get('activeKilocalories', 0),
-                    'total_distance_meters': user_summary.get('totalDistanceMeters', 0),
-                    'total_steps': user_summary.get('totalSteps', 0),
-
-                    'average_stress_level': stress_data.get('averageStressLevel', 0),
-                    'max_stress_level': stress_data.get('maxStressLevel', 0),
-                    'stress_duration_seconds': stress_data.get('stressDuration', 0),
-                },
-                'time_series': {
-                    'heart_rate_values': heart_rate_data.get('heartRateValues', {}),
-                    'sleep_heart_rate': sleep_data.get('sleepHeartRate', {}),
-                    'stress_timeseries': stress_data.get('stressTimeseries', {}),
-                }
-            }
-            
-        except Exception as e:
-            logger.error(f"Error processing Garmin data: {e}", exc_info=True)
-            return None
     
     def validate_data(self, processed_data: Dict[str, Any]) -> bool:
         """Validate minimal fields are present."""
@@ -253,7 +185,7 @@ class GarminProcessor(BaseDataProcessor):
             logger.error(f"Error storing Garmin data: {e}", exc_info=True)
             return False
     
-    def _get_from_db(self, date_range: List[date], profile_type: Optional[str] = None) -> Optional[List[Dict[str, Any]]]:
+    def _get_from_db(self, date_range: List[date]) -> Optional[List[Dict[str, Any]]]:
         """Get data from DB for the specified dates."""
         try:
             data = CoreBiometricData.objects.filter(
@@ -265,28 +197,76 @@ class GarminProcessor(BaseDataProcessor):
             if not data.exists():
                 return None
 
+            logger.info(f"Found {data.count()} records in DB, fields are: {data.values()}");
+
             results = []
             for item in data:
-                # Translate DB fields back to the shape we expect
                 results.append({
                     'date': item.date,
                     'source': 'garmin',
                     'metrics': {
-                        'total_sleep_seconds': item.sleep_duration,
-                        'deep_sleep_seconds': item.deep_sleep_duration,
-                        'light_sleep_seconds': item.light_sleep_duration,
-                        'rem_sleep_seconds': item.rem_sleep_duration,
-                        'awake_seconds': item.awake_duration,
+                        # Sleep Metrics
+                        'total_sleep_seconds': item.total_sleep_seconds,
+                        'deep_sleep_seconds': item.deep_sleep_seconds,
+                        'light_sleep_seconds': item.light_sleep_seconds,
+                        'rem_sleep_seconds': item.rem_sleep_seconds,
+                        'awake_seconds': item.awake_seconds,
+                        'average_respiration': item.average_respiration,
+                        'lowest_respiration': item.lowest_respiration,
+                        'highest_respiration': item.highest_respiration,
+                        'sleep_heart_rate': item.sleep_heart_rate,
+                        'sleep_stress': item.sleep_stress,
+                        'sleep_body_battery': item.sleep_body_battery,
+                        'body_battery_change': item.body_battery_change,
+                        'sleep_resting_heart_rate': item.sleep_resting_heart_rate,
+
+                        # Heart Rate Metrics
                         'resting_heart_rate': item.resting_heart_rate,
                         'max_heart_rate': item.max_heart_rate,
                         'min_heart_rate': item.min_heart_rate,
+                        'last_seven_days_avg_resting_heart_rate': item.last_seven_days_avg_resting_heart_rate,
+                        
+                        # User Summary Metrics
                         'total_calories': item.total_calories,
                         'active_calories': item.active_calories,
                         'total_steps': item.total_steps,
                         'total_distance_meters': item.total_distance_meters,
+                        'bmr_calories': item.bmr_calories,
+                        'net_calorie_goal': item.net_calorie_goal,
+                        'daily_step_goal': item.daily_step_goal,
+                        'highly_active_seconds': item.highly_active_seconds,
+                        'sedentary_seconds': item.sedentary_seconds,
+
+                        # Stress Metrics
                         'average_stress_level': item.average_stress_level,
                         'max_stress_level': item.max_stress_level,
-                        'stress_duration_seconds': item.stress_score
+                        'stress_duration_seconds': item.stress_duration_seconds,
+                        'sleep_heart_rate': item.sleep_heart_rate,
+                        'sleep_stress': item.sleep_stress,
+                        'sleep_body_battery': item.sleep_body_battery,
+                        'body_battery_change': item.body_battery_change,
+                        'sleep_resting_heart_rate': item.sleep_resting_heart_rate,
+
+                        # Activity Metrics
+                        'total_calories': item.total_calories,
+                        'active_calories': item.active_calories,
+                        'total_steps': item.total_steps,
+                        'total_distance_meters': item.total_distance_meters,
+
+                        # Stress Metrics
+                        'average_stress_level': item.average_stress_level,
+                        'max_stress_level': item.max_stress_level,
+                        'stress_duration_seconds': item.stress_duration_seconds,
+                        'rest_stress_duration': item.rest_stress_duration,
+                        'activity_stress_duration': item.activity_stress_duration,
+                        'low_stress_percentage': item.low_stress_percentage,
+                        'medium_stress_percentage': item.medium_stress_percentage,
+                        'high_stress_percentage': item.high_stress_percentage,
+                        
+                        # Metadata
+                        'created_at': item.created_at,
+                        'updated_at': item.updated_at,
+
                     }
                 })
             return results
@@ -295,7 +275,7 @@ class GarminProcessor(BaseDataProcessor):
             logger.error(f"Error getting data from DB: {e}")
             return None
     
-    def _get_from_s3(self, date_range: List[date], profile_type: Optional[str] = None) -> Optional[List[Dict[str, Any]]]:
+    def _get_from_s3(self, date_range: List[date]) -> Optional[List[Dict[str, Any]]]:
         """
         Tries to retrieve JSON data previously stored in S3,
         one day at a time, returning a list of items found.
@@ -311,12 +291,12 @@ class GarminProcessor(BaseDataProcessor):
             logger.error(f"Error getting Garmin data from S3: {e}")
             return None
     
-    def _get_from_api(self, start_date: date, end_date: date, profile_type: Optional[str] = None) -> Optional[List[Dict[str, Any]]]:
+    def _get_from_api(self, start_date: date, end_date: date) -> Optional[List[Dict[str, Any]]]:
         """
         Actually call Garmin's API collector, transform the raw data, and return it in the standard shape.
         """
         try:
-            collector = GarminDataCollector({'username': settings.GARMIN_USERNAME, 'password': settings.GARMIN_PASSWORD})
+            collector = GarminDataCollector({'username': self.athlete.garmin_credentials.get_profile_config()['username'], 'password': self.athlete.garmin_credentials.get_profile_config()['password']})
             raw_data_list = collector.collect_data(start_date, end_date)
             if not raw_data_list:
                 return None
@@ -334,7 +314,13 @@ class GarminProcessor(BaseDataProcessor):
     
     def sync_data(self, start_date: Optional[date] = None, end_date: Optional[date] = None) -> bool:
         """Garmin-specific sync implementation"""
+        sync_data_debugging = True  # Toggle for debug timing
+        start_time = datetime.now() if sync_data_debugging else None
+        
         try:
+            if sync_data_debugging:
+                logger.info(f"[DEBUG] Starting sync_data at {start_time}")
+            
             # TODO: Add validation of credentials
             # if not hasattr(self.athlete, 'garmin_credentials'):
             #     logger.error("No Garmin credentials found")
@@ -342,12 +328,117 @@ class GarminProcessor(BaseDataProcessor):
 
             # This is line 344 where you wanted to see the profile
             logger.info(f"Syncing Garmin data for athlete {self.athlete.id} using profile: {self.profile_type}")
-            logger.info(f"Profile config: {self.athlete.garmin_credentials.get_profile_config()['name']}")
+            logger.info(f"Profile config: {self.athlete.garmin_credentials.get_profile_config()['name']}") # e.g. 'Default Garmin Account'
             
             
+            if not start_date:
+                start_date = date.today() - timedelta(days=7)
+            if not end_date:
+                end_date = date.today()
+            date_range = [start_date + timedelta(days=x) for x in range((end_date - start_date).days + 1)]
+            date_range_set = set(date_range)  # Convert to set for efficient operations
+            
+            # Get DB data and track which dates we found
+            if sync_data_debugging:
+                db_start = datetime.now()
+            db_data = self._get_from_db(date_range)
+            if sync_data_debugging:
+                logger.info(f"[DEBUG] DB fetch took {(datetime.now() - db_start).total_seconds():.2f} seconds")
+            
+            missing_dates = date_range_set.copy()
+            if db_data:
+                found_dates = {item['date'] for item in db_data}
+                missing_dates -= found_dates
+                logger.info(f"Found {len(db_data)} records in DB for {start_date} to {end_date}, missing dates are: {missing_dates}")
+            
+            # Only proceed with S3/API if we have missing dates
+            if missing_dates:
+                missing_dates_list = sorted(list(missing_dates))
+                
+                if sync_data_debugging:
+                    s3_check_start = datetime.now()
+                s3_missing_dates = self.check_s3_freshness(missing_dates_list)
+                if sync_data_debugging:
+                    logger.info(f"[DEBUG] S3 freshness check took {(datetime.now() - s3_check_start).total_seconds():.2f} seconds")
+                
+                # Get dates that exist in S3
+                s3_available_dates = missing_dates - s3_missing_dates
+                if s3_available_dates:
+                    if sync_data_debugging:
+                        s3_fetch_start = datetime.now()
+                    s3_data = self._get_from_s3(sorted(list(s3_available_dates)))
+                    if sync_data_debugging:
+                        logger.info(f"[DEBUG] S3 data fetch took {(datetime.now() - s3_fetch_start).total_seconds():.2f} seconds")
+                    
+                    # Store S3 data into DB if found
+                    if s3_data:
+                        if sync_data_debugging:
+                            s3_store_start = datetime.now()
+                        for item in s3_data:
+                            logger.info(f"Storing S3 data for {item['date']} into DB")
+                            self.store_processed_data(item)
+                        if sync_data_debugging:
+                            logger.info(f"[DEBUG] S3 to DB storage took {(datetime.now() - s3_store_start).total_seconds():.2f} seconds")
+                
+                # The remaining dates need API fetch
+                api_dates_needed = missing_dates & s3_missing_dates
+                if api_dates_needed:
+                    logger.info(f"Fetching fresh data from API for dates: {sorted(api_dates_needed)}")
+                    if sync_data_debugging:
+                        api_fetch_start = datetime.now()
+                    api_data = self._get_from_api(min(api_dates_needed), max(api_dates_needed))
+                    if sync_data_debugging:
+                        logger.info(f"[DEBUG] API fetch took {(datetime.now() - api_fetch_start).total_seconds():.2f} seconds")
+                    
+                    # Store API data into both S3 and DB
+                    if api_data:
+                        if sync_data_debugging:
+                            api_store_start = datetime.now()
+                        for item in api_data:
+                            item_date = item['date']
+                            if item_date in api_dates_needed:
+                                # Convert date to string if it's a date object
+                                if isinstance(item_date, date):
+                                    item['date'] = item_date.isoformat()
+                                
+                                # Store raw data in S3
+                                logger.info(f"Storing API data for {item_date} into S3")
+                                self.s3_utils.store_json_data(
+                                    self.base_path,
+                                    f"{item_date}_raw.json",
+                                    item
+                                )
+                                
+                                # Convert back to date object for DB storage if needed
+                                if isinstance(item_date, str):
+                                    item['date'] = datetime.strptime(item_date, "%Y-%m-%d").date()
+                                else:
+                                    item['date'] = item_date
+                                    
+                                # Store processed data in DB
+                                transformed_data = GarminTransformer.transform(item)
+                                if transformed_data:
+                                    logger.info(f"Storing transformed API data for {item_date} into DB")
+                                    self.store_processed_data(transformed_data)
+                                else:
+                                    logger.error(f"Failed to transform data for {item_date}")
+                        if sync_data_debugging:
+                            logger.info(f"[DEBUG] API data storage took {(datetime.now() - api_store_start).total_seconds():.2f} seconds")
 
-            return super().sync_data(start_date, end_date, self.profile_type)
+            # Update success check to look for any data
+            if not (api_data or s3_data or db_data):
+                logger.error(f"No data found for {start_date} to {end_date} in DB, S3, or API")
+                return False
+
+            if sync_data_debugging:
+                total_time = datetime.now() - start_time
+                logger.info(f"[DEBUG] Total sync_data execution time: {total_time.total_seconds():.2f} seconds")
+            
+            return True
 
         except Exception as e:
-            logger.error(f"Error in Garmin sync: {e}")
+            if sync_data_debugging:
+                logger.error(f"[DEBUG] Error in Garmin sync after {(datetime.now() - start_time).total_seconds():.2f} seconds: {e}")
+            else:
+                logger.error(f"Error in Garmin sync: {e}")
             return False 

@@ -31,11 +31,11 @@ class WorkoutDataAdmin(admin.ModelAdmin):
     date_hierarchy = 'date'
 
 class CoreBiometricDataAdmin(admin.ModelAdmin):
-    list_display = ('athlete', 'date', 'resting_heart_rate', 'sleep_time_seconds')
+    list_display = ('athlete', 'date', 'resting_heart_rate', 'total_sleep_seconds', 'deep_sleep_seconds', 'light_sleep_seconds', 'rem_sleep_seconds', 'awake_seconds', 'average_respiration', 'lowest_respiration', 'highest_respiration', 'sleep_heart_rate', 'sleep_stress', 'sleep_body_battery', 'body_battery_change', 'sleep_resting_heart_rate')
     list_filter = ('date', 'athlete')
     search_fields = ('athlete__user__username',)
     date_hierarchy = 'date'
-    raw_id_fields = ('athlete',)
+    raw_id_fields = ('athlete', )
 
 # Register all models with their custom admin classes
 admin.site.register(User, CustomUserAdmin)

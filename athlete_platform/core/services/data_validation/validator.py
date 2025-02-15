@@ -11,6 +11,7 @@ class BiometricDataValidator:
     @staticmethod
     def validate_data(data: StandardizedBiometricData) -> bool:
         """Validate a single standardized data point"""
+        logger.info(f"Validating data of type: {type(data)} and length: {len(data)}")
         try:
             # Check required fields
             if not data.get('date') or not isinstance(data['date'], (datetime, date)):

@@ -177,11 +177,11 @@ class CoreBiometricData(models.Model):
     date = models.DateField()
 
     # Sleep Data
-    sleep_time_seconds = models.IntegerField(default=0)
+    total_sleep_seconds = models.IntegerField(default=0)
     deep_sleep_seconds = models.IntegerField(default=0)
     light_sleep_seconds = models.IntegerField(default=0)
     rem_sleep_seconds = models.IntegerField(default=0)
-    awake_sleep = models.IntegerField(default=0)
+    awake_seconds = models.IntegerField(default=0)
     average_respiration = models.FloatField(default=0)
     lowest_respiration = models.FloatField(default=0)
     highest_respiration = models.FloatField(default=0)
@@ -215,7 +215,7 @@ class CoreBiometricData(models.Model):
     # Stress Data
     average_stress_level = models.IntegerField(default=0)
     max_stress_level = models.IntegerField(default=0)
-    stress_duration = models.IntegerField(default=0)
+    stress_duration_seconds = models.IntegerField(default=0)
     rest_stress_duration = models.IntegerField(default=0)
     activity_stress_duration = models.IntegerField(default=0)
     low_stress_percentage = models.FloatField(default=0)

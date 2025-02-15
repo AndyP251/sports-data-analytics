@@ -5,7 +5,7 @@ from .s3_utils import S3Utils
 from ..db_models.oauth_tokens import OAuthTokens
 import json
 
-class WhoopDataCollector:
+class WhoopClient:
     BASE_URL = "https://api.whoop.com/v1"
     
     def __init__(self, user_id):

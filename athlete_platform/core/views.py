@@ -28,12 +28,12 @@ from django.contrib.auth.signals import user_logged_in
 from django.dispatch import receiver
 import warnings  # Python's built-in warnings module
 from django.conf import settings
+from asgiref.sync import sync_to_async
+from functools import wraps
 
 # Set up logging
 logger = logging.getLogger(__name__)
 
-# Define threshold constant - could also be moved to settings.py
-MINIMUM_RECORDS_THRESHOLD = 4
 
 # Create your views here.
 
@@ -64,19 +64,20 @@ def dashboard_view(request):
     try:
         athlete = request.user.athlete
         
-        # Initialize the sync service and get dashboard data
-        sync_service = DataSyncService()
-        dashboard_data = sync_service.sync_athlete_data(athlete)
+        # Use DataPipelineService instead of DataSyncService
+        pipeline_service = DataPipelineService(athlete)
+        pipeline_service.sync_athlete_data()
+        
+        # Get latest data from database
+        latest_data = get_athlete_biometrics(athlete, timezone.now().date())
         
         return render(request, 'core/dashboard.html', {
-            'biometric_data': dashboard_data['biometric_data'],
-            'performance_data': dashboard_data['performance_data']
+            'biometric_data': latest_data,
+            'athlete': athlete
         })
-    except AttributeError:
-        # Handle case where user doesn't have an associated athlete
-        return render(request, 'core/error.html', {
-            'error_message': 'No athlete profile found for this user.'
-        })
+    except Exception as e:
+        logger.error(f"Dashboard error: {e}")
+        return render(request, 'core/error.html')
 
 def get_s3_data(athlete):
     """Retrieve athlete data from S3"""
@@ -257,19 +258,14 @@ def update_garmin_data(request):
     logger.info(f"Garmin data update requested for user: {request.user.id}")
     try:
         athlete = request.user.athlete
-        logger.info(f"Found athlete profile, initiating data pipeline for athlete: {athlete.id}")
+        logger.info(f"Found athlete profile, initiating sync for athlete: {athlete.id}")
         
-        pipeline_service = DataPipelineService(athlete)
-        success, message = pipeline_service.update_athlete_data()
-        
-        if success:
-            logger.info(f"Successfully updated Garmin data for athlete: {athlete.id}")
-        else:
-            logger.error(f"Failed to update Garmin data for athlete: {athlete.id}. Message: {message}")
+        sync_service = DataSyncService(athlete)
+        success = sync_service.sync_data()
         
         return JsonResponse({
             'success': success,
-            'message': message
+            'message': 'Data sync completed' if success else 'Sync failed'
         })
     except Exception as e:
         logger.error(f"Error updating Garmin data: {str(e)}", exc_info=True)
@@ -288,115 +284,52 @@ def sync_on_login(sender, user, request, **kwargs):
     except Exception as e:
         logger.error(f"Error syncing data on login: {e}")
 
-@api_view(['POST'])
-@permission_classes([IsAuthenticated])
-def sync_biometric_data(request):
-    """Sync biometric data endpoint"""
-    try:
-        if not hasattr(request.user, 'athlete'):
-            return Response({
-                'success': False,
-                'message': 'No athlete profile found for user'
-            }, status=400)
+@require_http_methods(["POST"])
+@login_required
+async def sync_biometric_data(request):
+    """API endpoint for syncing biometric data"""
 
-        athlete = request.user.athlete
-        sync_service = DataSyncService(athlete)
-        success = sync_service.sync_data()
+    # Accessing a DB model (Athlete) is a blocking call
+    from asgiref.sync import sync_to_async
+
+    try:
+        # Wrap model calls
+        athlete = await sync_to_async(Athlete.objects.get)(user=request.user)
+
+        sync_service = await sync_to_async(DataSyncService)(athlete)
         
-        return Response({
-            'success': success,
-            'message': 'Sync completed successfully' if success else 'Sync failed'
-        })
+        # If DataSyncService.sync_data() is async, do:
+        data = await sync_to_async(sync_service.sync_data)()
+        # If DataSyncService.sync_data() is sync, you'd do:
+        # data = await sync_to_async(sync_service.sync_data)()
+
+        # data = await sync_to_async(sync_service.sync_data)()  # Example for sync pipeline
+
+        return JsonResponse({'success': True, 'data': data or []})
+
     except Exception as e:
-        logger.error(f"Error in sync_biometric_data: {str(e)}")
-        return Response({
-            'success': False,
-            'message': str(e)
-        }, status=500)
+        logger.error(f"Error in sync_biometric_data: {e}", exc_info=True)
+        return JsonResponse({'success': False, 'error': str(e)}, status=500)
+
+def async_safe(f):
+    @wraps(f)
+    def wrapper(request, *args, **kwargs):
+        if request.META.get('HTTP_ACCEPT') == 'text/event-stream':
+            # Handle streaming response
+            return sync_to_async(f)(request, *args, **kwargs)
+        return f(request, *args, **kwargs)
+    return wrapper
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
+@async_safe
 def get_biometric_data(request):
     try:
         athlete = request.user.athlete
-        logger.info(f"Data requested for user: {request.user.id}")
+        sync_service = DataSyncService(athlete)
+        data = sync_service.get_biometric_data()
         
-        end_date = timezone.now().date()
-        start_date = end_date - timedelta(days=7)
-        
-        data = CoreBiometricData.objects.filter(
-            athlete=athlete,
-            date__range=[start_date, end_date]
-        ).order_by('date')
-        
-        if not data.exists():
-            logger.warning("No data found")
-            total_records = CoreBiometricData.objects.filter(
-                athlete=athlete,
-                date__range=[start_date, end_date]
-            ).count()
-            
-            if total_records < MINIMUM_RECORDS_THRESHOLD:
-                logger.info(f"Found only {total_records} records, below threshold of {MINIMUM_RECORDS_THRESHOLD}. Triggering API sync.")
-                pipeline_service = DataPipelineService(athlete)
-                pipeline_service.update_athlete_data()
-                
-                data = CoreBiometricData.objects.filter(
-                    athlete=athlete,
-                    date__range=[start_date, end_date]
-                ).order_by('date')
-            
-            if not data.exists():
-                return Response([])
-            
-        logger.info(f"Found {data.count()} records for date range {start_date} to {end_date}")
-        
-        return Response([{
-            'date': item.date,
-            # Sleep metrics
-            'sleep_time_seconds': item.sleep_time_seconds,
-            'deep_sleep_seconds': item.deep_sleep_seconds,
-            'light_sleep_seconds': item.light_sleep_seconds,
-            'rem_sleep_seconds': item.rem_sleep_seconds,
-            'awake_sleep': item.awake_sleep,
-            'average_respiration': item.average_respiration,
-            'lowest_respiration': item.lowest_respiration,
-            'highest_respiration': item.highest_respiration,
-            'sleep_heart_rate': item.sleep_heart_rate,
-            'sleep_stress': item.sleep_stress,
-            'sleep_body_battery': item.sleep_body_battery,
-            'body_battery_change': item.body_battery_change,
-            'sleep_resting_heart_rate': item.sleep_resting_heart_rate,
-            
-            # Heart rate metrics
-            'resting_heart_rate': item.resting_heart_rate,
-            'max_heart_rate': item.max_heart_rate,
-            'min_heart_rate': item.min_heart_rate,
-            'last_seven_days_avg_resting_heart_rate': item.last_seven_days_avg_resting_heart_rate,
-            'heart_rate_values': item.heart_rate_values,
-            
-            # Activity metrics
-            'total_calories': item.total_calories,
-            'active_calories': item.active_calories,
-            'bmr_calories': item.bmr_calories,
-            'net_calorie_goal': item.net_calorie_goal,
-            'total_steps': item.total_steps,
-            'total_distance_meters': item.total_distance_meters,
-            'daily_step_goal': item.daily_step_goal,
-            'highly_active_seconds': item.highly_active_seconds,
-            'sedentary_seconds': item.sedentary_seconds,
-            
-            # Stress metrics
-            'average_stress_level': item.average_stress_level,
-            'max_stress_level': item.max_stress_level,
-            'stress_duration': item.stress_duration,
-            'rest_stress_duration': item.rest_stress_duration,
-            'activity_stress_duration': item.activity_stress_duration,
-            'low_stress_percentage': item.low_stress_percentage,
-            'medium_stress_percentage': item.medium_stress_percentage,
-            'high_stress_percentage': item.high_stress_percentage,
-        } for item in data])
-        
+        return Response(data)
     except Exception as e:
         logger.error(f"Error in get_biometric_data: {e}", exc_info=True)
         return Response({'error': str(e)}, status=500)
@@ -405,4 +338,111 @@ def get_current_user(request):
     if request.user.is_authenticated:
         return JsonResponse({'username': request.user.username})
     return JsonResponse({'username': 'AnonymousUser'}, status=401)
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def activate_source(request):
+    logger.info(f"Source activation requested for user: {request.user.id}")
+    try:
+        athlete = request.user.athlete
+        source = request.data.get('source')
+        profile_type = request.data.get('profile_type', 'default')
+        
+        if source == 'garmin':
+            from django.conf import settings
+            if profile_type not in settings.GARMIN_PROFILES:
+                return JsonResponse({
+                    'success': False,
+                    'message': 'Invalid profile type'
+                }, status=400)
+                
+            from .models import GarminCredentials
+            credentials, created = GarminCredentials.objects.get_or_create(
+                athlete=athlete,
+                profile_type=profile_type,
+                defaults={
+                    'access_token': 'mock_token',
+                    'refresh_token': 'mock_refresh',
+                    'expires_at': timezone.now() + timedelta(days=365)
+                }
+            )
+        elif source == 'whoop':
+            # TEMPORARY: Skip authentication and just create mock credentials
+            from .models import WhoopCredentials
+            WhoopCredentials.objects.get_or_create(
+                athlete=athlete,
+                defaults={
+                    'access_token': 'mock_token',  # No need for real tokens now
+                    'refresh_token': 'mock_refresh',
+                    'expires_at': timezone.now() + timedelta(days=365)  # Longer expiry since we're not refreshing
+                }
+            )
+        else:
+            return JsonResponse({
+                'success': False,
+                'message': 'Unsupported source'
+            }, status=400)
+            
+        # TODO: Add proper OAuth flow here later
+        sync_service = DataSyncService(athlete)
+        success = sync_service.sync_specific_sources([source])
+        
+        if success:
+            return JsonResponse({
+                'success': True,
+                'message': f'{source.title()} source activated successfully'
+            })
+        else:
+            return JsonResponse({
+                'success': False,
+                'message': f'Failed to sync {source} data'
+            }, status=500)
+            
+    except Exception as e:
+        logger.error(f"Error activating source: {str(e)}", exc_info=True)
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=500)
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def reset_data_processing(request):
+    """Reset any stuck data processing locks"""
+    try:
+        sync_service = DataSyncService(request.user.athlete)
+        
+        # Clear locks for all processors
+        for processor in sync_service.processors:
+            processor.clear_processing_lock()
+            
+        return Response({
+            'status': 'success',
+            'message': 'Processing locks cleared successfully'
+        })
+        
+    except Exception as e:
+        logger.error(f"Error resetting processing locks: {e}")
+        return Response({
+            'status': 'error',
+            'message': str(e)
+        }, status=500)
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_garmin_profiles(request):
+    from django.conf import settings
+    
+    # Return success field to match API convention
+    return JsonResponse({
+        'success': True,
+        'profiles': [
+            {
+                'id': profile_id,
+                'name': profile['name'],
+                'source': 'garmin'
+            }
+            for profile_id, profile in settings.GARMIN_PROFILES.items()
+        ]
+    })
 

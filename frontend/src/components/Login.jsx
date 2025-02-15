@@ -100,7 +100,7 @@ function Login({ setIsAuthenticated }) {
     <div className="auth-page">
       <div className="auth-container">
         <div className="auth-box">
-          <div className="brand-title">AthleteInsights</div>
+          <div className="brand-title">Pulse Project</div>
           <h2 className="auth-title">{isLoginMode ? 'Welcome Back' : 'Create Account'}</h2>
           {error && <div className="error-message">{error}</div>}
           {success && <div className="success-message">{success}</div>}

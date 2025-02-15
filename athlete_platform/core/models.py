@@ -169,7 +169,11 @@ class InjuryRecord(models.Model):
 
 class CoreBiometricData(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    athlete = models.ForeignKey(Athlete, on_delete=models.CASCADE)
+    athlete = models.ForeignKey(
+        'Athlete',
+        on_delete=models.CASCADE,
+        related_name='biometric_data'
+    )
     date = models.DateField()
 
     # Sleep Data
@@ -188,14 +192,14 @@ class CoreBiometricData(models.Model):
     sleep_resting_heart_rate = models.IntegerField(default=0)
     
     # Activity Data
-    steps = models.JSONField(default=list)
+    # steps = models.JSONField(default=list)
     
     # Heart Rate Data
     resting_heart_rate = models.IntegerField(default=0)  # <--- Important to have default=0
     max_heart_rate = models.IntegerField(default=0)
     min_heart_rate = models.IntegerField(default=0)
     last_seven_days_avg_resting_heart_rate = models.IntegerField(default=0)
-    heart_rate_values = models.JSONField(default=list)
+    # heart_rate_values = models.JSONField(default=list)
     
     # User Summary Data
     total_calories = models.IntegerField(default=0)
@@ -207,6 +211,8 @@ class CoreBiometricData(models.Model):
     daily_step_goal = models.IntegerField(default=0)
     highly_active_seconds = models.IntegerField(default=0)
     sedentary_seconds = models.IntegerField(default=0)
+    
+    # Stress Data
     average_stress_level = models.IntegerField(default=0)
     max_stress_level = models.IntegerField(default=0)
     stress_duration = models.IntegerField(default=0)
@@ -215,6 +221,8 @@ class CoreBiometricData(models.Model):
     low_stress_percentage = models.FloatField(default=0)
     medium_stress_percentage = models.FloatField(default=0)
     high_stress_percentage = models.FloatField(default=0)
+
+    source = models.CharField(max_length=20, default='garmin')
 
     created_at = models.DateTimeField(default=timezone.now)
     updated_at = models.DateTimeField(auto_now=True)
@@ -259,3 +267,61 @@ def get_athlete_biometrics(athlete, date):
         )
     except CoreBiometricData.DoesNotExist:
         return None
+
+class GarminCredentials(models.Model):
+    id = models.UUIDField(
+        primary_key=True,
+        default=uuid.uuid4,
+        editable=False,
+        help_text="Unique identifier for the Garmin credentials"
+    )
+    athlete = models.OneToOneField(
+        Athlete, 
+        on_delete=models.CASCADE, 
+        related_name='garmin_credentials'
+    )
+    profile_type = models.CharField(
+        max_length=20,
+        default='default'
+    )
+    access_token = models.CharField(max_length=255)
+    refresh_token = models.CharField(max_length=255)
+    expires_at = models.DateTimeField()
+    created_at = models.DateTimeField(default=timezone.now)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'core_garmin_credentials'
+
+    def get_profile_config(self):
+        from django.conf import settings
+        return settings.GARMIN_PROFILES.get(self.profile_type, settings.GARMIN_PROFILES['default'])
+
+    def __str__(self):
+        return f"Garmin credentials for {self.athlete.user.username} ({self.profile_type})"
+
+
+class WhoopCredentials(models.Model):
+    """Temporary model for storing Whoop credentials"""
+    id = models.UUIDField(
+        primary_key=True,
+        default=uuid.uuid4,
+        editable=False,
+        help_text="Unique identifier for the Whoop credentials"
+    )
+    athlete = models.OneToOneField(
+        Athlete, 
+        on_delete=models.CASCADE, 
+        related_name='whoop_credentials'
+    )
+    access_token = models.CharField(max_length=255)
+    refresh_token = models.CharField(max_length=255)
+    expires_at = models.DateTimeField()
+    created_at = models.DateTimeField(default=timezone.now)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'core_whoop_credentials'
+
+    def __str__(self):
+        return f"Whoop credentials for {self.athlete.user.username}"

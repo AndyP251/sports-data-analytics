@@ -1,5 +1,5 @@
 from ..utils.garmin_utils import GarminDataCollector
-from ..utils.whoop_utils import WhoopDataCollector
+from ..utils.whoop_utils import WhoopClient
 from ..models import CoreBiometricData, create_biometric_data, get_athlete_biometrics
 from datetime import datetime, timedelta
 from django.utils import timezone
@@ -7,14 +7,51 @@ import logging
 import boto3
 from django.conf import settings
 import json
+from ..utils.s3_utils import S3Utils
+from .data_transformers.garmin_transformer import GarminTransformer
+from .data_transformers.whoop_transformer import WhoopTransformer
+from .data_collectors.garmin_collector import GarminCollector
+from .data_collectors.whoop_collector import WhoopCollector
+from .data_processors.garmin_processor import GarminProcessor
+from .data_processors.whoop_processor import WhoopProcessor
+from .data_formats.biometric_format import StandardizedBiometricData
+from core.utils.cache_utils import resource_lock
+from typing import List, Dict, Any, Optional
+
 
 logger = logging.getLogger(__name__)
 
 class DataPipelineService:
+    """
+    Handles ETL pipeline for processing and storing biometric data.
+    Called by DataSyncService when new data needs to be processed.
+    """
+    
+    SOURCE_CONFIGS = {
+        'garmin': {
+            'collector': GarminCollector,
+            'processor': GarminProcessor,
+            'transformer': GarminTransformer
+        },
+        'whoop': {
+            'collector': WhoopCollector,
+            'processor': WhoopProcessor,
+            'transformer': WhoopTransformer
+        }
+    }
     def __init__(self, athlete):
         self.athlete = athlete
         self.s3_client = boto3.client('s3')
         self.bucket_name = settings.AWS_STORAGE_BUCKET_NAME
+        self.s3_utils = S3Utils()
+        self.transformers = {
+            'garmin': GarminTransformer(),
+            'whoop': WhoopTransformer()
+        }
+        self.collectors = {
+            'garmin': GarminCollector(athlete),
+            'whoop': WhoopCollector(athlete)
+        }
 
     def upload_to_s3(self, data, date):
         """Upload data to S3 bucket with date-specific filename"""
@@ -181,26 +218,29 @@ class DataPipelineService:
                     awake_seconds = sleep_data.get('awakeSleepSeconds', 0)
                     
                     processed_data = {
+                        # Map to actual CoreBiometricData model fields
+                        'date': date,
+                        'athlete': self.athlete,
+                        
+                        # Sleep metrics (all in seconds)
+                        'sleep_duration': sleep_seconds,
+                        'deep_sleep_duration': deep_sleep_seconds,
+                        'light_sleep_duration': light_sleep_seconds,
+                        'rem_sleep_duration': rem_sleep_seconds,
+                        'awake_duration': awake_seconds,
+                        
                         # Body metrics
-                        'weight': body_comp.get('weight', 0),
-                        'body_fat_percentage': body_comp.get('bodyFat', 0),
-                        'bmi': body_comp.get('bmi', 0),
-                        'stress_level': stress_data.get('stressLevel', 0),
+                        'weight_kg': body_comp.get('weight', 0),
+                        'body_fat': body_comp.get('bodyFat', 0),
+                        'body_mass_index': body_comp.get('bmi', 0),
                         
-                        # Sleep metrics in hours (for backward compatibility)
-                        'sleep_hours': sleep_seconds / 3600 if sleep_seconds else 0,
-                        'deep_sleep': deep_sleep_seconds / 3600 if deep_sleep_seconds else 0,
-                        'light_sleep': light_sleep_seconds / 3600 if light_sleep_seconds else 0,
-                        'rem_sleep': rem_sleep_seconds / 3600 if rem_sleep_seconds else 0,
-                        'awake_time': awake_seconds / 3600 if awake_seconds else 0,
+                        # Other metrics
+                        'stress_score': stress_data.get('stressLevel', 0),
+                        'respiration_rate': sleep_data.get('averageRespirationValue', 0),
                         
-                        # Sleep metrics in seconds (new fields)
-                        'total_sleep_seconds': sleep_seconds,
-                        'deep_sleep_seconds': deep_sleep_seconds,
-                        'light_sleep_seconds': light_sleep_seconds,
-                        'rem_sleep_seconds': rem_sleep_seconds,
-                        'awake_seconds': awake_seconds,
-                        'average_respiration': sleep_data.get('averageRespirationValue', 0),
+                        # Source tracking
+                        'source': 'garmin',
+                        'last_updated': timezone.now()
                     }
                     
                     # Check for existing data
@@ -249,4 +289,71 @@ class DataPipelineService:
             return False
         except Exception as e:
             logger.error(f"Error updating athlete data: {e}")
-            return False 
+            return False
+
+    @resource_lock('data_pipeline')
+    def sync_athlete_data(self) -> bool:
+        """Main method to sync athlete data from all sources"""
+        try:
+            success = True
+            for source, collector in self.collectors.items():
+                if not collector.authenticate():
+                    logger.error(f"Failed to authenticate with {source}")
+                    success = False
+                    continue
+                    
+                raw_data = collector.collect_data()
+                if raw_data:
+                    transformer = self.transformers[source]
+                    standardized_data = transformer.transform_to_standard_format(raw_data)
+                    self._store_data(standardized_data)
+                else:
+                    success = False
+                    
+            return success
+            
+        except Exception as e:
+            logger.error(f"Error in data pipeline: {e}")
+            return False
+
+    def _store_data(self, data: StandardizedBiometricData) -> bool:
+        """Store standardized data in both S3 and database"""
+        try:
+            # Store in S3
+            success_s3 = self.s3_utils.store_json_data(
+                f"accounts/{self.athlete.user.id}/biometric-data/{data['source']}",
+                f"{data['date']}_{datetime.now().strftime('%H%M%S')}.json",
+                data
+            )
+            
+            # Store in database
+            success_db = bool(create_biometric_data(self.athlete, data['date'], data))
+            
+            return success_s3 and success_db
+            
+        except Exception as e:
+            logger.error(f"Error storing data from 335 pipeline: {e}")
+            return False
+
+    def collect_data(self, source: str, date_range: List[datetime.date]) -> Optional[List[Dict[str, Any]]]:
+        """Centralized data collection method"""
+        try:
+            collector = self.collectors.get(source)
+            if not collector:
+                logger.error(f"No collector found for source: {source}")
+                return None
+            
+            raw_data = collector.collect_data(date_range)
+            if raw_data:
+                # Store raw data in S3 immediately
+                for item in raw_data:
+                    self.s3_utils.store_json_data(
+                        f"accounts/{self.athlete.user.id}/biometric-data/{source}",
+                        f"{item['date']}_raw.json",
+                        item
+                    )
+            return raw_data
+        
+        except Exception as e:
+            logger.error(f"Error collecting data for {source}: {e}")
+            return None 

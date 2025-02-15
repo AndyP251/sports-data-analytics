@@ -2,129 +2,233 @@ from datetime import datetime, timedelta
 import traceback
 from ..utils.garmin_utils import GarminDataCollector
 from ..models import Athlete, CoreBiometricData, create_biometric_data, get_athlete_biometrics
-from .storage_service import UserStorageService
 import json
-import boto3
 import numpy as np
-from django.conf import settings
 import logging
 from scipy import stats
 import pandas as pd
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 from django.core.cache import cache
 from functools import wraps
+from .data_formats.biometric_format import StandardizedBiometricData
+from django.db import transaction
+from django.utils import timezone
+from core.utils.cache_utils import resource_lock
+from .data_pipeline_service import DataPipelineService
+from ..utils.s3_utils import S3Utils
 
 logger = logging.getLogger(__name__)
 
+
 def sync_lock(timeout=300):
+    """Decorator to prevent concurrent syncs for the same athlete"""
     def decorator(func):
         @wraps(func)
         def wrapper(self, *args, **kwargs):
             lock_id = f"sync_lock_{self.athlete.id}"
-            
-            # Check if sync is already running
             if cache.get(lock_id):
                 logger.warning(f"Sync already in progress for athlete {self.athlete.id}")
                 return False
-            
-            # Set lock with timeout
             cache.set(lock_id, True, timeout)
-            
             try:
-                result = func(self, *args, **kwargs)
-                return result
+                return func(self, *args, **kwargs)
             finally:
                 cache.delete(lock_id)
         return wrapper
     return decorator
 
 class DataSyncService:
-    def __init__(self, athlete):
+    """High-level service to coordinate data syncing."""
+    
+    SUPPORTED_SOURCES = {
+        'garmin': 'garmin_credentials',
+        'whoop': 'whoop_credentials',
+    }
+
+    def __init__(self, athlete: Athlete):
         self.athlete = athlete
-        self.s3 = boto3.client(
-            's3',
-            region_name='us-east-2',
-            aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
-            aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY
+        self.active_sources = []
+        self.processors = []
+        self.pipeline_service = DataPipelineService(self.athlete)
+        self.s3_utils = S3Utils()
+
+        
+        # Check for active sources and initialize processors
+        for source, cred_attr in self.SUPPORTED_SOURCES.items():
+            if hasattr(self.athlete, cred_attr):
+                self.active_sources.append(source)
+        
+        if self.active_sources:
+            self._initialize_processors()
+        else:
+            logger.info(f"No active sources for athlete {self.athlete.id}")
+
+    def _initialize_processors(self):
+        """Initialize processors for active sources"""
+        from .data_processors import GarminProcessor, WhoopProcessor
+        
+        for source in self.active_sources:
+            try:
+                if source == 'garmin':
+                    # Get the credentials to determine profile type
+                    creds = self.athlete.garmin_credentials
+                    profile_type = getattr(creds, 'profile_type', 'default')
+                    self.processors.append(GarminProcessor(self.athlete, profile_type))
+                elif source == 'whoop':
+                    self.processors.append(WhoopProcessor(self.athlete))
+            except Exception as e:
+                logger.error(f"Error initializing {source} processor: {e}")
+
+        logger.info(f"Initialized {len(self.processors)} processors")
+
+    def sync_data(self, start_date: Optional[datetime] = None, end_date: Optional[datetime] = None) -> bool:
+        """Main sync method called by frontend"""
+        if not self.active_sources:
+            logger.info(f"No active sources for athlete {self.athlete.id}, skipping sync")
+            return False
+    
+        return self.sync_specific_sources(self.active_sources, start_date, end_date)
+
+    def sync_specific_sources(self, sources: List[str], start_date: Optional[datetime] = None, end_date: Optional[datetime] = None) -> bool:
+        """Sync data from specific sources"""
+        logger.info(f"Syncing data from sources: {sources} for athlete {self.athlete.id} with processors: {self.processors}")
+        if not sources or not self.processors:
+            logger.info("No sources to sync or no processors initialized")
+            return False
+
+        success = True
+        for processor in self.processors:
+            if start_date and end_date:
+                success = processor.sync_data(start_date, end_date)
+            else:
+                success = processor.sync_data()
+            if not success:
+                logger.error(f"Sync failed for processor: {processor.__class__.__name__}")
+
+        return success
+
+    def get_biometric_data(self, days: int = 7):
+        """Get biometric data for the athlete"""
+        if not self.active_sources:
+            logger.info(f"No active sources for athlete {self.athlete.id}")
+            return []
+            
+        try:
+            end_date = timezone.now().date()
+            start_date = end_date - timedelta(days=days)
+            
+            data = CoreBiometricData.objects.filter(
+                athlete=self.athlete,
+                date__range=[start_date, end_date]
+            ).values().order_by('date')
+
+            if not data.exists():
+                logger.info(f"No data found for athlete {self.athlete.id}, syncing data")
+                self.sync_specific_sources(self.active_sources, start_date, end_date)
+                data = CoreBiometricData.objects.filter(
+                    athlete=self.athlete,
+                    date__range=[start_date, end_date]
+                ).values().order_by('date')
+
+            return data
+
+        except Exception as e:
+            logger.error(f"Error getting biometric data: {e}")
+            return []
+
+    def _check_db_freshness(self, start_date: datetime.date, end_date: datetime.date) -> bool:
+        """Check if database has fresh data for date range"""
+        try:
+            data_count = CoreBiometricData.objects.filter(
+                athlete=self.athlete,
+                date__range=[start_date, end_date]
+            ).count()
+            expected_days = (end_date - start_date).days + 1
+            return data_count >= expected_days
+        except Exception as e:
+            logger.error(f"DB freshness check error: {e}")
+            return False
+
+    def _check_s3_freshness(self, start_date: datetime.date, end_date: datetime.date) -> bool:
+        """Check if S3 has fresh data for date range"""
+        try:
+            for source in self.active_sources:
+                base_path = f"accounts/{self.athlete.user.id}/biometric-data/{source}"
+                if not self.s3_utils.check_data_freshness(base_path, [start_date, end_date]):
+                    return False
+            return True
+        except Exception as e:
+            logger.error(f"S3 freshness check error: {e}")
+            return False
+
+    def _get_s3_path(self, source: str, date: datetime) -> str:
+        """Generate S3 path for storing data"""
+        return f'accounts/{self.athlete.user.id}/biometric-data/{source}/{date.strftime("%Y%m%d")}'
+
+    def _store_in_s3(self, data: StandardizedBiometricData, source: str) -> bool:
+        """Store standardized data in S3"""
+        try:
+            path = self._get_s3_path(source, data['date'])
+            self.s3_utils.put_object(
+                Bucket=self.bucket,
+                Key=f"{path}.json",
+                Body=data,
+                ContentType='application/json'
+            )
+            return True
+        except Exception as e:
+            logger.error(f"Error storing data in S3: {e}")
+            return False
+
+    @sync_lock()
+    def sync_all_sources(self, 
+                         start_date: Optional[datetime] = None,
+                         end_date: Optional[datetime] = None) -> Dict[str, bool]:
+        """Sync all available data sources"""
+        logger.info(f"Syncing all sources for athlete {self.athlete.id}")
+        return self.sync_specific_sources(
+            sources=[p.__class__.__name__.lower().replace('processor', '') 
+                    for p in self.processors],
+            start_date=start_date,
+            end_date=end_date
         )
-        self.bucket = 'athlete-platform-bucket'
-        self.garmin_collector = GarminDataCollector()
+
+    def get_latest_data(self, days: int = 7) -> Dict[str, List[StandardizedBiometricData]]:
+        """Get latest data from all sources"""
+        logger.info(f"Fetching latest {days} days of data for athlete {self.athlete.id}")
+        return self.sync_manager.get_latest_data(days)
 
     def _check_s3_data_exists(self, date_str):
         """Check if data already exists in S3 for a given date"""
         prefix = f'accounts/{self.athlete.user.id}/biometric-data/garmin/'
         try:
-            response = self.s3.list_objects_v2(
-                Bucket=self.bucket,
-                Prefix=f"{prefix}{date_str}"
-            )
+            response = self.s3_utils.get_latest_json_data(prefix, date_str)
             return 'Contents' in response and len(response['Contents']) > 0
         except Exception as e:
             logger.error(f"Error checking S3: {e}")
             return False
 
-    @sync_lock()
-    def sync_data(self):
-        """Sync data from Garmin with locking mechanism."""
+    def _perform_sync(self):
+        """Perform the actual sync operation"""
         try:
-            # If you want to skip calling Garmin entirely if any day is in S3, you can check it first.
-            # For each day, if it's in S3, skip. Otherwise, pull from Garmin.
-
-            raw_data = self.garmin_collector.collect_data()
-            if not raw_data:
-                logger.error("No data received from Garmin")
-                return False
-            
-            success = False
-            processed_dates = set()
-
-            for daily_data in raw_data:
-                date = daily_data.get('date')
-                if not date:
-                    continue
-
-                # Skip if already processed or if already on S3
-                if date in processed_dates or self._check_s3_data_exists(date):
-                    logger.info(f"Skipping data for date {date} (already on S3 or processed).")
-                    continue
-
-                # Process & save
-                if self._process_and_save_data(daily_data):
-                    success = True
-                    processed_dates.add(date)
-                    
-                    # Only upload once DB is updated successfully
-                    self._upload_to_s3(daily_data, date)
-
-            return success
-
+            with transaction.atomic():
+                success = True
+                for processor in self.processors:
+                    if not processor.sync_data():
+                        logger.error(f"Sync failed for processor: {processor.__class__.__name__}")
+                        success = False
+                return success
         except Exception as e:
-            logger.error(f"Error in sync_data: {e}", exc_info=True)
+            logger.error(f"Error in _perform_sync: {e}", exc_info=True)
             return False
-        finally:
-            cache.delete(f"sync_lock_{self.athlete.id}")
 
-    def _upload_to_s3(self, data, date):
-        """Upload data to S3 with proper error handling"""
-        try:
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            key = f'accounts/{self.athlete.user.id}/biometric-data/garmin/{date}_{timestamp}.json'
-            
-            # Check if file already exists
-            if self._check_s3_data_exists(date):
-                logger.info(f"Data already exists in S3 for date {date}")
-                return True
-                
-            self.s3.put_object(
-                Bucket=self.bucket,
-                Key=key,
-                Body=json.dumps(data)
-            )
-            logger.info(f"Successfully uploaded {key} to S3")
-            return True
-        except Exception as e:
-            logger.error(f"Error uploading to S3: {e}")
-            return False
+    def _get_active_collectors(self):
+        # Implementation of _get_active_collectors method
+        pass
+
+    def _process_and_store_data(self, raw_data):
+        # Implementation of _process_and_store_data method
+        pass
 
     def _process_and_save_data(self, data):
         """Process and save a single day's data"""
@@ -237,10 +341,7 @@ class DataSyncService:
         try:
             # List all files in athlete's directory
             prefix = f'accounts/{self.athlete.user.id}/biometric-data/garmin/'
-            response = self.s3.list_objects_v2(
-                Bucket=self.bucket,
-                Prefix=prefix
-            )
+            response = self.s3_utils.get_latest_json_data(prefix, datetime.now().date())
 
             if 'Contents' not in response:
                 logger.warning(f"No files found for athlete {self.athlete.user.id}")
@@ -253,10 +354,7 @@ class DataSyncService:
             )
 
             # Get file content
-            file_response = self.s3.get_object(
-                Bucket=self.bucket,
-                Key=latest_file['Key']
-            )
+            file_response = self.s3_utils.get_latest_json_data(prefix, datetime.now().date())
             
             data = json.loads(file_response['Body'].read())
             return self._process_complete_data(data[0])
@@ -388,7 +486,7 @@ class DataSyncService:
             latest_files = {}
 
             # List objects in the S3 bucket
-            paginator = self.s3.get_paginator("list_objects_v2")
+            paginator = self.s3_utils.get_paginator("list_objects_v2")
             pages = paginator.paginate(Bucket=self.bucket, Prefix=base_path)
 
             for page in pages:
@@ -407,7 +505,7 @@ class DataSyncService:
             # Fetch data from the latest files
             for date_str, file_info in latest_files.items():
                 try:
-                    data = self.s3.get_object(Bucket=self.bucket, Key=file_info["Key"])
+                    data = self.s3_utils.get_object(Bucket=self.bucket, Key=file_info["Key"])
                     json_data = json.loads(data["Body"].read().decode("utf-8"))
                     
                     # Ensure proper handling of the JSON structure
@@ -581,116 +679,6 @@ class DataSyncService:
             logger.error(f"Error calculating recovery score: {e}")
             return 0
 
-    def _process_raw_data(self, raw_data):
-        """Process raw Garmin data into standardized format"""
-        try:
-            # Extract date
-            date = datetime.strptime(raw_data.get('date'), '%Y-%m-%d').date()
-            
-            # Get daily stats
-            daily_stats = raw_data.get('daily_stats', {})
-            if not daily_stats:
-                logger.error(f"No daily stats found for {date}, data: {raw_data}")
-                
-                return False
-
-            # Extract sleep data
-            sleep_data = daily_stats.get('sleep', {}).get('dailySleepDTO', {})
-            user_summary = daily_stats.get('user_summary', {})
-            heart_rate_data = daily_stats.get('heart_rate', {})
-            stress_data = daily_stats.get('stress', {})
-
-            processed_data = {
-                'date': date,
-                
-                # Sleep metrics
-                'total_sleep_seconds': sleep_data.get('sleepTimeSeconds', 0),
-                'deep_sleep_seconds': sleep_data.get('deepSleepSeconds', 0),
-                'light_sleep_seconds': sleep_data.get('lightSleepSeconds', 0),
-                'rem_sleep_seconds': sleep_data.get('remSleepSeconds', 0),
-                'awake_seconds': sleep_data.get('awakeSleepSeconds', 0),
-                'average_respiration': sleep_data.get('averageRespirationValue', 0),
-                'lowest_respiration': sleep_data.get('lowestRespirationValue', 0),
-                'highest_respiration': sleep_data.get('highestRespirationValue', 0),
-                'sleep_heart_rate': daily_stats.get('sleep_heart_rate', {}),
-                'sleep_stress': daily_stats.get('sleep_stress', {}),
-                'sleep_body_battery': daily_stats.get('sleep_body_battery', {}),
-                'body_battery_change': daily_stats.get('body_battery_change', 0),
-                'sleep_resting_heart_rate': sleep_data.get('sleepRestingHeartRate', 0),
-                
-                # Heart Rate Data
-                'resting_heart_rate': heart_rate_data.get('restingHeartRate', 0),
-                'max_heart_rate': heart_rate_data.get('maxHeartRate', 0),
-                'min_heart_rate': heart_rate_data.get('minHeartRate', 0),
-                'last_seven_days_avg_resting_heart_rate': heart_rate_data.get('lastSevenDaysAvgRestingHeartRate', 0),
-                'heart_rate_values': heart_rate_data.get('heartRateValues', {}),
-                
-                # Activity Data
-                'total_calories': user_summary.get('totalKilocalories', 0),
-                'active_calories': user_summary.get('activeKilocalories', 0),
-                'bmr_calories': user_summary.get('bmrKilocalories', 0),
-                'net_calorie_goal': user_summary.get('netCalorieGoal', 0),
-                'total_distance_meters': user_summary.get('totalDistanceMeters', 0),
-                'total_steps': user_summary.get('totalSteps', 0),
-                'daily_step_goal': user_summary.get('dailyStepGoal', 0),
-                'highly_active_seconds': user_summary.get('highlyActiveSeconds', 0),
-                'sedentary_seconds': user_summary.get('sedentarySeconds', 0),
-                
-                # Stress Data
-                'average_stress_level': stress_data.get('averageStressLevel', 0),
-                'max_stress_level': stress_data.get('maxStressLevel', 0),
-                'stress_duration': stress_data.get('stressDuration', 0),
-                'rest_stress_duration': stress_data.get('restStressDuration', 0),
-                'activity_stress_duration': stress_data.get('activityStressDuration', 0),
-                'low_stress_percentage': stress_data.get('lowStressPercentage', 0),
-                'medium_stress_percentage': stress_data.get('mediumStressPercentage', 0),
-                'high_stress_percentage': stress_data.get('highStressPercentage', 0),
-            }
-
-            return processed_data
-
-        except Exception as e:
-            logger.error(f"Error processing raw data: {e}", exc_info=True)
-            return False
-
-    def _store_processed_data(self, processed_data):
-        """Store the processed data in the database"""
-        try:
-            # Get or create the BiometricData instance
-            biometric_data, created = CoreBiometricData.objects.get_or_create(
-                date=processed_data['date'],
-                athlete=self.athlete,
-                defaults={
-                    'resting_heart_rate': processed_data['resting_heart_rate'],
-                    'min_heart_rate': processed_data['min_hr'],
-                    'max_heart_rate': processed_data['max_hr'],
-                    'avg_heart_rate': processed_data['avg_heart_rate'],
-                    'calories_active': processed_data['calories_active'],
-                    'calories_total': processed_data['calories_total'],
-                    'steps': processed_data['steps'],
-                    'distance_meters': processed_data['distance_meters'],
-                    'intensity_minutes': processed_data['intensity_minutes'],
-                    'stress_level': processed_data['stress_level'],
-                    'sleep_hours': processed_data['sleep_hours'],
-                    'deep_sleep': processed_data['deep_sleep'],
-                    'light_sleep': processed_data['light_sleep'],
-                    'rem_sleep': processed_data['rem_sleep'],
-                    'awake_time': processed_data['awake_time'],
-                }
-            )
-
-            if not created:
-                # Update existing record
-                for key, value in processed_data.items():
-                    setattr(biometric_data, key, value)
-                biometric_data.save()
-
-            return True
-
-        except Exception as e:
-            logger.error(f"Error storing processed data: {e}", exc_info=True)
-            return False
-
     def _save_detailed_sleep(self, sleep_data):
         # Implementation of _save_detailed_sleep method
         pass
@@ -701,4 +689,29 @@ class DataSyncService:
 
     def _save_body_battery(self, body_battery_data):
         # Implementation of _save_body_battery method
-        pass 
+        pass
+
+    def _format_biometric_data(self, queryset):
+        """Format biometric data for API response using appropriate transformer"""
+        logger.debug("Formatting biometric data for response")
+        formatted_data = []
+        
+        for data in queryset:
+            source = data.get('source', 'default')  # default to garmin for backward compatibility
+            logger.info(f"Source: {source}")
+            if source not in self.transformers:
+                logger.error(f"Unknown data source: {source}")
+                continue
+                
+            try:
+                transformer = self.transformers[source]
+                logger.info(f"Transformer: {transformer}")
+                logger.info(f"Tranforming data...")
+                standardized_data = transformer.transform_to_standard_format(data)
+                logger.info(f"Standardized the data!")
+                formatted_data.append(standardized_data)
+            except Exception as e:
+                logger.error(f"Error transforming {source} data: {e}")
+                continue
+    
+        return formatted_data 

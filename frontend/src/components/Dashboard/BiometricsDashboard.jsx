@@ -119,6 +119,16 @@ const BiometricsDashboard = ({ username }) => {
   const [showDialog, setShowDialog] = useState(false);
   const [dialogTitle, setDialogTitle] = useState('');
   const [dialogContent, setDialogContent] = useState('');
+  const [showSourceMenu, setShowSourceMenu] = useState(false);
+  const [selectedSource, setSelectedSource] = useState(null);
+  const [showCredentialsMenu, setShowCredentialsMenu] = useState(false);
+  const [hasActiveSources, setHasActiveSources] = useState(true);
+  const [garminProfiles, setGarminProfiles] = useState([]);
+  
+  const sources = [
+    { id: 'garmin', name: 'Garmin' },
+    { id: 'whoop', name: 'Whoop (Coming Soon)' }
+  ];
 
   const openMenu = (event) => {
     setAnchorEl(event.currentTarget);
@@ -329,12 +339,110 @@ const BiometricsDashboard = ({ username }) => {
     closeMenu();
   };
 
+  const handleSourceActivation = async (source, profile = null) => {
+    setLoading(true);
+    setError(null);
+    setSyncMessage(`Activating ${source} source...`);
+
+    try {
+      const response = await fetch('/api/biometrics/activate-source/', {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'X-CSRFToken': getCookie('csrftoken')
+        },
+        credentials: 'include',
+        body: JSON.stringify({ 
+          source,
+          profile_type: profile
+        })
+      });
+
+      const data = await response.json();
+      
+      if (data.success) {
+        setSyncMessage(`${source} source activated successfully!`);
+        await syncData();
+      } else {
+        setError(`Source activation failed: ${data.message || 'Unknown error'}`);
+      }
+    } catch (err) {
+      setError(`Error activating source: ${err.message}`);
+    } finally {
+      setLoading(false);
+      setShowSourceMenu(false);
+      setShowCredentialsMenu(false);
+      setSelectedSource(null);
+      closeMenu();
+    }
+  };
+
   useEffect(() => {
-    fetchBiometricData();
+    let mounted = true;
+    
+    const fetchData = async () => {
+        if (loading || biometricData.length > 0) return; // Add check for existing data
+        setLoading(true);
+        
+        try {
+            const response = await fetch('/api/biometrics/');
+            if (!mounted) return;
+            const data = await response.json();
+            setBiometricData(data);
+        } catch (error) {
+            console.error('Error fetching biometric data:', error);
+        } finally {
+            if (mounted) setLoading(false);
+        }
+    };
+
+    fetchData();
+
+    return () => {
+        mounted = false;
+    };
+  }, []); // Only fetch on mount
+
+  useEffect(() => {
+    if (biometricData.length === 0 && !loading) {
+      setHasActiveSources(false);
+    }
+  }, [biometricData, loading]);
+
+  useEffect(() => {
+    const fetchGarminProfiles = async () => {
+      try {
+        const response = await fetch('/api/biometrics/garmin-profiles/', { credentials: 'include' });
+        if (response.ok) {
+          const data = await response.json();
+          setGarminProfiles(data.profiles);
+        }
+      } catch (error) {
+        console.error('Error fetching Garmin profiles:', error);
+      }
+    };
+    
+    fetchGarminProfiles();
   }, []);
 
   const handleChangeTab = (event, newValue) => {
     setTabValue(newValue);
+  };
+
+ 
+  const getCookie = (name) => {
+    let cookieValue = null;
+    if (document.cookie && document.cookie !== '') {
+      const cookies = document.cookie.split(';');
+      for (let i = 0; i < cookies.length; i++) {
+        const cookie = cookies[i].trim();
+        if (cookie.substring(0, name.length + 1) === (name + '=')) {
+          cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+          break;
+        }
+      }
+    }
+    return cookieValue;
   };
 
   return (
@@ -364,6 +472,11 @@ const BiometricsDashboard = ({ username }) => {
             open={Boolean(anchorEl)}
             onClose={closeMenu}
           >
+            <StyledMenuItem onClick={() => setShowSourceMenu(true)}>
+              <SyncIcon />
+              <Typography>Activate Data Source</Typography>
+            </StyledMenuItem>
+            
             <StyledMenuItem onClick={() => {
               closeMenu();
               setTabValue(1);
@@ -408,11 +521,91 @@ const BiometricsDashboard = ({ username }) => {
         </DialogContent>
       </Dialog>
 
+      {/* Source Selection Dialog */}
+      <Dialog 
+        open={showSourceMenu} 
+        onClose={() => setShowSourceMenu(false)}
+        PaperProps={{
+          sx: {
+            width: '300px',
+            backgroundColor: '#2C3E50',
+            color: 'white'
+          }
+        }}
+      >
+        <DialogTitle>Select Data Source</DialogTitle>
+        <DialogContent>
+          {sources.map(source => (
+            <StyledMenuItem
+              key={source.id}
+              onClick={() => {
+                if (source.id === 'whoop') {
+                  setSyncMessage('Whoop integration coming soon!');
+                  return;
+                }
+                setSelectedSource(source.id);
+                setShowSourceMenu(false);
+                setShowCredentialsMenu(true);
+              }}
+            >
+              <Typography>{source.name}</Typography>
+            </StyledMenuItem>
+          ))}
+        </DialogContent>
+      </Dialog>
+
+      {/* Credentials Selection Dialog */}
+      <Dialog 
+        open={showCredentialsMenu} 
+        onClose={() => setShowCredentialsMenu(false)}
+        PaperProps={{
+          sx: {
+            width: '300px',
+            backgroundColor: '#2C3E50',
+            color: 'white'
+          }
+        }}
+      >
+        <DialogTitle>Select Credentials</DialogTitle>
+        <DialogContent>
+          {garminProfiles.map(profile => (
+            <StyledMenuItem
+              key={profile.id}
+              onClick={() => {
+                handleSourceActivation(selectedSource, profile.id);
+                setShowCredentialsMenu(false);
+              }}
+            >
+              <Typography>{profile.name}</Typography>
+            </StyledMenuItem>
+          ))}
+        </DialogContent>
+      </Dialog>
+
       <Box sx={{ 
         p: 4, 
         backgroundColor: colors.background,
         minHeight: '100vh'
       }}>
+        {/* Add Alert for no active sources */}
+        {!hasActiveSources && (
+          <Alert 
+            severity="info" 
+            sx={{ mb: 3 }}
+            action={
+              <Button 
+                color="inherit" 
+                size="small"
+                onClick={() => setShowSourceMenu(true)}  // Use the same handler as the menu item
+              >
+                ACTIVATE SOURCE
+              </Button>
+            }
+          >
+            No active data sources found. Please activate Garmin or another data source to see your biometric data.
+          </Alert>
+        )}
+
         {/* Sync & Feedback */}
         <Box sx={{ mb: 2 }}>
           {loading && <CircularProgress />}

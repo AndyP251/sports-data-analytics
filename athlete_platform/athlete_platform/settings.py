@@ -59,6 +59,7 @@ INSTALLED_APPS = [
 
     'corsheaders',
     'storages',  # Make sure this is here
+    'core.services',
 ]
 
 MIDDLEWARE = [
@@ -162,6 +163,27 @@ STATICFILES_DIRS = [
 # Garmin Settings
 GARMIN_USERNAME = os.getenv('GARMIN_USERNAME')
 GARMIN_PASSWORD = os.getenv('GARMIN_PASSWORD')
+
+GARMIN_PROFILES = {
+    'default': {
+        'name': 'Default Garmin Account',
+        'username': GARMIN_USERNAME,  # Will be replaced with settings.GARMIN_USERNAME
+        'password': GARMIN_PASSWORD,  # Will be replaced with settings.GARMIN_PASSWORD
+        'is_production': True
+    },
+    'test': {
+        'name': 'Test Garmin Account',
+        'username': 'test_user',
+        'password': 'test_password',
+        'is_production': False
+    },
+    'hash': {
+        'name': 'Hash Testing Account',
+        'username': 'hash_user',
+        'password': 'hash_password',
+        'is_production': False
+    }
+} 
 
 # Use different storage for development and production
 if DEBUG:
@@ -316,4 +338,12 @@ SESSION_COOKIE_HTTPONLY = True
 WHOOP_CLIENT_ID = os.getenv('WHOOP_CLIENT_ID')
 WHOOP_CLIENT_SECRET = os.getenv('WHOOP_CLIENT_SECRET')
 WHOOP_REDIRECT_URI = os.getenv('WHOOP_REDIRECT_URI')  # e.g., https://yourdomain.com/oauth/whoop/callback
-ENCRYPTION_KEY = os.getenv('ENCRYPTION_KEY')  # Generate using: Fernet.generate_key() 
+ENCRYPTION_KEY = os.getenv('ENCRYPTION_KEY')  # Generate using: Fernet.generate_key()
+
+# Add cache configuration for sync locks
+CACHES = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.redis.RedisCache',
+        'LOCATION': 'redis://127.0.0.1:6379/1',
+    }
+}

@@ -308,19 +308,48 @@ def get_garmin_profiles(request):
 def get_raw_biometric_data(request):
     """Get raw biometric data from S3"""
     try:
+        active_source = ""
         athlete = request.user.athlete
+        logger.info(f"Fetching raw biometric data for athlete {athlete.id}")
+        
+        # Get the active source (should only be one)
+        active_sources = request.user.active_data_sources
+        if not active_sources:
+            logger.warning(f"No active source found for athlete {athlete.id}")
+            # default to garmin TODO: fix this
+            active_source = 'garmin'
+            # return JsonResponse({
+            #     'success': True,
+            #     'data': []
+            # })
+        if len(active_sources) > 1:
+            active_source = active_sources[0]  # Get the first (and only) source
         s3_utils = S3Utils()
         
-        # Get all data from S3 for this athlete
-        base_path = f'accounts/{request.user.id}/biometric-data/garmin'
-        raw_data = s3_utils.get_all_json_data(base_path)
+        # Get all data from S3 for this athlete's active source
+        base_path = f'accounts/{request.user.id}/biometric-data/{active_source}'
+        logger.info(f"Checking S3 path: {base_path}")
+        
+        try:
+            raw_data = s3_utils.get_all_json_data(base_path)
+            # logger.info(f"S3 data retrieved: {raw_data[:10] if raw_data else 'No data'}")
+        except Exception as s3_error:
+            logger.error(f"S3 operation failed: {s3_error}", exc_info=True)
+            raise
+        
+        if not raw_data:
+            logger.warning(f"No raw data found in S3 for path: {base_path}")
+            return JsonResponse({
+                'success': True,
+                'data': []
+            })
         
         return JsonResponse({
             'success': True,
             'data': raw_data
         })
     except Exception as e:
-        logger.error(f"Error fetching raw biometric data: {e}")
+        logger.error(f"Error fetching raw biometric data: {e}", exc_info=True)
         return JsonResponse({
             'success': False,
             'error': str(e)

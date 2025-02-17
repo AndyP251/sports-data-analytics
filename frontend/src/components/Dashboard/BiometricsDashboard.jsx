@@ -157,7 +157,7 @@ const BiometricsDashboard = ({ username }) => {
     
     try {
       const response = await axios.get('/api/biometrics/');
-      console.log('Raw biometrics data:', response.data);
+      // console.log('Raw biometrics data:', response.data);
       
       // Check if we have any data
       if (!response.data || response.data.length === 0) {
@@ -392,12 +392,29 @@ const BiometricsDashboard = ({ username }) => {
       if (data.success) {
         setActiveSource(source);
         setSyncMessage(`${source} source activated successfully!`);
+        
+        
         await syncData();
+
+          // Fetch raw data after successful activation
+        const rawResponse = await fetch('/api/biometrics/raw/', {
+          credentials: 'include'
+        });
+        const rawData = await rawResponse.json();
+        
+        if (rawData.success) {
+          setRawData(rawData.data);
+          console.log('Raw data fetched successfully');
+        } else {
+          console.error('Failed to fetch raw data:', rawData.error);
+        }
+      
       } else {
         setError(`Source activation failed: ${data.message || 'Unknown error'}`);
       }
     } catch (err) {
       setError(`Error activating source: ${err.message}`);
+      console.log('Source activation error:', err);
     } finally {
       setLoading(false);
       setShowSourceMenu(false);
@@ -416,10 +433,10 @@ const BiometricsDashboard = ({ username }) => {
       
       try {
         const response = await axios.get('/api/biometrics/');
-        console.log('Raw biometrics data:', response.data);
+        // console.log('Raw biometrics data:', response.data);
         // Process the raw data array directly
         const processedData = processData(response.data);
-        console.log('Processed biometrics data:', processedData);
+        // console.log('Processed biometrics data:', processedData);
         setBiometricData(processedData);
       } catch (error) {
         console.error('Error fetching biometric data:', error);

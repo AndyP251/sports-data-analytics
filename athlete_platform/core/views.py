@@ -30,6 +30,7 @@ import warnings  # Python's built-in warnings module
 from django.conf import settings
 from asgiref.sync import sync_to_async
 from functools import wraps
+from rest_framework import status
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -392,4 +393,36 @@ def active_sources(request):
             'success': False,
             'error': str(e)
         }, status=500)
+
+@csrf_exempt  # Only use during development
+@require_http_methods(["POST"])
+def verify_dev_password(request):
+    try:
+        data = json.loads(request.body)
+        password = data.get('password')
+        
+        logger.info(f"Development password attempt received: {password}")
+        logger.info(f"Expected password: {settings.DEVELOPMENT_PASSWORD}")
+        
+        if password == settings.DEVELOPMENT_PASSWORD:
+            logger.info("Development password verification successful")
+            return JsonResponse({'status': 'success'})
+        
+        logger.warning("Invalid development password attempt")
+        return JsonResponse(
+            {'error': 'Invalid development password'}, 
+            status=401
+        )
+    except json.JSONDecodeError:
+        logger.error("Invalid JSON in development password request")
+        return JsonResponse(
+            {'error': 'Invalid request format'}, 
+            status=400
+        )
+    except Exception as e:
+        logger.error(f"Unexpected error in development password verification: {str(e)}")
+        return JsonResponse(
+            {'error': 'Server error'}, 
+            status=500
+        )
 

@@ -397,3 +397,9 @@ CACHES = {
         'LOCATION': 'unique-snowflake',
     }
 }
+
+# Add this near your other environment variables
+DEVELOPMENT_PASSWORD = os.getenv('DEVELOPMENT_PASSWORD', 'default_password')
+
+# Add this to your CORS settings
+CORS_ALLOW_ALL_ORIGINS = DEBUG  # Allow all origins in development

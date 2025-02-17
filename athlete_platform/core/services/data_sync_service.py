@@ -13,7 +13,8 @@ from functools import wraps
 from .data_formats.biometric_format import StandardizedBiometricData
 from django.db import transaction
 from django.utils import timezone
-from core.utils.cache_utils import resource_lock
+# from core.utils.cache_utils import resource_lock
+
 from ..utils.s3_utils import S3Utils
 
 logger = logging.getLogger(__name__)

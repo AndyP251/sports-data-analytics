@@ -4,13 +4,14 @@ import garminconnect
 import logging
 from datetime import date, timedelta
 from typing import Optional, Dict, Any, List
-
+from ..utils.encryption_utils import decrypt_value
 logger = logging.getLogger(__name__)
 
 class GarminDataCollector:
     def __init__(self, user_credentials=None):
-        self.username = user_credentials.get('username')
-        self.password = user_credentials.get('password')
+        self.username = decrypt_value(user_credentials.get('username'))
+        self.password = decrypt_value(user_credentials.get('password'))
+        
         self.garmin_client = None
 
     def authenticate(self) -> bool:

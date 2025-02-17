@@ -6,7 +6,7 @@ import logging
 from django.core.cache import cache
 from functools import wraps
 from django.utils import timezone
-from core.utils.cache_utils import resource_lock
+# from core.utils.cache_utils import resource_lock
 from core.utils.validation_utils import DataValidator
 
 logger = logging.getLogger(__name__)
@@ -70,23 +70,23 @@ class BaseDataProcessor(ABC):
         """Validate processed data"""
         pass
     
-    @resource_lock('processing')
-    def store_data(self, processed_data: Dict[str, Any], date: date) -> bool:
-        """Store processed data with locking mechanism"""
-        try:
-            if not self.validate_data(processed_data):
-                logger.error(f"Data validation failed for {date}")
-                return False
+    # @resource_lock('processing')
+    # def store_data(self, processed_data: Dict[str, Any], date: date) -> bool:
+    #     """Store processed data with locking mechanism"""
+    #     try:
+    #         if not self.validate_data(processed_data):
+    #             logger.error(f"Data validation failed for {date}")
+    #             return False
             
-            success = self._store_in_db(processed_data, date)
-            if not success:
-                return False
+    #         success = self._store_in_db(processed_data, date)
+    #         if not success:
+    #             return False
             
-            return self._store_in_s3(processed_data, date)
+    #         return self._store_in_s3(processed_data, date)
             
-        except Exception as e:
-            logger.error(f"Error storing data from base processor: {e}")
-            return False
+    #     except Exception as e:
+    #         logger.error(f"Error storing data from base processor: {e}")
+    #         return False
     
     def _store_in_db(self, processed_data: Dict[str, Any], date: date) -> bool:
         """Store data in database"""

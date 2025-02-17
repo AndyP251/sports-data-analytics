@@ -15,7 +15,7 @@ from .data_collectors.whoop_collector import WhoopCollector
 from .data_processors.garmin_processor import GarminProcessor
 from .data_processors.whoop_processor import WhoopProcessor
 from .data_formats.biometric_format import StandardizedBiometricData
-from core.utils.cache_utils import resource_lock
+# from core.utils.cache_utils import resource_lock
 from typing import List, Dict, Any, Optional
 
 

@@ -323,3 +323,45 @@ This project is licensed under the MIT License - see the LICENSE.md file for det
    - Regular Redis security audits
    - PostgreSQL connection pooling
    - S3 bucket policies review
+
+
+
+
+
+
+
+
+
+[Rest of the development setup remains the same]
+
+### Estimated Monthly Costs (Minimum Viable Setup)
+- Droplet (Basic Plan): $4-$8/month (1GB RAM)
+- Managed Database (PostgreSQL): $15/month (1GB RAM)
+- S3-Compatible Spaces: $5/month (250GB storage)
+**Total Estimated Cost**: $24-28/month
+
+### Future Scaling Considerations
+As the application grows, you may need to add:
+
+1. **Redis**
+   - For distributed caching
+   - Task queue management
+   - Rate limiting
+   - Real-time features
+   - Required when scaling horizontally across multiple servers
+
+2. **Background Tasks**
+   - Initially handled synchronously
+   - Can be moved to AWS Lambda or Celery+Redis when scale requires
+
+3. **Caching Strategy**
+   - Currently using local memory cache
+   - Redis implementation needed for multi-server deployments
+
+### Current Implementation Notes
+- Using Django's built-in local memory cache
+- Background tasks run synchronously
+- Resource locks are handled in-memory
+- Suitable for single-server deployment
+
+[Rest of the README remains the same]

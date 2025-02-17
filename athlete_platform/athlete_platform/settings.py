@@ -220,8 +220,8 @@ REST_FRAMEWORK = {
 }
 
 # Celery Configuration (Enables background tasks for long-running operations)
-CELERY_BROKER_URL = os.getenv('REDIS_URL')
-CELERY_RESULT_BACKEND = os.getenv('REDIS_URL')
+# CELERY_BROKER_URL = os.getenv('REDIS_URL')
+# CELERY_RESULT_BACKEND = os.getenv('REDIS_URL')
 
 # Custom User Model (Defines the custom user model for the project)
 AUTH_USER_MODEL = 'core.User'
@@ -342,9 +342,17 @@ WHOOP_REDIRECT_URI = os.getenv('WHOOP_REDIRECT_URI')  # e.g., https://yourdomain
 ENCRYPTION_KEY = os.getenv('ENCRYPTION_KEY')  # Generate using: Fernet.generate_key()
 
 # Add cache configuration for sync locks
+# CACHES = {
+#     'default': {
+#         'BACKEND': 'django.core.cache.backends.redis.RedisCache',
+#         'LOCATION': 'redis://127.0.0.1:6379/1',
+#     }
+# }
+
+#without redis
 CACHES = {
     'default': {
-        'BACKEND': 'django.core.cache.backends.redis.RedisCache',
-        'LOCATION': 'redis://127.0.0.1:6379/1',
+        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+        'LOCATION': 'unique-snowflake',
     }
 }

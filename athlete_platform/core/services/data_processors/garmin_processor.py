@@ -305,7 +305,7 @@ class GarminProcessor(BaseDataProcessor):
             logger.error(f"Error getting data from API: {e}", exc_info=True)
             return None
     
-    def sync_data(self, start_date: Optional[date] = None, end_date: Optional[date] = None) -> bool:
+    def sync_data(self, start_date: Optional[date] = None, end_date: Optional[date] = None, force_refresh: bool = False) -> bool:
         """Garmin-specific sync implementation"""
         sync_data_debugging = True
         start_time = datetime.now() if sync_data_debugging else None
@@ -313,6 +313,10 @@ class GarminProcessor(BaseDataProcessor):
         s3_data = None
         
         try:
+            # if not self.athlete.active_sources.filter(source_type='garmin').exists():
+            #     logger.info(f"Garmin not activated for athlete {self.athlete.id}")
+            #     return False
+            
             if sync_data_debugging:
                 logger.info(f"[DEBUG] Starting sync_data at {start_time}")
             # TODO: Add validation of credentials

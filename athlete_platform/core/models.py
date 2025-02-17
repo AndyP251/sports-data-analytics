@@ -6,6 +6,8 @@ import uuid
 from django.core.exceptions import ValidationError
 import logging
 from django.db import transaction
+from django.contrib.auth.signals import user_logged_in
+from django.dispatch import receiver
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +30,16 @@ class User(AbstractUser):
     date_of_birth = models.DateField(null=True, blank=True)
     profile_image = models.ImageField(upload_to='profile_images/', null=True, blank=True)
     
+    # New fields for tracking active sources
+    active_data_sources = models.JSONField(
+        default=list,
+        help_text="List of active data sources for this user"
+    )
+    last_source_check = models.DateTimeField(
+        auto_now=True,
+        help_text="Last time the data sources were checked"
+    )
+
     groups = models.ManyToManyField(
         'auth.Group',
         related_name='core_user_groups',
@@ -68,6 +80,33 @@ class User(AbstractUser):
     # Add this to handle admin log entries
     class Meta:
         db_table = 'core_user'
+
+    def update_active_sources(self):
+        """Update the list of active data sources for this user"""
+        active_sources = []
+        
+        # Check if user has an athlete profile
+        if hasattr(self, 'athlete'):
+            # Check for Garmin credentials
+            if hasattr(self.athlete, 'garmin_credentials'):
+                active_sources.append('garmin')
+                logger.info(f"Garmin credentials found for user {self.id}")
+            
+            # Check for Whoop credentials
+            if hasattr(self.athlete, 'whoop_credentials'):
+                active_sources.append('whoop')
+                logger.info(f"Whoop credentials found for user {self.id}")
+        self.active_data_sources = active_sources
+        self.save(update_fields=['active_data_sources', 'last_source_check'])
+
+@receiver(user_logged_in)
+def update_sources_on_login(sender, user, request, **kwargs):
+    """Update active sources when user logs in"""
+    logger.info(f"Updating active sources for user {user.id} on login")
+    try:
+        user.update_active_sources()
+    except Exception as e:
+        logger.error(f"Error updating active sources on login: {e}")
 
 class Team(models.Model):
     id = models.UUIDField(

@@ -151,55 +151,25 @@ const BiometricsDashboard = ({ username }) => {
     setDialogContent('');
   };
 
-  const fetchBiometricData = async () => {
+  const fetchData = async () => {
+    if (loading || biometricData.length > 0) return;
     setLoading(true);
+    
     try {
-      // Fetch both DB and S3 data
-      const [dbResponse, s3Response] = await Promise.all([
-        axios.get('/api/biometrics/'),
-        axios.get('/api/biometrics/raw/')
-      ]);
-
-      if (dbResponse.data.success) {
-        const dbData = dbResponse.data.data;
-        setBiometricData(dbData.map(item => ({
-          ...item,
-          date: item.date ? format(new Date(item.date), 'MM/dd') : 'N/A',
-          // Sleep metrics
-          sleep_hours: (item.total_sleep_seconds || 0) / 3600,
-          deep_sleep: (item.deep_sleep_seconds || 0) / 3600,
-          light_sleep: (item.light_sleep_seconds || 0) / 3600,
-          rem_sleep: (item.rem_sleep_seconds || 0) / 3600,
-          awake_hours: (item.awake_seconds || 0) / 3600,
-          
-          // Heart rate metrics
-          resting_heart_rate: item.resting_heart_rate || 0,
-          max_heart_rate: item.max_heart_rate || 0,
-          min_heart_rate: item.min_heart_rate || 0,
-          sleep_resting_heart_rate: item.sleep_resting_heart_rate || 0,
-          
-          // Activity metrics
-          total_steps: item.total_steps || 0,
-          active_calories: item.active_calories || 0,
-          total_calories: item.total_calories || 0,
-          total_distance: (item.total_distance_meters || 0) / 1000, // Convert to km
-          
-          // Stress metrics
-          average_stress_level: item.average_stress_level || 0,
-          max_stress_level: item.max_stress_level || 0,
-          stress_duration: (item.stress_duration_seconds || 0) / 3600,
-          
-          // Respiration
-          average_respiration: item.average_respiration || 0,
-          lowest_respiration: item.lowest_respiration || 0,
-          highest_respiration: item.highest_respiration || 0,
-        })));
+      const response = await axios.get('/api/biometrics/');
+      console.log('Raw biometrics data:', response.data);
+      
+      // Check if we have any data
+      if (!response.data || response.data.length === 0) {
+        setHasActiveSources(false);
+        setError('No data available. Please activate a data source.');
+        return;
       }
-
-      if (s3Response.data.success) {
-        setRawData(s3Response.data.data);
-      }
-
+      
+      // Process the raw data array directly
+      const processedData = processData(response.data);
+      console.log('Processed biometrics data:', processedData);
+      setBiometricData(processedData);
     } catch (error) {
       console.error('Error fetching biometric data:', error);
       setError('Failed to fetch biometric data');
@@ -229,7 +199,7 @@ const BiometricsDashboard = ({ username }) => {
         setActiveSource(source);
         setSyncMessage(`${source} source activated successfully!`);
         setError(null);
-        await fetchBiometricData();
+        await fetchData();
       }
     } catch (err) {
       setError(`Error activating ${source}: ${err.message}`);
@@ -240,7 +210,7 @@ const BiometricsDashboard = ({ username }) => {
 
   const syncData = async () => {
     if (activeSource === null) {
-      setError('No data source selected');
+      // setError('No data source selected');
       return;
     }
     setLoading(true);
@@ -261,7 +231,7 @@ const BiometricsDashboard = ({ username }) => {
       const data = await response.json();
       if (data.success) {
         setSyncMessage('Data synced successfully!');
-        fetchBiometricData();
+        fetchData();
       } else {
         setError(`Sync failed: ${data.message || 'Unknown error'}`);
       }
@@ -275,11 +245,11 @@ const BiometricsDashboard = ({ username }) => {
   const processData = (data) => {
     return data.map(item => {
       // Convert seconds to hours and handle null/undefined values
-      const sleepHours = (item.metrics?.total_sleep_seconds || 0) / 3600;
-      const deepSleepHours = (item.metrics?.deep_sleep_seconds || 0) / 3600;
-      const lightSleepHours = (item.metrics?.light_sleep_seconds || 0) / 3600;
-      const remSleepHours = (item.metrics?.rem_sleep_seconds || 0) / 3600;
-      const awakeHours = (item.metrics?.awake_seconds || 0) / 3600;
+      const sleepHours = (item.total_sleep_seconds || 0) / 3600;
+      const deepSleepHours = (item.deep_sleep_seconds || 0) / 3600;
+      const lightSleepHours = (item.light_sleep_seconds || 0) / 3600;
+      const remSleepHours = (item.rem_sleep_seconds || 0) / 3600;
+      const awakeHours = (item.awake_seconds || 0) / 3600;
 
       return {
         ...item,  // Keep all original data
@@ -308,7 +278,7 @@ const BiometricsDashboard = ({ username }) => {
         max_stress_level: item.max_stress_level || 0,
         
         // For health score calculation
-        hrv: item.body_battery_change || 0, // Using body battery as proxy for HRV
+        hrv: item.body_battery_change || 0,
       };
     });
   };
@@ -445,14 +415,15 @@ const BiometricsDashboard = ({ username }) => {
       setLoading(true);
       
       try {
-        const response = await fetch('/api/biometrics/');
-        if (!mounted) return;
-        const data = await response.json();
-        // Process the data before setting it
-        const processedData = processData(data.data || []);
+        const response = await axios.get('/api/biometrics/');
+        console.log('Raw biometrics data:', response.data);
+        // Process the raw data array directly
+        const processedData = processData(response.data);
+        console.log('Processed biometrics data:', processedData);
         setBiometricData(processedData);
       } catch (error) {
         console.error('Error fetching biometric data:', error);
+        setError('Failed to fetch biometric data');
       } finally {
         if (mounted) setLoading(false);
       }

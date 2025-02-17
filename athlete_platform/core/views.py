@@ -133,25 +133,40 @@ def sync_on_login(sender, user, request, **kwargs):
 
 @require_http_methods(["POST"])
 @login_required
-async def sync_biometric_data(request):
+def sync_biometric_data(request):
     """API endpoint for syncing biometric data"""
-
-    # Accessing a DB model (Athlete) is a blocking call
-    from asgiref.sync import sync_to_async
-
     try:
-        # Wrap model calls
-        athlete = await sync_to_async(Athlete.objects.get)(user=request.user)
+        athlete = request.user.athlete
+        
+        # Get active sources directly from the user model
+        active_sources = request.user.active_data_sources
+        
+        if not active_sources:
+            # Update active sources and try again
+            request.user.update_active_sources()
+            active_sources = request.user.active_data_sources
+            
+            if not active_sources:
+                return JsonResponse({
+                    'success': False,
+                    'error': 'No active sources found'
+                }, status=400)
 
-        sync_service = await sync_to_async(DataSyncService)(athlete)
+        # Initialize sync service and sync data
+        sync_service = DataSyncService(athlete)
+        success = sync_service.sync_specific_sources(active_sources)
 
-        data = await sync_to_async(sync_service.sync_data)()
-
-        return JsonResponse({'success': True, 'data': data or []})
+        return JsonResponse({
+            'success': success,
+            'data': [] if not success else 'Data synced successfully'
+        })
 
     except Exception as e:
         logger.error(f"Error in sync_biometric_data: {e}", exc_info=True)
-        return JsonResponse({'success': False, 'error': str(e)}, status=500)
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=500)
 
 def async_safe(f):
     @wraps(f)
@@ -320,15 +335,27 @@ def active_sources(request):
         
         # Check Garmin credentials
         if hasattr(athlete, 'garmin_credentials'):
-            active_sources.append('garmin')
+            garmin_creds = athlete.garmin_credentials
+            active_sources.append({
+                'id': 'garmin',
+                'name': 'Garmin',
+                'profile_type': garmin_creds.profile_type,
+                'last_sync': request.user.last_source_check
+            })
             
         # Check Whoop credentials
         if hasattr(athlete, 'whoop_credentials'):
-            active_sources.append('whoop')
+            whoop_creds = athlete.whoop_credentials
+            active_sources.append({
+                'id': 'whoop',
+                'name': 'Whoop',
+                'last_sync': request.user.last_source_check
+            })
             
         return JsonResponse({
             'success': True,
-            'sources': active_sources
+            'sources': active_sources,
+            'last_check': request.user.last_source_check
         })
     except Exception as e:
         logger.error(f"Error fetching active sources: {str(e)}")

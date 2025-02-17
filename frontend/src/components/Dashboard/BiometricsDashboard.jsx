@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   LineChart, Line, AreaChart, Area, BarChart, Bar,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend,
-  ResponsiveContainer, RadialBarChart, RadialBar
+  ResponsiveContainer, RadialBarChart, RadialBar, ComposedChart
 } from 'recharts';
 import { 
   Card, Grid, Typography, Box, Button, 
@@ -19,6 +19,7 @@ import BarChartIcon from '@mui/icons-material/BarChart';
 import BugReportIcon from '@mui/icons-material/BugReport';
 import TableChartIcon from '@mui/icons-material/TableChart';
 import HeartRateMetrics from '../HeartRateMetrics';
+import axios from 'axios';
 
 // Modern, professional color palette
 const colors = {
@@ -124,6 +125,7 @@ const BiometricsDashboard = ({ username }) => {
   const [showCredentialsMenu, setShowCredentialsMenu] = useState(false);
   const [hasActiveSources, setHasActiveSources] = useState(true);
   const [garminProfiles, setGarminProfiles] = useState([]);
+  const [activeSource, setActiveSource] = useState(null);
   
   const sources = [
     { id: 'garmin', name: 'Garmin' },
@@ -150,39 +152,98 @@ const BiometricsDashboard = ({ username }) => {
   };
 
   const fetchBiometricData = async () => {
+    setLoading(true);
     try {
-      setLoading(true);
-      setError('');
-      setSyncMessage('');
-      const response = await fetch('/api/biometrics/', { credentials: 'include' });
-      if (!response.ok) {
-        throw new Error(`HTTP error ${response.status}`);
-      }
-      const data = await response.json();
-      console.log('Raw biometric data:', data);
-      setRawData(data);
+      // Fetch both DB and S3 data
+      const [dbResponse, s3Response] = await Promise.all([
+        axios.get('/api/biometrics/'),
+        axios.get('/api/biometrics/raw/')
+      ]);
 
-      if (!data || data.length === 0) {
-        setSyncMessage('No data available. Try syncing.');
-        setBiometricData([]);
-      } else {
-        const processed = processData(data);
-        debugSleepData(processed);
-        console.log('Processed data:', processed);
-        setBiometricData(processed);
+      if (dbResponse.data.success) {
+        const dbData = dbResponse.data.data;
+        setBiometricData(dbData.map(item => ({
+          ...item,
+          date: item.date ? format(new Date(item.date), 'MM/dd') : 'N/A',
+          // Sleep metrics
+          sleep_hours: (item.total_sleep_seconds || 0) / 3600,
+          deep_sleep: (item.deep_sleep_seconds || 0) / 3600,
+          light_sleep: (item.light_sleep_seconds || 0) / 3600,
+          rem_sleep: (item.rem_sleep_seconds || 0) / 3600,
+          awake_hours: (item.awake_seconds || 0) / 3600,
+          
+          // Heart rate metrics
+          resting_heart_rate: item.resting_heart_rate || 0,
+          max_heart_rate: item.max_heart_rate || 0,
+          min_heart_rate: item.min_heart_rate || 0,
+          sleep_resting_heart_rate: item.sleep_resting_heart_rate || 0,
+          
+          // Activity metrics
+          total_steps: item.total_steps || 0,
+          active_calories: item.active_calories || 0,
+          total_calories: item.total_calories || 0,
+          total_distance: (item.total_distance_meters || 0) / 1000, // Convert to km
+          
+          // Stress metrics
+          average_stress_level: item.average_stress_level || 0,
+          max_stress_level: item.max_stress_level || 0,
+          stress_duration: (item.stress_duration_seconds || 0) / 3600,
+          
+          // Respiration
+          average_respiration: item.average_respiration || 0,
+          lowest_respiration: item.lowest_respiration || 0,
+          highest_respiration: item.highest_respiration || 0,
+        })));
+      }
+
+      if (s3Response.data.success) {
+        setRawData(s3Response.data.data);
+      }
+
+    } catch (error) {
+      console.error('Error fetching biometric data:', error);
+      setError('Failed to fetch biometric data');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchActiveSources = async () => {
+    try {
+      const response = await axios.get('/api/biometrics/active-sources/');
+      if (response.data.success) {
+        setActiveSource(response.data.sources.length > 0 ? response.data.sources[0] : null);
       }
     } catch (err) {
-      setError(`Error fetching data: ${err.message}`);
+      console.error('Error fetching active sources:', err);
+    }
+  };
+
+  const activateSource = async (source) => {
+    setLoading(true);
+    try {
+      const response = await axios.post('/api/biometrics/activate-source/', {
+        source: source
+      });
+      if (response.data.success) {
+        setActiveSource(source);
+        setSyncMessage(`${source} source activated successfully!`);
+        setError(null);
+        await fetchBiometricData();
+      }
+    } catch (err) {
+      setError(`Error activating ${source}: ${err.message}`);
     } finally {
       setLoading(false);
     }
   };
 
   const syncData = async () => {
+    if (activeSource === null) {
+      setError('No data source selected');
+      return;
+    }
     setLoading(true);
-    setError(null);
-    setSyncMessage('Syncing data...');
-
     try {
       const response = await fetch('/api/biometrics/sync/', {
         method: 'POST',
@@ -214,11 +275,11 @@ const BiometricsDashboard = ({ username }) => {
   const processData = (data) => {
     return data.map(item => {
       // Convert seconds to hours and handle null/undefined values
-      const sleepHours = (item.sleep_time_seconds || 0) / 3600;
-      const deepSleepHours = (item.deep_sleep_seconds || 0) / 3600;
-      const lightSleepHours = (item.light_sleep_seconds || 0) / 3600;
-      const remSleepHours = (item.rem_sleep_seconds || 0) / 3600;
-      const awakeHours = (item.awake_sleep || 0) / 3600;
+      const sleepHours = (item.metrics?.total_sleep_seconds || 0) / 3600;
+      const deepSleepHours = (item.metrics?.deep_sleep_seconds || 0) / 3600;
+      const lightSleepHours = (item.metrics?.light_sleep_seconds || 0) / 3600;
+      const remSleepHours = (item.metrics?.rem_sleep_seconds || 0) / 3600;
+      const awakeHours = (item.metrics?.awake_seconds || 0) / 3600;
 
       return {
         ...item,  // Keep all original data
@@ -231,25 +292,23 @@ const BiometricsDashboard = ({ username }) => {
         rem_sleep: Number(remSleepHours.toFixed(2)),
         awake_time: Number(awakeHours.toFixed(2)),
         
-        // Heart rate metrics
+        // Heart rate metrics (already in correct format)
         resting_heart_rate: item.resting_heart_rate || 0,
         max_heart_rate: item.max_heart_rate || 0,
         min_heart_rate: item.min_heart_rate || 0,
         
         // Activity metrics
+        steps: item.total_steps || 0,
+        distance: (item.total_distance_meters || 0) / 1000, // Convert to km
         total_calories: item.total_calories || 0,
         active_calories: item.active_calories || 0,
-        total_steps: item.total_steps || 0,
         
         // Stress metrics
-        average_stress_level: item.average_stress_level || 0,
+        stress_level: item.average_stress_level || 0,
         max_stress_level: item.max_stress_level || 0,
         
-        // Additional metrics
-        total_distance: (item.total_distance_meters || 0) / 1000, // Convert to km
-        
-        // For debugging
-        raw_sleep_seconds: item.sleep_time_seconds || 0,
+        // For health score calculation
+        hrv: item.body_battery_change || 0, // Using body battery as proxy for HRV
       };
     });
   };
@@ -342,8 +401,8 @@ const BiometricsDashboard = ({ username }) => {
   const handleSourceActivation = async (source, profile = null) => {
     setLoading(true);
     setError(null);
-    setSyncMessage(`Activating ${source} source...`);
-
+    setSyncMessage(null);
+    
     try {
       const response = await fetch('/api/biometrics/activate-source/', {
         method: 'POST',
@@ -361,6 +420,7 @@ const BiometricsDashboard = ({ username }) => {
       const data = await response.json();
       
       if (data.success) {
+        setActiveSource(source);
         setSyncMessage(`${source} source activated successfully!`);
         await syncData();
       } else {
@@ -381,27 +441,29 @@ const BiometricsDashboard = ({ username }) => {
     let mounted = true;
     
     const fetchData = async () => {
-        if (loading || biometricData.length > 0) return; // Add check for existing data
-        setLoading(true);
-        
-        try {
-            const response = await fetch('/api/biometrics/');
-            if (!mounted) return;
-            const data = await response.json();
-            setBiometricData(data);
-        } catch (error) {
-            console.error('Error fetching biometric data:', error);
-        } finally {
-            if (mounted) setLoading(false);
-        }
+      if (loading || biometricData.length > 0) return;
+      setLoading(true);
+      
+      try {
+        const response = await fetch('/api/biometrics/');
+        if (!mounted) return;
+        const data = await response.json();
+        // Process the data before setting it
+        const processedData = processData(data.data || []);
+        setBiometricData(processedData);
+      } catch (error) {
+        console.error('Error fetching biometric data:', error);
+      } finally {
+        if (mounted) setLoading(false);
+      }
     };
 
     fetchData();
 
     return () => {
-        mounted = false;
+      mounted = false;
     };
-  }, []); // Only fetch on mount
+  }, []);
 
   useEffect(() => {
     if (biometricData.length === 0 && !loading) {
@@ -444,6 +506,16 @@ const BiometricsDashboard = ({ username }) => {
     }
     return cookieValue;
   };
+
+  useEffect(() => {
+    const handleError = (error) => {
+      console.error('BiometricsDashboard Error:', error);
+      setError('An error occurred while displaying the data');
+    };
+
+    window.addEventListener('error', handleError);
+    return () => window.removeEventListener('error', handleError);
+  }, []);
 
   return (
     <Box sx={{ width: '100%' }}>
@@ -587,8 +659,11 @@ const BiometricsDashboard = ({ username }) => {
         backgroundColor: colors.background,
         minHeight: '100vh'
       }}>
-        {/* Add Alert for no active sources */}
-        {!hasActiveSources && (
+        {loading ? (
+          <Alert severity="info">Loading...</Alert>
+        ) : error ? (
+          <Alert severity="error">{error}</Alert>
+        ) : !activeSource ? (
           <Alert 
             severity="info" 
             sx={{ mb: 3 }}
@@ -596,7 +671,7 @@ const BiometricsDashboard = ({ username }) => {
               <Button 
                 color="inherit" 
                 size="small"
-                onClick={() => setShowSourceMenu(true)}  // Use the same handler as the menu item
+                onClick={() => setShowSourceMenu(true)}
               >
                 ACTIVATE SOURCE
               </Button>
@@ -604,14 +679,15 @@ const BiometricsDashboard = ({ username }) => {
           >
             No active data sources found. Please activate Garmin or another data source to see your biometric data.
           </Alert>
+        ) : syncMessage ? (
+          <Alert severity="success" sx={{ mb: 3 }}>{syncMessage}</Alert>
+        ) : (
+          <Alert severity="success" sx={{ mb: 3 }}>
+            Currently using {activeSource} as your data source
+          </Alert>
         )}
 
-        {/* Sync & Feedback */}
         <Box sx={{ mb: 2 }}>
-          {loading && <CircularProgress />}
-          {error && !loading && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
-          {syncMessage && !loading && <Alert severity="info" sx={{ mb: 2 }}>{syncMessage}</Alert>}
-
           <Box sx={{ mb: 2 }}>
             <Button
               variant="contained"
@@ -625,246 +701,130 @@ const BiometricsDashboard = ({ username }) => {
           </Box>
         </Box>
 
-        {/* Tabs */}
         <Tabs value={tabValue} onChange={handleChangeTab} aria-label="dashboard tabs">
           <Tab label="Analytics" {...a11yProps(0)} />
           <Tab label="Data Table" {...a11yProps(1)} />
         </Tabs>
 
-        {/* ============= TAB PANEL 0: Analytics Charts ============= */}
         {tabValue === 0 && (
           <Box sx={{ mt: 3 }}>
-            {biometricData.length === 0 && !loading ? (
-              <Typography variant="body1" color="textSecondary">
-                No biometric data to display.
-              </Typography>
-            ) : (
-              <>
-                {biometricData.every(item => item.sleep_hours === 0) && (
-                  <Alert severity="info" sx={{ mb: 2 }}>
-                    No sleep data available. Try syncing with Garmin again.
-                  </Alert>
-                )}
-                <Grid container spacing={2}>
-                  {/* Health Score Card */}
-                  <Grid item xs={12} md={4}>
-                    <Card sx={{ 
-                      p: 3, 
-                      height: '100%',
-                      borderRadius: '12px',
-                      boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
-                      background: `linear-gradient(135deg, ${colors.primary}, ${colors.secondary})`
-                    }}>
-                      <Typography variant="h5" gutterBottom sx={{ color: 'white' }}>
-                        Overall Health Score
-                      </Typography>
-                      <Box sx={{ 
-                        display: 'flex', 
-                        justifyContent: 'center', 
-                        alignItems: 'center',
-                        height: '250px'
-                      }}>
-                        <Box sx={{ position: 'relative', display: 'inline-flex' }}>
-                          <CircularProgress
-                            variant="determinate"
-                            value={calculateHealthScore(biometricData)}
-                            size={120}
-                            thickness={4}
-                            sx={{
-                              color: theme.palette.success.main,
-                              '& .MuiCircularProgress-circle': {
-                                strokeLinecap: 'round',
-                              },
-                            }}
-                          />
-                          <Box
-                            sx={{
-                              top: 0,
-                              left: 0,
-                              bottom: 0,
-                              right: 0,
-                              position: 'absolute',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                            }}
-                          >
-                            <Typography variant="h4" component="div" color="text.primary">
-                              {`${calculateHealthScore(biometricData)}%`}
-                            </Typography>
-                          </Box>
-                        </Box>
-                      </Box>
-                    </Card>
-                  </Grid>
+            <Grid container spacing={3}>
+              {/* Heart Rate Trends */}
+              <Grid item xs={12} md={6}>
+                <Card sx={{ p: 2, height: '100%' }}>
+                  <Typography variant="h6" gutterBottom>Heart Rate Trends</Typography>
+                  <ResponsiveContainer width="100%" height={300}>
+                    <LineChart data={biometricData}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="date" />
+                      <YAxis />
+                      <Tooltip />
+                      <Legend />
+                      <Line type="monotone" dataKey="max_heart_rate" name="Max HR" stroke="#e74c3c" />
+                      <Line type="monotone" dataKey="resting_heart_rate" name="Resting HR" stroke="#2ecc71" />
+                      <Line type="monotone" dataKey="min_heart_rate" name="Min HR" stroke="#3498db" />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </Card>
+              </Grid>
 
-                  {/* Sleep Analysis Card */}
-                  <Grid item xs={12} md={6}>
-                    <Card sx={{ p: 2 }}>
-                      <Typography variant="h6">Sleep Analysis</Typography>
-                      <ResponsiveContainer width="100%" height={300}>
-                        <BarChart data={biometricData}>
-                          <CartesianGrid strokeDasharray="3 3" />
-                          <XAxis dataKey="date" />
-                          <YAxis />
-                          <Tooltip />
-                          <Legend />
-                          <Bar 
-                            dataKey="deep_sleep" 
-                            name="Deep Sleep (hrs)" 
-                            fill={colors.primary} 
-                          />
-                          <Bar 
-                            dataKey="light_sleep" 
-                            name="Light Sleep (hrs)" 
-                            fill={colors.secondary} 
-                          />
-                          <Bar 
-                            dataKey="rem_sleep" 
-                            name="REM Sleep (hrs)" 
-                            fill={colors.accent1} 
-                          />
-                        </BarChart>
-                      </ResponsiveContainer>
-                      <Box sx={{ mt: 2 }}>
-                        <Typography variant="body2">
-                          Average Respiration: {biometricData[biometricData.length - 1]?.average_respiration || 0}
-                        </Typography>
-                      </Box>
-                    </Card>
-                  </Grid>
+              {/* Sleep Duration */}
+              <Grid item xs={12} md={6}>
+                <Card sx={{ p: 2, height: '100%' }}>
+                  <Typography variant="h6" gutterBottom>Sleep Duration</Typography>
+                  <ResponsiveContainer width="100%" height={300}>
+                    <BarChart data={biometricData}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="date" />
+                      <YAxis />
+                      <Tooltip />
+                      <Legend />
+                      <Bar dataKey="sleep_hours" name="Sleep (hrs)" fill="#8e44ad" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </Card>
+              </Grid>
 
-                  {/* Heart Rate Card */}
-                  <Grid item xs={12} md={6}>
-                    <Card sx={{ p: 3, borderRadius: '12px', boxShadow: '0 4px 6px rgba(0,0,0,0.1)' }}>
-                      <Typography variant="h5" gutterBottom>Heart Rate Metrics</Typography>
-                      <ResponsiveContainer width="100%" height={300}>
-                        <LineChart data={biometricData}>
-                          <CartesianGrid strokeDasharray="3 3" stroke={`${colors.primary}15`} />
-                          <XAxis dataKey="date" stroke={colors.text} />
-                          <YAxis stroke={colors.text} />
-                          <Tooltip 
-                            contentStyle={{ 
-                              backgroundColor: colors.background,
-                              border: `1px solid ${colors.primary}` 
-                            }}
-                          />
-                          <Legend />
-                          <Line 
-                            type="monotone" 
-                            dataKey="resting_heart_rate" 
-                            name="Resting HR" 
-                            stroke={colors.primary}
-                            strokeWidth={3}
-                            dot={false}
-                          />
-                          <Line 
-                            type="monotone" 
-                            dataKey="avg_heart_rate" 
-                            name="Average HR" 
-                            stroke={colors.secondary}
-                            strokeWidth={2}
-                            dot={false}
-                          />
-                          <Line 
-                            type="monotone" 
-                            dataKey="max_heart_rate" 
-                            name="Max HR" 
-                            stroke={colors.accent2}
-                            strokeWidth={3}
-                            dot={false}
-                          />
-                        </LineChart>
-                      </ResponsiveContainer>
-                      <Box sx={{ mt: 2, display: 'flex', justifyContent: 'space-around' }}>
-                        <Typography variant="body2" color="textSecondary">
-                          HRV: {biometricData[biometricData.length - 1]?.hrv || 0}ms
-                        </Typography>
-                        <Typography variant="body2" color="textSecondary">
-                          Recovery Score: {biometricData[biometricData.length - 1]?.recovery_score || 0}%
-                        </Typography>
-                      </Box>
-                    </Card>
-                  </Grid>
+              {/* Daily Activity */}
+              <Grid item xs={12} md={6}>
+                <Card sx={{ p: 2, height: '100%' }}>
+                  <Typography variant="h6" gutterBottom>Daily Activity</Typography>
+                  <ResponsiveContainer width="100%" height={300}>
+                    <ComposedChart data={biometricData}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="date" />
+                      <YAxis yAxisId="left" />
+                      <YAxis yAxisId="right" orientation="right" />
+                      <Tooltip />
+                      <Legend />
+                      <Bar dataKey="steps" name="Steps" fill="#3498db" yAxisId="left" />
+                      <Line type="monotone" dataKey="active_calories" name="Active Calories" stroke="#e74c3c" yAxisId="right" />
+                    </ComposedChart>
+                  </ResponsiveContainer>
+                </Card>
+              </Grid>
 
-                  {/* Activity Metrics Card */}
-                  <Grid item xs={12} md={6}>
-                    <Card sx={{ p: 2 }}>
-                      <Typography variant="h6" gutterBottom>Daily Activity</Typography>
-                      <ResponsiveContainer width="100%" height={300}>
-                        <BarChart data={biometricData}>
-                          <CartesianGrid strokeDasharray="3 3" />
-                          <XAxis dataKey="date" />
-                          <YAxis />
-                          <Tooltip />
-                          <Legend />
-                          <Bar dataKey="calories_active" name="Active Calories" fill="#8884d8" />
-                          <Bar dataKey="calories_total" name="Total Calories" fill="#82ca9d" />
-                          <Bar dataKey="steps" name="Steps" fill="#ffc658" />
-                        </BarChart>
-                      </ResponsiveContainer>
-                    </Card>
-                  </Grid>
+              {/* Respiration Metrics */}
+              <Grid item xs={12} md={6}>
+                <Card sx={{ p: 2, height: '100%' }}>
+                  <Typography variant="h6" gutterBottom>Respiration Range</Typography>
+                  <ResponsiveContainer width="100%" height={300}>
+                    <AreaChart data={biometricData}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="date" />
+                      <YAxis />
+                      <Tooltip />
+                      <Legend />
+                      <Area 
+                        type="monotone" 
+                        dataKey="max_respiration" 
+                        name="Max Resp" 
+                        stroke="#e74c3c" 
+                        fill="#e74c3c" 
+                        fillOpacity={0.2} 
+                      />
+                      <Area 
+                        type="monotone" 
+                        dataKey="average_respiration" 
+                        name="Avg Resp" 
+                        stroke="#2ecc71" 
+                        fill="#2ecc71" 
+                        fillOpacity={0.2} 
+                      />
+                      <Area 
+                        type="monotone" 
+                        dataKey="lowest_respiration" 
+                        name="Min Resp" 
+                        stroke="#3498db" 
+                        fill="#3498db" 
+                        fillOpacity={0.2} 
+                      />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </Card>
+              </Grid>
 
-                  {/* Body Composition Card */}
-                  <Grid item xs={12}>
-                    <Card sx={{ p: 3, borderRadius: '12px', boxShadow: '0 4px 6px rgba(0,0,0,0.1)' }}>
-                      <Typography variant="h5" gutterBottom>Body Composition Trends</Typography>
-                      <ResponsiveContainer width="100%" height={300}>
-                        <LineChart data={biometricData}>
-                          <CartesianGrid strokeDasharray="3 3" stroke={`${colors.primary}15`} />
-                          <XAxis dataKey="date" stroke={colors.text} />
-                          <YAxis stroke={colors.text} />
-                          <Tooltip 
-                            contentStyle={{ 
-                              backgroundColor: colors.background,
-                              border: `1px solid ${colors.primary}` 
-                            }}
-                          />
-                          <Legend />
-                          <Line 
-                            type="monotone" 
-                            dataKey="weight" 
-                            name="Weight (kg)" 
-                            stroke={colors.primary}
-                            strokeWidth={2}
-                          />
-                          <Line 
-                            type="monotone" 
-                            dataKey="body_fat_percentage" 
-                            name="Body Fat %" 
-                            stroke={colors.secondary}
-                            strokeWidth={2}
-                          />
-                        </LineChart>
-                      </ResponsiveContainer>
-                    </Card>
-                  </Grid>
-
-                  {/* Stress and Recovery Card */}
-                  <Grid item xs={12} md={6}>
-                    <Card sx={{ p: 2 }}>
-                      <Typography variant="h6" gutterBottom>Stress & Recovery</Typography>
-                      <ResponsiveContainer width="100%" height={300}>
-                        <LineChart data={biometricData}>
-                          <CartesianGrid strokeDasharray="3 3" />
-                          <XAxis dataKey="date" />
-                          <YAxis />
-                          <Tooltip />
-                          <Legend />
-                          <Line type="monotone" dataKey="stress_level" name="Stress Level" stroke="#8884d8" />
-                          <Line type="monotone" dataKey="hrv" name="HRV" stroke="#82ca9d" />
-                        </LineChart>
-                      </ResponsiveContainer>
-                    </Card>
-                  </Grid>
-                </Grid>
-              </>
-            )}
+              {/* Calorie Breakdown */}
+              <Grid item xs={12}>
+                <Card sx={{ p: 2 }}>
+                  <Typography variant="h6" gutterBottom>Daily Calorie Breakdown</Typography>
+                  <ResponsiveContainer width="100%" height={300}>
+                    <BarChart data={biometricData}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="date" />
+                      <YAxis />
+                      <Tooltip />
+                      <Legend />
+                      <Bar dataKey="total_calories" name="Total Calories" stackId="calories" fill="#3498db" />
+                      <Bar dataKey="active_calories" name="Active Calories" stackId="calories" fill="#2ecc71" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </Card>
+              </Grid>
+            </Grid>
           </Box>
         )}
 
-        {/* ============= TAB PANEL 1: Data Table ============= */}
         {tabValue === 1 && (
           <Box sx={{ mt: 3 }}>
             {biometricData.length === 0 && !loading ? (
@@ -880,30 +840,45 @@ const BiometricsDashboard = ({ username }) => {
                       <th style={thStyle}>RHR</th>
                       <th style={thStyle}>Max HR</th>
                       <th style={thStyle}>Min HR</th>
-                      <th style={thStyle}>Total Steps</th>
-                      <th style={thStyle}>Active Cals</th>
-                      <th style={thStyle}>Total Cals</th>
+                      <th style={thStyle}>Sleep RHR</th>
                       <th style={thStyle}>Sleep (hrs)</th>
                       <th style={thStyle}>Deep Sleep (hrs)</th>
                       <th style={thStyle}>Light Sleep (hrs)</th>
                       <th style={thStyle}>REM Sleep (hrs)</th>
-                      {/* Add more columns as needed */}
+                      <th style={thStyle}>Awake (hrs)</th>
+                      <th style={thStyle}>Steps</th>
+                      <th style={thStyle}>Distance (km)</th>
+                      <th style={thStyle}>Active Cals</th>
+                      <th style={thStyle}>Total Cals</th>
+                      <th style={thStyle}>Avg Stress</th>
+                      <th style={thStyle}>Max Stress</th>
+                      <th style={thStyle}>Avg Resp</th>
+                      <th style={thStyle}>Min Resp</th>
+                      <th style={thStyle}>Max Resp</th>
                     </tr>
                   </thead>
                   <tbody>
                     {biometricData.map((item, idx) => (
                       <tr key={idx} style={{ borderBottom: '1px solid #ccc' }}>
-                        <td style={tdStyle}>{item.date}</td>
-                        <td style={tdStyle}>{item.resting_heart_rate}</td>
-                        <td style={tdStyle}>{item.max_heart_rate}</td>
-                        <td style={tdStyle}>{item.min_heart_rate}</td>
-                        <td style={tdStyle}>{item.total_steps}</td>
-                        <td style={tdStyle}>{item.active_calories}</td>
-                        <td style={tdStyle}>{item.total_calories}</td>
-                        <td style={tdStyle}>{item.sleep_hours.toFixed(2)}</td>
-                        <td style={tdStyle}>{item.deep_sleep.toFixed(2)}</td>
-                        <td style={tdStyle}>{item.light_sleep.toFixed(2)}</td>
-                        <td style={tdStyle}>{item.rem_sleep.toFixed(2)}</td>
+                        <td style={tdStyle}>{item.date || 'N/A'}</td>
+                        <td style={tdStyle}>{item.resting_heart_rate || '0'}</td>
+                        <td style={tdStyle}>{item.max_heart_rate || '0'}</td>
+                        <td style={tdStyle}>{item.min_heart_rate || '0'}</td>
+                        <td style={tdStyle}>{item.sleep_resting_heart_rate || '0'}</td>
+                        <td style={tdStyle}>{(item.sleep_hours || 0).toFixed(2)}</td>
+                        <td style={tdStyle}>{(item.deep_sleep || 0).toFixed(2)}</td>
+                        <td style={tdStyle}>{(item.light_sleep || 0).toFixed(2)}</td>
+                        <td style={tdStyle}>{(item.rem_sleep || 0).toFixed(2)}</td>
+                        <td style={tdStyle}>{(item.awake_hours || 0).toFixed(2)}</td>
+                        <td style={tdStyle}>{item.total_steps || '0'}</td>
+                        <td style={tdStyle}>{(item.distance || 0).toFixed(2)}</td>
+                        <td style={tdStyle}>{item.active_calories || '0'}</td>
+                        <td style={tdStyle}>{item.total_calories || '0'}</td>
+                        <td style={tdStyle}>{item.stress_level || '0'}</td>
+                        <td style={tdStyle}>{item.max_stress_level || '0'}</td>
+                        <td style={tdStyle}>{(item.average_respiration || 0).toFixed(1)}</td>
+                        <td style={tdStyle}>{(item.lowest_respiration || 0).toFixed(1)}</td>
+                        <td style={tdStyle}>{(item.highest_respiration || 0).toFixed(1)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -913,7 +888,6 @@ const BiometricsDashboard = ({ username }) => {
           </Box>
         )}
 
-        {/* Heart Rate Metrics component */}
         <HeartRateMetrics 
           resting={biometricData?.resting_heart_rate || 0}
           average={biometricData?.avg_heart_rate || 0}

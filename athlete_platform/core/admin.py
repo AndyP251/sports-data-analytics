@@ -31,11 +31,17 @@ class WorkoutDataAdmin(admin.ModelAdmin):
     date_hierarchy = 'date'
 
 class CoreBiometricDataAdmin(admin.ModelAdmin):
-    list_display = ('athlete', 'date', 'resting_heart_rate', 'total_sleep_seconds', 'deep_sleep_seconds', 'light_sleep_seconds', 'rem_sleep_seconds', 'awake_seconds', 'average_respiration', 'lowest_respiration', 'highest_respiration', 'sleep_heart_rate', 'sleep_stress', 'sleep_body_battery', 'body_battery_change', 'sleep_resting_heart_rate')
+    list_display = ('athlete', 'date', 'resting_heart_rate', 'total_sleep_seconds', 'deep_sleep_seconds', 'light_sleep_seconds', 'rem_sleep_seconds', 'awake_seconds', 'average_respiration', 'lowest_respiration', 'highest_respiration', 'body_battery_change', 'sleep_resting_heart_rate', 'total_calories', 'active_calories', 'total_steps', 'total_distance_meters', 'average_stress_level', 'max_stress_level', 'stress_duration_seconds')
     list_filter = ('date', 'athlete')
     search_fields = ('athlete__user__username',)
     date_hierarchy = 'date'
     raw_id_fields = ('athlete', )
+
+class CoreBiometricTimeSeriesAdmin(admin.ModelAdmin):
+    list_display = ('id', 'created_at', 'updated_at', 'sleep_heart_rate', 'sleep_stress', 'sleep_body_battery',)
+    list_filter = ('created_at', 'updated_at')
+    search_fields = ('id',)
+    date_hierarchy = 'created_at'
 
 # Register all models with their custom admin classes
 admin.site.register(User, CustomUserAdmin)

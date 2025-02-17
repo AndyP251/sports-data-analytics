@@ -22,21 +22,44 @@ class BiometricDataValidator:
                 logger.error("Missing source identifier")
                 return False
 
-            # Validate sleep metrics
+            # Validate sleep metrics with warnings
             sleep = data.get('sleep', {})
-            if not all(isinstance(sleep.get(field), int) for field in [
-                'sleep_time_seconds', 'deep_sleep_seconds', 
-                'light_sleep_seconds', 'rem_sleep_seconds'
-            ]):
-                logger.error("Invalid sleep metrics")
-                return False
+            sleep_fields = ['sleep_time_seconds', 'deep_sleep_seconds', 
+                           'light_sleep_seconds', 'rem_sleep_seconds']
+            invalid_sleep_fields = [
+                field for field in sleep_fields 
+                if not isinstance(sleep.get(field), (int, type(None)))
+            ]
+            if invalid_sleep_fields:
+                logger.warning(f"Invalid sleep metrics types for fields: {invalid_sleep_fields}")
+            
+            # Check if all sleep metrics are None/0
+            if all(not sleep.get(field) for field in sleep_fields):
+                logger.warning("All sleep metrics are empty or zero")
 
-            # Validate heart rate metrics
+            # Validate heart rate metrics with warnings
             heart_rate = data.get('heart_rate', {})
-            if not all(isinstance(heart_rate.get(field), int) for field in [
-                'resting_heart_rate', 'max_heart_rate', 'min_heart_rate'
-            ]):
-                logger.error("Invalid heart rate metrics")
+            hr_fields = ['resting_heart_rate', 'max_heart_rate', 'min_heart_rate']
+            invalid_hr_fields = [
+                field for field in hr_fields 
+                if not isinstance(heart_rate.get(field), (int, type(None)))
+            ]
+            if invalid_hr_fields:
+                logger.warning(f"Invalid heart rate metrics types for fields: {invalid_hr_fields}")
+            
+            # Check if all heart rate metrics are None/0
+            if all(not heart_rate.get(field) for field in hr_fields):
+                logger.warning("All heart rate metrics are empty or zero")
+
+            # Instead of failing, we'll warn about empty data
+            if all(not heart_rate.get(field) for field in heart_rate.keys()):
+                logger.warning("All heart rate data is empty")
+            if all(not sleep.get(field) for field in sleep.keys()):
+                logger.warning("All sleep data is empty")
+
+            # Only fail validation if we have invalid types (not just empty values)
+            if invalid_sleep_fields or invalid_hr_fields:
+                logger.error("Found invalid data types in metrics")
                 return False
 
             return True

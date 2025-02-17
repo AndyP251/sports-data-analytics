@@ -164,6 +164,7 @@ STATICFILES_DIRS = [
 GARMIN_USERNAME = os.getenv('GARMIN_USERNAME')
 GARMIN_PASSWORD = os.getenv('GARMIN_PASSWORD')
 
+#TODO: ENCRPYT THESE
 GARMIN_PROFILES = {
     'default': {
         'name': 'Default Garmin Account',

@@ -17,7 +17,7 @@ import boto3
 from botocore.exceptions import ClientError
 import json
 from .services.data_sync_service import DataSyncService
-from .services.data_pipeline_service import DataPipelineService
+# from .services.data_pipeline_service import DataPipelineService
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from django.views.decorators.csrf import ensure_csrf_cookie, csrf_exempt
@@ -65,8 +65,8 @@ def dashboard_view(request):
         athlete = request.user.athlete
         
         # Use DataPipelineService instead of DataSyncService
-        pipeline_service = DataPipelineService(athlete)
-        pipeline_service.sync_athlete_data()
+        # pipeline_service = DataPipelineService(athlete)
+        # pipeline_service.sync_athlete_data()
         
         # Get latest data from database
         latest_data = get_athlete_biometrics(athlete, timezone.now().date())
@@ -79,31 +79,6 @@ def dashboard_view(request):
         logger.error(f"Dashboard error: {e}")
         return render(request, 'core/error.html')
 
-def get_s3_data(athlete):
-    """Retrieve athlete data from S3"""
-    try:
-        s3 = boto3.client('s3')
-        response = s3.get_object(
-            Bucket='your-bucket-name',
-            Key=f'athletes/{athlete.id}/data.json'
-        )
-        return json.loads(response['Body'].read().decode('utf-8'))
-    except ClientError as e:
-        if e.response['Error']['Code'] == 'NoSuchKey':
-            # Initialize empty data structure if no data exists
-            default_data = {
-                'athlete_id': athlete.id,
-                'created_at': timezone.now().isoformat(),
-                'biometric_history': []
-            }
-            # Store the initial data
-            s3.put_object(
-                Bucket='your-bucket-name',
-                Key=f'athletes/{athlete.id}/data.json',
-                Body=json.dumps(default_data)
-            )
-            return default_data
-        raise
 
 @login_required
 def logout_view(request):
@@ -111,102 +86,6 @@ def logout_view(request):
     messages.success(request, 'You have been successfully logged out.')
     return redirect('login')
 
-@require_POST
-@login_required
-def update_athlete_data(request):
-    """Update athlete data from Garmin"""
-    try:
-        if request.user.role == 'ATHLETE':
-            athlete = Athlete.objects.get(user=request.user)
-        else:
-            athlete_id = request.POST.get('athlete_id')
-            athlete = Athlete.objects.get(id=athlete_id)
-            
-            # Check if coach has permission to update this athlete's data
-            if athlete.team.coach != request.user:
-                return JsonResponse({'success': False, 'error': 'Permission denied'})
-        
-        # Collect and store data
-        collector = GarminDataCollector()
-        success = collector.collect_and_store_data(athlete.id)
-        
-        if success:
-            # Update athlete's basic stats in database
-            s3_utils = S3Utils()
-            raw_data = s3_utils.get_athlete_data(athlete.id, 'garmin_data')
-            if raw_data and len(raw_data) > 0:
-                latest_data = raw_data[0]  # Most recent data
-                
-                # Update CoreBiometricData
-                create_biometric_data(athlete, datetime.strptime(latest_data['date'], '%Y-%m-%d').date(), latest_data)
-                # CoreBiometricData.objects.create(
-                #     athlete=athlete,
-                #     date=datetime.strptime(latest_data['date'], '%Y-%m-%d').date(),
-                #     resting_heart_rate=latest_data['daily_stats']['heart_rate'].get('restingHeartRate'),
-                #     # Add other relevant fields
-                # )
-            
-            return JsonResponse({'success': True})
-        else:
-            return JsonResponse({'success': False, 'error': 'Failed to collect data'})
-            
-    except Exception as e:
-        return JsonResponse({'success': False, 'error': str(e)})
-
-@login_required
-def update_data(request):
-    if request.method != 'POST':
-        return JsonResponse({'error': 'Method not allowed'}, status=405)
-    
-    try:
-        athlete = Athlete.objects.get(user=request.user)
-        
-        # Create new biometric data with defaults
-        biometric_data = create_biometric_data(athlete, timezone.now().date(), {})
-        # biometric_data = CoreBiometricData.objects.create(
-        #     athlete=athlete,
-        #     date=timezone.now().date()
-        # )
-        
-        # Update S3 with new data
-        try:
-            historical_data = get_s3_data(athlete)
-            historical_data['biometric_history'].append({
-                'date': biometric_data.date.isoformat(),
-                'weight': float(biometric_data.weight),
-                'height': float(biometric_data.height),
-                'resting_heart_rate': biometric_data.resting_heart_rate,
-                'created_at': biometric_data.created_at.isoformat()
-            })
-            
-            s3 = boto3.client('s3')
-            s3.put_object(
-                Bucket='your-bucket-name',
-                Key=f'athletes/{athlete.id}/data.json',
-                Body=json.dumps(historical_data)
-            )
-            
-            return JsonResponse({'success': True})
-            
-        except Exception as e:
-            logger.error(f"S3 update error for athlete {athlete.id}: {str(e)}")
-            return JsonResponse({
-                'error': 'Error updating historical data',
-                'details': str(e)
-            }, status=500)
-            
-    except Athlete.DoesNotExist:
-        logger.error(f"Update attempted for non-existent athlete: user {request.user.id}")
-        return JsonResponse({
-            'error': 'Athlete profile not found',
-            'details': 'Please contact support'
-        }, status=404)
-    except Exception as e:
-        logger.error(f"Update error for user {request.user.id}: {str(e)}")
-        return JsonResponse({
-            'error': 'An unexpected error occurred',
-            'details': str(e)
-        }, status=500)
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
@@ -216,37 +95,28 @@ def dashboard_data(request):
         athlete = request.user.athlete
         logger.info(f"Found athlete profile for user: {request.user.id}")
         
-        # Fetch the latest biometric data
-        # latest_data = CoreBiometricData.objects.filter(athlete=athlete).order_by('-date').first()
-
-        # Fetch the latest biometric data from CoreBiometricData
-        latest_data = get_athlete_biometrics(athlete, timezone.now().date())
+        # Get last 7 days of data
+        end_date = timezone.now().date()
+        start_date = end_date - timedelta(days=7)
         
-        if latest_data:
-            logger.info(f"Found latest biometric data for athlete: {athlete.id}, under path accounts/{athlete.user.id}/biometric-data/garmin")
-            data = {
-                'heart_rate': {
-                    'latest': latest_data.resting_heart_rate,
-                    'average': latest_data.hrv,
-                },
-                'sleep': {
-                    'duration': float(latest_data.sleep_hours),
-                    'quality': 'Good' if latest_data.sleep_hours >= 7 else 'Poor',
-                },
-                'activity': {
-                    'steps': 0,
-                    'distance': 0,
-                }
-            }
+        biometric_data = CoreBiometricData.objects.filter(
+            athlete=athlete,
+            date__range=[start_date, end_date]
+        ).order_by('date').values()
+        
+        if biometric_data:
+            logger.info(f"Found biometric data for athlete: {athlete.id}")
+            return JsonResponse({
+                'success': True,
+                'data': list(biometric_data)  # Send all raw data to frontend
+            })
         else:
             logger.warning(f"No biometric data found for athlete: {athlete.id}")
-            data = {
-                'heart_rate': {'latest': None, 'average': None},
-                'sleep': {'duration': None, 'quality': None},
-                'activity': {'steps': None, 'distance': None}
-            }
+            return JsonResponse({
+                'success': True,
+                'data': []
+            })
             
-        return JsonResponse({'success': True, 'data': data})
     except Exception as e:
         logger.error(f"Error fetching dashboard data: {str(e)}", exc_info=True)
         return JsonResponse({'success': False, 'error': str(e)}, status=500)
@@ -417,4 +287,53 @@ def get_garmin_profiles(request):
             for profile_id, profile in settings.GARMIN_PROFILES.items()
         ]
     })
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_raw_biometric_data(request):
+    """Get raw biometric data from S3"""
+    try:
+        athlete = request.user.athlete
+        s3_utils = S3Utils()
+        
+        # Get all data from S3 for this athlete
+        base_path = f'accounts/{request.user.id}/biometric-data/garmin'
+        raw_data = s3_utils.get_all_json_data(base_path)
+        
+        return JsonResponse({
+            'success': True,
+            'data': raw_data
+        })
+    except Exception as e:
+        logger.error(f"Error fetching raw biometric data: {e}")
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=500)
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def active_sources(request):
+    try:
+        athlete = request.user.athlete
+        active_sources = []
+        
+        # Check Garmin credentials
+        if hasattr(athlete, 'garmin_credentials'):
+            active_sources.append('garmin')
+            
+        # Check Whoop credentials
+        if hasattr(athlete, 'whoop_credentials'):
+            active_sources.append('whoop')
+            
+        return JsonResponse({
+            'success': True,
+            'sources': active_sources
+        })
+    except Exception as e:
+        logger.error(f"Error fetching active sources: {str(e)}")
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=500)
 

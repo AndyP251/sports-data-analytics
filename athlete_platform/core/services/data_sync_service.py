@@ -14,7 +14,6 @@ from .data_formats.biometric_format import StandardizedBiometricData
 from django.db import transaction
 from django.utils import timezone
 from core.utils.cache_utils import resource_lock
-from .data_pipeline_service import DataPipelineService
 from ..utils.s3_utils import S3Utils
 
 logger = logging.getLogger(__name__)
@@ -49,7 +48,6 @@ class DataSyncService:
         self.athlete = athlete
         self.active_sources = []
         self.processors = []
-        self.pipeline_service = DataPipelineService(self.athlete)
         self.s3_utils = S3Utils()
 
         

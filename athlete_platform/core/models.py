@@ -185,21 +185,14 @@ class CoreBiometricData(models.Model):
     average_respiration = models.FloatField(default=0)
     lowest_respiration = models.FloatField(default=0)
     highest_respiration = models.FloatField(default=0)
-    sleep_heart_rate = models.JSONField(default=list)
-    sleep_stress = models.JSONField(default=list)
-    sleep_body_battery = models.JSONField(default=list)
     body_battery_change = models.IntegerField(default=0)
     sleep_resting_heart_rate = models.IntegerField(default=0)
     
-    # Activity Data
-    # steps = models.JSONField(default=list)
-    
     # Heart Rate Data
-    resting_heart_rate = models.IntegerField(default=0)  # <--- Important to have default=0
+    resting_heart_rate = models.IntegerField(default=0)
     max_heart_rate = models.IntegerField(default=0)
     min_heart_rate = models.IntegerField(default=0)
     last_seven_days_avg_resting_heart_rate = models.IntegerField(default=0)
-    # heart_rate_values = models.JSONField(default=list)
     
     # User Summary Data
     total_calories = models.IntegerField(default=0)
@@ -223,7 +216,6 @@ class CoreBiometricData(models.Model):
     high_stress_percentage = models.FloatField(default=0)
 
     source = models.CharField(max_length=20, default='garmin')
-
     created_at = models.DateTimeField(default=timezone.now)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -325,3 +317,21 @@ class WhoopCredentials(models.Model):
 
     def __str__(self):
         return f"Whoop credentials for {self.athlete.user.username}"
+
+class CoreBiometricTimeSeries(models.Model):
+    """Stores detailed time-series biometric data"""
+    id = models.UUIDField(primary_key=True)  # This will match CoreBiometricData's id
+    sleep_heart_rate = models.JSONField(default=list)
+    sleep_stress = models.JSONField(default=list)
+    sleep_body_battery = models.JSONField(default=list)
+    created_at = models.DateTimeField(default=timezone.now)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'core_biometric_time_series'
+        indexes = [
+            models.Index(fields=['id']),
+        ]
+
+    def __str__(self):
+        return f"Details for biometric data {self.id}"

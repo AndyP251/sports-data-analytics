@@ -60,3 +60,5 @@ class GarminCollector(BaseDataCollector):
         except Exception as e:
             logger.error(f"Error collecting Garmin data: {e}")
             return None 
+    
+    

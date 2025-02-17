@@ -2,7 +2,7 @@ import boto3
 from botocore.exceptions import NoCredentialsError
 import json
 from django.conf import settings
-from typing import Any, List, Optional
+from typing import Any, List, Optional, Dict
 from datetime import datetime
 import logging
 
@@ -106,8 +106,8 @@ class S3Utils:
     def get_latest_json_data(self, base_path: str, date: datetime.date) -> Optional[dict]:
         """Get latest JSON data for a given date"""
         try:
-            logger.info(f"Getting latest JSON data at {base_path}/{date}")
-            date_prefix = f"{base_path}/{date}"
+            logger.info(f"Getting latest JSON data at {base_path}/{date}_raw.json")
+            date_prefix = f"{base_path}/{date}_raw.json"
             response = self.client.list_objects_v2(
                 Bucket=self.bucket,
                 Prefix=date_prefix
@@ -129,12 +129,44 @@ class S3Utils:
         except Exception as e:
             logger.error(f"Error getting latest JSON data: {e}")
             return None 
+        
+
+
+    def get_latest_json_data_full_path(self, full_path: str) -> Optional[dict]:
+        """Get latest JSON data for a given full path"""
+        try:
+            logger.info(f"Getting latest JSON data at {full_path} from S3")
+            response = self.client.list_objects_v2(
+                Bucket=self.bucket,
+                Prefix=full_path
+            )
+            
+            if 'Contents' not in response:
+                logger.warning(f"No data found in S3 for {full_path}")
+                return None
+            
+            # Get the latest file for this date
+            latest = max(response['Contents'], key=lambda x: x['LastModified'])
+            logger.info(f"Latest file: {latest['Key']}")
+            obj = self.client.get_object(
+                Bucket=self.bucket,
+                Key=latest['Key']
+            )
+            
+            return json.loads(obj['Body'].read())
+            
+        except Exception as e:
+            logger.error(f"Error getting latest JSON data: {e}")
+            return None 
+
     def get_paginator(self, operation_name: str) -> Any:
         """Get paginator for S3 operations"""
         return self.client.meta.client.meta.paginator(operation_name)
+
     def get_object(self, Bucket: str, Key: str) -> Any:
         """Get object from S3"""
         return self.client.get_object(Bucket=Bucket, Key=Key)
+
     def put_object(self, Bucket: str, Key: str, Body: Any, ContentType: str) -> Any:
         """Put object in S3"""
         return self.client.put_object(Bucket=Bucket, Key=Key, Body=Body, ContentType=ContentType)
@@ -167,6 +199,30 @@ class S3Utils:
         except Exception as e:
             logger.error(f"Error storing JSON data in S3: {e}")
             return False
+
+    def get_all_json_data(self, base_path: str) -> List[Dict]:
+        """Get all JSON data for a given base path"""
+        try:
+            # List all objects in the path
+            objects = self.client.list_objects_v2(
+                Bucket=self.bucket,
+                Prefix=base_path
+            )
+            
+            all_data = []
+            for obj in objects.get('Contents', []):
+                if obj['Key'].endswith('.json'):
+                    response = self.client.get_object(
+                        Bucket=self.bucket,
+                        Key=obj['Key']
+                    )
+                    data = json.loads(response['Body'].read().decode('utf-8'))
+                    all_data.append(data)
+                    
+            return sorted(all_data, key=lambda x: x.get('date', ''), reverse=True)
+        except Exception as e:
+            logger.error(f"Error getting all JSON data: {e}")
+            return []
 
 
 

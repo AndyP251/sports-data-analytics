@@ -28,7 +28,6 @@ urlpatterns = [
     path('logout/', core_views.logout_view, name='logout'),
     path('register/', core_views.register, name='register'),
     path('accounts/', include('allauth.urls')),
-    path('update-data/', core_views.update_athlete_data, name='update_athlete_data'),
     path('', include('core.urls')),  # API endpoints
 ]
 

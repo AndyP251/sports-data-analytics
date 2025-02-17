@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 
 // Add CSRF token function
 function getCsrfToken() {
@@ -17,7 +17,7 @@ function getCsrfToken() {
   return cookieValue
 }
 
-function Login({ setIsAuthenticated }) {
+const Login = ({ setIsAuthenticated }) => {
   const [isLoginMode, setIsLoginMode] = useState(true)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [formData, setFormData] = useState({
@@ -28,10 +28,42 @@ function Login({ setIsAuthenticated }) {
   })
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
+  const [csrfToken, setCsrfToken] = useState('')
+
+  useEffect(() => {
+    // Get CSRF token on component mount
+    const getCsrfToken = async () => {
+      try {
+        const response = await fetch('/api/verify-dev-password/', {
+          method: 'GET',
+          credentials: 'include',
+        })
+        
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`)
+        }
+        
+        const data = await response.json()
+        if (data.csrfToken) {
+          setCsrfToken(data.csrfToken)
+        }
+      } catch (error) {
+        console.error('Error fetching CSRF token:', error)
+        setError('Failed to initialize security. Please refresh the page.')
+      }
+    }
+
+    getCsrfToken()
+  }, [])
 
   const handleSubmit = async (e) => {
     e.preventDefault()
     
+    if (!csrfToken) {
+      setError('Security token not available. Please refresh the page.')
+      return
+    }
+
     if (isSubmitting) return;
     setIsSubmitting(true)
     setError('')
@@ -56,11 +88,11 @@ function Login({ setIsAuthenticated }) {
         email: formData.email
       }
 
-      const response = await fetch(`http://localhost:8000/api/${endpoint}/`, {
+      const response = await fetch(`/api/${endpoint}/`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'X-CSRFToken': getCsrfToken(),
+          'X-Csrftoken': csrfToken,
         },
         credentials: 'include',
         body: JSON.stringify(requestData)

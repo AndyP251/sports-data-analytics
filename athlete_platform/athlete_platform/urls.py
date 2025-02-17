@@ -17,6 +17,7 @@ Including another URLconf
 from django.contrib import admin
 from django.urls import path, include
 from django.contrib.auth import views as auth_views
+from core.api_views.auth import register_view
 from core import views as core_views
 from django.conf import settings
 from django.conf.urls.static import static
@@ -26,7 +27,7 @@ urlpatterns = [
     path('', core_views.dashboard_view, name='dashboard'),
     path('login/', auth_views.LoginView.as_view(template_name='registration/login.html'), name='login'),
     path('logout/', core_views.logout_view, name='logout'),
-    path('register/', core_views.register, name='register'),
+    path('register/', register_view, name='register'),
     path('accounts/', include('allauth.urls')),
     path('', include('core.urls')),  # API endpoints
 ]

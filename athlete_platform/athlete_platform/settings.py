@@ -356,6 +356,14 @@ CORS_ALLOW_METHODS = [
     'POST',
     'PUT',
 ]
+
+# CSRF settings
+CSRF_HEADER_NAME = 'HTTP_X_CSRFTOKEN'  # Matches X-Csrftoken
+CSRF_COOKIE_NAME = 'csrftoken'
+CSRF_USE_SESSIONS = False
+CSRF_COOKIE_HTTPONLY = False
+
+# Update CORS headers to match
 CORS_ALLOW_HEADERS = [
     'accept',
     'accept-encoding',
@@ -364,18 +372,13 @@ CORS_ALLOW_HEADERS = [
     'dnt',
     'origin',
     'user-agent',
-    'x-csrftoken',
+    'x-csrftoken',  # Match the case
     'x-requested-with',
 ]
 
 # Cookie settings
-CSRF_COOKIE_NAME = "csrftoken"
-CSRF_COOKIE_HTTPONLY = False  # Must be False to access it via JavaScript
 CSRF_COOKIE_SAMESITE = 'Lax'
-CSRF_HEADER_NAME = 'HTTP_X_CSRFTOKEN'
 SESSION_COOKIE_SAMESITE = 'Lax'
-CSRF_COOKIE_HTTPONLY = False
-SESSION_COOKIE_HTTPONLY = True
 
 # WHOOP Settings
 WHOOP_CLIENT_ID = os.getenv('WHOOP_CLIENT_ID')
@@ -399,7 +402,21 @@ CACHES = {
 }
 
 # Add this near your other environment variables
-DEVELOPMENT_PASSWORD = os.getenv('DEVELOPMENT_PASSWORD', 'default_password')
+DEVELOPMENT_PASSWORD = os.getenv('DEVELOPMENT_PASSWORD')
+if not DEVELOPMENT_PASSWORD:
+    raise ValueError("DEVELOPMENT_PASSWORD must be set in environment variables")
 
 # Add this to your CORS settings
-CORS_ALLOW_ALL_ORIGINS = DEBUG  # Allow all origins in development
+CORS_ALLOW_ALL_ORIGINS = False  # Never allow all origins
+
+# Only force SSL in production (HTTPS)
+SECURE_SSL_REDIRECT = not DEBUG
+
+# Make other security settings conditional as well
+SESSION_COOKIE_SECURE = not DEBUG # Cookies only sent over HTTPS
+CSRF_COOKIE_SECURE = not DEBUG # CSRF cookies only sent over HTTPS
+
+# Add these security settings
+SECURE_BROWSER_XSS_FILTER = True
+SECURE_CONTENT_TYPE_NOSNIFF = True
+X_FRAME_OPTIONS = 'DENY'  # Prevent clickjacking

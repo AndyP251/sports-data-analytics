@@ -31,6 +31,8 @@ from django.conf import settings
 from asgiref.sync import sync_to_async
 from functools import wraps
 from rest_framework import status
+from django.core.cache import cache
+from django.middleware.csrf import get_token
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -42,7 +44,13 @@ logger = logging.getLogger(__name__)
 def home(request):
     return render(request, 'core/home.html')
 
-def register(request):
+@require_http_methods(["POST", "OPTIONS"])
+def login_view(request):
+    if request.method == "OPTIONS":
+        response = JsonResponse({})
+        response["Access-Control-Allow-Headers"] = "Content-Type, X-CSRFToken"
+        return response
+        
     if request.method == 'POST':
         form = CustomUserCreationForm(request.POST)
         if form.is_valid():
@@ -394,33 +402,51 @@ def active_sources(request):
             'error': str(e)
         }, status=500)
 
-@csrf_exempt  # Only use during development
-@require_http_methods(["POST"])
+@ensure_csrf_cookie
+@require_http_methods(["GET", "POST"])
 def verify_dev_password(request):
+    if request.method == "GET":
+        # Explicitly set CSRF token
+        csrf_token = get_token(request)
+        logger.info(f"Setting CSRF token: {csrf_token}")
+        response = JsonResponse({'csrfToken': csrf_token})
+        response['X-CSRFToken'] = csrf_token
+        return response
+        
     try:
+        # Rate limiting
+        ip = request.META.get('REMOTE_ADDR')
+        attempts_key = f'dev_password_attempts_{ip}'
+        attempts = cache.get(attempts_key, 0)
+        
+        if attempts >= 5:  # Max 5 attempts per 15 minutes
+            return JsonResponse(
+                {'error': 'Too many attempts. Please try again later.'}, 
+                status=429
+            )
+            
+        cache.set(attempts_key, attempts + 1, 900)  # 15 minutes timeout
+        
         data = json.loads(request.body)
         password = data.get('password')
         
-        logger.info(f"Development password attempt received: {password}")
-        logger.info(f"Expected password: {settings.DEVELOPMENT_PASSWORD}")
+        if not settings.DEVELOPMENT_PASSWORD:
+            logger.error("Development password not set in environment")
+            return JsonResponse(
+                {'error': 'Server configuration error'}, 
+                status=500
+            )
         
         if password == settings.DEVELOPMENT_PASSWORD:
-            logger.info("Development password verification successful")
+            cache.delete(attempts_key)  # Reset attempts on success
             return JsonResponse({'status': 'success'})
         
-        logger.warning("Invalid development password attempt")
         return JsonResponse(
             {'error': 'Invalid development password'}, 
             status=401
         )
-    except json.JSONDecodeError:
-        logger.error("Invalid JSON in development password request")
-        return JsonResponse(
-            {'error': 'Invalid request format'}, 
-            status=400
-        )
     except Exception as e:
-        logger.error(f"Unexpected error in development password verification: {str(e)}")
+        logger.error(f"Development gate error: {str(e)}")
         return JsonResponse(
             {'error': 'Server error'}, 
             status=500

@@ -33,8 +33,14 @@ def check_auth(request):
         })
     return JsonResponse({'error': 'Not authenticated'}, status=401)
 
-@require_http_methods(["POST"])
+@ensure_csrf_cookie
+@require_http_methods(["POST", "OPTIONS"])
 def login_view(request):
+    if request.method == "OPTIONS":
+        response = JsonResponse({})
+        response["Access-Control-Allow-Headers"] = "Content-Type, X-Csrftoken"  # Match the frontend header
+        return response
+
     try:
         data = json.loads(request.body)
         username = data.get('username')
@@ -63,8 +69,14 @@ def login_view(request):
         logger.error(f"Unexpected error in login: {str(e)}")
         return JsonResponse({'error': 'Login failed', 'details': str(e)}, status=500)
 
-@require_http_methods(["POST"])
+@ensure_csrf_cookie
+@require_http_methods(["POST", "OPTIONS"])
 def register_view(request):
+    if request.method == "OPTIONS":
+        response = JsonResponse({})
+        response["Access-Control-Allow-Headers"] = "Content-Type, X-Csrftoken"  # Match the frontend header
+        return response
+
     try:
         data = json.loads(request.body)
         username = data.get('username')

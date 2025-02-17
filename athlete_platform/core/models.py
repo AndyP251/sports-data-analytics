@@ -3,6 +3,13 @@ from django.db import models
 from django.core.validators import MinValueValidator, MaxValueValidator
 from django.utils import timezone
 import uuid
+from django.core.exceptions import ValidationError
+import logging
+from django.db import transaction
+from django.contrib.auth.signals import user_logged_in
+from django.dispatch import receiver
+
+logger = logging.getLogger(__name__)
 
 class User(AbstractUser):
    
@@ -23,6 +30,16 @@ class User(AbstractUser):
     date_of_birth = models.DateField(null=True, blank=True)
     profile_image = models.ImageField(upload_to='profile_images/', null=True, blank=True)
     
+    # New fields for tracking active sources
+    active_data_sources = models.JSONField(
+        default=list,
+        help_text="List of active data sources for this user"
+    )
+    last_source_check = models.DateTimeField(
+        auto_now=True,
+        help_text="Last time the data sources were checked"
+    )
+
     groups = models.ManyToManyField(
         'auth.Group',
         related_name='core_user_groups',
@@ -64,7 +81,39 @@ class User(AbstractUser):
     class Meta:
         db_table = 'core_user'
 
+    def update_active_sources(self):
+        """Update the list of active data sources for this user"""
+        active_sources = []
+        
+        # Check if user has an athlete profile
+        if hasattr(self, 'athlete'):
+            # Check for Garmin credentials
+            if hasattr(self.athlete, 'garmin_credentials'):
+                active_sources.append('garmin')
+                logger.info(f"Garmin credentials found for user {self.id}")
+            
+            # Check for Whoop credentials
+            if hasattr(self.athlete, 'whoop_credentials'):
+                active_sources.append('whoop')
+                logger.info(f"Whoop credentials found for user {self.id}")
+        self.active_data_sources = active_sources
+        self.save(update_fields=['active_data_sources', 'last_source_check'])
+
+@receiver(user_logged_in)
+def update_sources_on_login(sender, user, request, **kwargs):
+    """Update active sources when user logs in"""
+    logger.info(f"Updating active sources for user {user.id} on login")
+    try:
+        user.update_active_sources()
+    except Exception as e:
+        logger.error(f"Error updating active sources on login: {e}")
+
 class Team(models.Model):
+    id = models.UUIDField(
+        primary_key=True,
+        default=uuid.uuid4,
+        editable=False
+    )
     name = models.CharField(max_length=100)
     coach = models.ForeignKey(User, on_delete=models.CASCADE, related_name='coached_teams')
     description = models.TextField(blank=True)
@@ -76,6 +125,11 @@ class Team(models.Model):
         return self.name
 
 class Athlete(models.Model):
+    id = models.UUIDField(
+        primary_key=True,
+        default=uuid.uuid4,
+        editable=False
+    )
     POSITION_CHOICES = [
         ('FORWARD', 'Forward'),
         ('MIDFIELDER', 'Midfielder'),
@@ -91,12 +145,16 @@ class Athlete(models.Model):
     weight = models.DecimalField(max_digits=5, decimal_places=2, help_text='Weight in kg', null=True)
     emergency_contact = models.CharField(max_length=100, blank=True)
     emergency_phone = models.CharField(max_length=15, blank=True)
-    date_joined = models.DateTimeField(default=timezone.now)
     created_at = models.DateTimeField(default=timezone.now)
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
         return f"{self.user.username} - {self.team.name if self.team else 'No Team'}"
+
+    def save(self, *args, **kwargs):
+        if not self.id and self.user:
+            self.id = self.user.id
+        super().save(*args, **kwargs)
 
 class WorkoutData(models.Model):
     WORKOUT_TYPES = [
@@ -128,96 +186,6 @@ class WorkoutData(models.Model):
     def __str__(self):
         return f"{self.athlete.user.username} - {self.workout_type} on {self.date}"
 
-class BiometricData(models.Model):
-    athlete = models.ForeignKey(Athlete, on_delete=models.CASCADE, related_name='biometric_data')
-    date = models.DateField(default=timezone.now)
-    
-    # Basic measurements with reasonable defaults and validation
-    weight = models.DecimalField(
-        max_digits=5, 
-        decimal_places=2,
-        validators=[MinValueValidator(30), MaxValueValidator(200)],
-        help_text='Weight in kg',
-        default=70.00
-    )
-    height = models.DecimalField(
-        max_digits=5, 
-        decimal_places=2,
-        validators=[MinValueValidator(100), MaxValueValidator(250)],
-        help_text='Height in cm',
-        default=170.00
-    )
-    
-    # Vital signs with validation
-    resting_heart_rate = models.IntegerField(
-        validators=[MinValueValidator(30), MaxValueValidator(200)],
-        default=60,
-        help_text='Beats per minute'
-    )
-    blood_pressure_systolic = models.IntegerField(
-        validators=[MinValueValidator(70), MaxValueValidator(200)],
-        default=120,
-        help_text='Systolic blood pressure'
-    )
-    blood_pressure_diastolic = models.IntegerField(
-        validators=[MinValueValidator(40), MaxValueValidator(130)],
-        default=80,
-        help_text='Diastolic blood pressure'
-    )
-    
-    # Optional measurements
-    body_fat_percentage = models.DecimalField(
-        max_digits=4,
-        decimal_places=1,
-        validators=[MinValueValidator(3), MaxValueValidator(50)],
-        null=True,
-        blank=True,
-        help_text='Body fat percentage'
-    )
-    hrv = models.IntegerField(
-        null=True,
-        blank=True,
-        validators=[MinValueValidator(0), MaxValueValidator(200)],
-        help_text='Heart Rate Variability'
-    )
-    
-    # Sleep and recovery
-    sleep_hours = models.DecimalField(
-        max_digits=4,
-        decimal_places=2,
-        validators=[MinValueValidator(0), MaxValueValidator(24)],
-        default=8.00,
-        help_text='Hours of sleep'
-    )
-    stress_level = models.IntegerField(
-        validators=[MinValueValidator(1), MaxValueValidator(10)],
-        default=5,
-        help_text='Stress level from 1-10'
-    )
-    
-    # Metadata
-    notes = models.TextField(blank=True, default='')
-    created_at = models.DateTimeField(default=timezone.now)
-    updated_at = models.DateTimeField(auto_now=True)
-    
-    class Meta:
-        ordering = ['-date']
-        verbose_name = 'Biometric Data'
-        verbose_name_plural = 'Biometric Data'
-        unique_together = ['athlete', 'date']  # Prevent duplicate entries for same day
-
-    def __str__(self):
-        return f"{self.athlete.user.username} - {self.date}"
-
-    def save(self, *args, **kwargs):
-        # Set default values for optional fields if they're None
-        if self.body_fat_percentage is None:
-            self.body_fat_percentage = 15.0
-        if self.hrv is None:
-            self.hrv = 50
-            
-        super().save(*args, **kwargs)
-
 class InjuryRecord(models.Model):
     SEVERITY_CHOICES = [
         ('MINOR', 'Minor'),
@@ -237,3 +205,172 @@ class InjuryRecord(models.Model):
 
     def __str__(self):
         return f"{self.athlete.user.username} - {self.injury_type} on {self.injury_date}"
+
+class CoreBiometricData(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    athlete = models.ForeignKey(
+        'Athlete',
+        on_delete=models.CASCADE,
+        related_name='biometric_data'
+    )
+    date = models.DateField()
+
+    # Sleep Data
+    total_sleep_seconds = models.IntegerField(default=0)
+    deep_sleep_seconds = models.IntegerField(default=0)
+    light_sleep_seconds = models.IntegerField(default=0)
+    rem_sleep_seconds = models.IntegerField(default=0)
+    awake_seconds = models.IntegerField(default=0)
+    average_respiration = models.FloatField(default=0)
+    lowest_respiration = models.FloatField(default=0)
+    highest_respiration = models.FloatField(default=0)
+    body_battery_change = models.IntegerField(default=0)
+    sleep_resting_heart_rate = models.IntegerField(default=0)
+    
+    # Heart Rate Data
+    resting_heart_rate = models.IntegerField(default=0)
+    max_heart_rate = models.IntegerField(default=0)
+    min_heart_rate = models.IntegerField(default=0)
+    last_seven_days_avg_resting_heart_rate = models.IntegerField(default=0)
+    
+    # User Summary Data
+    total_calories = models.IntegerField(default=0)
+    active_calories = models.IntegerField(default=0)
+    bmr_calories = models.IntegerField(default=0)
+    net_calorie_goal = models.IntegerField(default=0)
+    total_distance_meters = models.FloatField(default=0)
+    total_steps = models.IntegerField(default=0)
+    daily_step_goal = models.IntegerField(default=0)
+    highly_active_seconds = models.IntegerField(default=0)
+    sedentary_seconds = models.IntegerField(default=0)
+    
+    # Stress Data
+    average_stress_level = models.IntegerField(default=0)
+    max_stress_level = models.IntegerField(default=0)
+    stress_duration_seconds = models.IntegerField(default=0)
+    rest_stress_duration = models.IntegerField(default=0)
+    activity_stress_duration = models.IntegerField(default=0)
+    low_stress_percentage = models.FloatField(default=0)
+    medium_stress_percentage = models.FloatField(default=0)
+    high_stress_percentage = models.FloatField(default=0)
+
+    source = models.CharField(max_length=20, default='garmin')
+    created_at = models.DateTimeField(default=timezone.now)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'core_biometric_data'
+        unique_together = ['athlete', 'date']
+        indexes = [
+            models.Index(fields=['-date']),
+            models.Index(fields=['athlete', '-date']),
+        ]
+
+    def __str__(self):
+        return f"{self.athlete.user.username} - {self.date}"
+
+
+def create_biometric_data(athlete, date, data):
+    """
+    Create or update biometric data for an athlete on a given date.
+    We do NOT manually set 'id'—let the DB autogenerate the UUID.
+    """
+    from django.db import transaction
+
+    try:
+        with transaction.atomic():
+            biometric_data, created = CoreBiometricData.objects.update_or_create(
+                athlete=athlete,
+                date=date,
+                defaults=data
+            )
+            return biometric_data
+    except Exception as e:
+        logger.error(f"Error in create_biometric_data: {e}")
+        return None
+
+def get_athlete_biometrics(athlete, date):
+    """Retrieves biometric data for an athlete on a specific date"""
+    try:
+        return CoreBiometricData.objects.get(
+            athlete=athlete,
+            date=date
+        )
+    except CoreBiometricData.DoesNotExist:
+        return None
+
+class GarminCredentials(models.Model):
+    id = models.UUIDField(
+        primary_key=True,
+        default=uuid.uuid4,
+        editable=False,
+        help_text="Unique identifier for the Garmin credentials"
+    )
+    athlete = models.OneToOneField(
+        Athlete, 
+        on_delete=models.CASCADE, 
+        related_name='garmin_credentials'
+    )
+    profile_type = models.CharField(
+        max_length=20,
+        default='default'
+    )
+    access_token = models.CharField(max_length=255)
+    refresh_token = models.CharField(max_length=255)
+    expires_at = models.DateTimeField()
+    created_at = models.DateTimeField(default=timezone.now)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'core_garmin_credentials'
+
+    def get_profile_config(self):
+        from django.conf import settings
+        return settings.GARMIN_PROFILES.get(self.profile_type, settings.GARMIN_PROFILES['default'])
+
+    def __str__(self):
+        return f"Garmin credentials for {self.athlete.user.username} ({self.profile_type})"
+
+
+class WhoopCredentials(models.Model):
+    """Temporary model for storing Whoop credentials"""
+    id = models.UUIDField(
+        primary_key=True,
+        default=uuid.uuid4,
+        editable=False,
+        help_text="Unique identifier for the Whoop credentials"
+    )
+    athlete = models.OneToOneField(
+        Athlete, 
+        on_delete=models.CASCADE, 
+        related_name='whoop_credentials'
+    )
+    access_token = models.CharField(max_length=255)
+    refresh_token = models.CharField(max_length=255)
+    expires_at = models.DateTimeField()
+    created_at = models.DateTimeField(default=timezone.now)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'core_whoop_credentials'
+
+    def __str__(self):
+        return f"Whoop credentials for {self.athlete.user.username}"
+
+class CoreBiometricTimeSeries(models.Model):
+    """Stores detailed time-series biometric data"""
+    id = models.UUIDField(primary_key=True)  # This will match CoreBiometricData's id
+    sleep_heart_rate = models.JSONField(default=list)
+    sleep_stress = models.JSONField(default=list)
+    sleep_body_battery = models.JSONField(default=list)
+    created_at = models.DateTimeField(default=timezone.now)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'core_biometric_time_series'
+        indexes = [
+            models.Index(fields=['id']),
+        ]
+
+    def __str__(self):
+        return f"Details for biometric data {self.id}"

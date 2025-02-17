@@ -1,67 +1,55 @@
+# athlete_platform/core/utils/garmin_utils.py
+
 import garminconnect
-from datetime import datetime, timedelta
-from django.conf import settings
-from .s3_utils import S3Utils
-import json
+import logging
+from datetime import date, timedelta
+from typing import Optional, Dict, Any, List
+
+logger = logging.getLogger(__name__)
 
 class GarminDataCollector:
     def __init__(self, user_credentials=None):
-        # If user_credentials is provided, use those instead of default settings
-        if user_credentials:
-            self.username = user_credentials.get('username')
-            self.password = user_credentials.get('password')
-        else:
-            self.username = settings.GARMIN_USERNAME
-            self.password = settings.GARMIN_PASSWORD
-        self.s3_utils = S3Utils()
-        
-    def get_formatted_data(self, garmin, date):
-        """Collect all Garmin data in a structured format"""
+        self.username = user_credentials.get('username')
+        self.password = user_credentials.get('password')
+        self.garmin_client = None
+
+    def authenticate(self) -> bool:
         try:
-            return {
-                "date": date.strftime("%Y-%m-%d"),
-                "timestamp": datetime.now().isoformat(),
-                "daily_stats": {
-                    "sleep": garmin.get_sleep_data(date.strftime("%Y-%m-%d")),
-                    "steps": garmin.get_steps_data(date.strftime("%Y-%m-%d")),
-                    "heart_rate": garmin.get_heart_rates(date.strftime("%Y-%m-%d")),
-                    "user_summary": garmin.get_user_summary(date.strftime("%Y-%m-%d")),
-                    "body_composition": garmin.get_body_composition(date.strftime("%Y-%m-%d"))
-                },
-                "activities": garmin.get_last_activity()
-            }
+            self.garmin_client = garminconnect.Garmin(self.username, self.password)
+            self.garmin_client.login()
+            return True
         except Exception as e:
-            print(f"Error collecting Garmin data: {e}")
+            logger.error(f"Garmin authentication failed: {e}")
+            return False
+
+    def collect_data(self, start_date: date, end_date: date) -> Optional[List[Dict[str, Any]]]:
+        """
+        Collect data from Garmin Connect for all dates between start_date and end_date.
+        """
+        if not self.authenticate():
+            logger.error("Failed to authenticate Garmin client.")
             return None
 
-    def collect_and_store_data(self, athlete_id):
-        """Collect Garmin data and store in S3"""
-        try:
-            # Initialize and login to Garmin
-            garmin = garminconnect.Garmin(self.username, self.password)
-            garmin.login()
-            
-            # Get data for last 2 days
-            today = datetime.now()
-            dates = [today - timedelta(days=x) for x in range(2)]
-            
-            collected_data = []
-            for date in dates:
-                data = self.get_formatted_data(garmin, date)
-                if data:
-                    collected_data.append(data)
-            
-            # Store in S3
-            if collected_data:
-                self.s3_utils.store_athlete_data(
-                    athlete_id,
-                    'garmin_data',
-                    collected_data
-                )
-                return True
-            
-            return False
-            
-        except Exception as e:
-            print(f"Error in collect_and_store_data: {e}")
-            return False 
+        data = []
+        current_date = start_date
+        while current_date <= end_date:
+            date_str = current_date.strftime("%Y-%m-%d")
+            try:
+                daily_data = {
+                    "date": date_str,
+                    "sleep": self.garmin_client.get_sleep_data(date_str),
+                    "heart_rate": self.garmin_client.get_heart_rates(date_str),
+                    "steps": self.garmin_client.get_steps_data(date_str),
+                    "body_comp": self.garmin_client.get_body_composition(date_str),
+                    "user_summary": self.garmin_client.get_user_summary(date_str),
+                    "stress": self.garmin_client.get_stress_data(date_str),
+                }
+                data.append(daily_data)
+                logger.info(f"Collected data for {current_date}")
+            except Exception as e:
+                logger.error(f"Error collecting data for {current_date}: {e}")
+            current_date += timedelta(days=1)
+
+        if data:
+            logger.info(f"Successfully collected {len(data)} day(s) of Garmin data")
+        return data or None

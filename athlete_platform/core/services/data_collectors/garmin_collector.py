@@ -4,6 +4,7 @@ from ..exceptions import CollectorError
 from .base_collector import BaseDataCollector
 from core.models import Athlete
 from core.utils.garmin_utils import GarminDataCollector
+from core.utils.encryption_utils import decrypt_value
 import logging
 
 logger = logging.getLogger(__name__)
@@ -20,11 +21,14 @@ class GarminCollector(BaseDataCollector):
         try:
             if not hasattr(self.athlete, 'garmin_credentials'):
                 raise CollectorError("No Garmin credentials found")
+            
+            username = decrypt_value(self.athlete.garmin_credentials.username)
+            password = decrypt_value(self.athlete.garmin_credentials.password)
                 
-            self.garmin_client = GarminDataCollector(
-                username=self.athlete.garmin_credentials.username,
-                password=self.athlete.garmin_credentials.password
-            )
+            self.garmin_client = GarminDataCollector({
+                'username': username,
+                'password': password
+            })
             return True
         except Exception as e:
             logger.error(f"Garmin authentication failed: {e}")

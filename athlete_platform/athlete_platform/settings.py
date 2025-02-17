@@ -13,6 +13,11 @@ https://docs.djangoproject.com/en/5.0/ref/settings/
 from pathlib import Path
 import os
 from dotenv import load_dotenv
+from cryptography.fernet import Fernet
+from core.utils.encryption_utils import encrypt_value
+import logging
+
+logger = logging.getLogger(__name__)
 
 # Load environment variables from .env file
 load_dotenv()
@@ -160,31 +165,68 @@ STATICFILES_DIRS = [
     os.path.join(BASE_DIR, 'static'),
 ]
 
+# Encryption setup
+raw_key = os.getenv('GARMIN_ACCOUNT_ENCRYPTION_KEY')
+ENCRYPTION_KEY = raw_key
+
+try:
+    if not raw_key:
+        ENCRYPTION_KEY = Fernet.generate_key()
+        logger.warning(f"Generated new encryption key: {ENCRYPTION_KEY.decode()}")
+        logger.warning("Add this key to your .env file as GARMIN_ACCOUNT_ENCRYPTION_KEY")
+    else:
+        # Ensure the key is properly formatted
+        if isinstance(raw_key, str):
+            # Remove any whitespace and ensure proper padding
+            raw_key = raw_key.strip()
+            padding = len(raw_key) % 4
+            if padding:
+                raw_key += '=' * (4 - padding)
+            ENCRYPTION_KEY = raw_key.encode()
+        else:
+            ENCRYPTION_KEY = raw_key
+
+    # Validate the key by creating a Fernet instance
+    Fernet(ENCRYPTION_KEY)
+    
+except Exception as e:
+    logger.error(f"Invalid encryption key: {e}, {raw_key}")
+    ENCRYPTION_KEY = Fernet.generate_key()
+    logger.warning(f"Generated new encryption key: {ENCRYPTION_KEY.decode()}")
+    logger.warning("Add this key to your .env file as GARMIN_ACCOUNT_ENCRYPTION_KEY")
+
+
 # Garmin Settings
 GARMIN_USERNAME = os.getenv('GARMIN_USERNAME')
 GARMIN_PASSWORD = os.getenv('GARMIN_PASSWORD')
 
-#TODO: ENCRPYT THESE
+GARMIN_USERNAME_ALT_1 = os.getenv('GARMIN_USERNAME_ALT_1', 'test_user')
+GARMIN_PASSWORD_ALT_1 = os.getenv('GARMIN_PASSWORD_ALT_1', 'test_password')
+
+GARMIN_USERNAME_ALT_2 = os.getenv('GARMIN_USERNAME_ALT_2', 'hash_user')
+GARMIN_PASSWORD_ALT_2 = os.getenv('GARMIN_PASSWORD_ALT_2', 'hash_password')
+
+# Encrypt credentials when defining profiles
 GARMIN_PROFILES = {
     'default': {
         'name': 'Default Garmin Account',
-        'username': GARMIN_USERNAME,  # Will be replaced with settings.GARMIN_USERNAME
-        'password': GARMIN_PASSWORD,  # Will be replaced with settings.GARMIN_PASSWORD
+        'username': encrypt_value(GARMIN_USERNAME),
+        'password': encrypt_value(GARMIN_PASSWORD),
         'is_production': True
     },
     'test': {
         'name': 'Test Garmin Account',
-        'username': 'test_user',
-        'password': 'test_password',
+        'username': encrypt_value(GARMIN_USERNAME_ALT_1),
+        'password': encrypt_value(GARMIN_PASSWORD_ALT_1),
         'is_production': False
     },
     'hash': {
         'name': 'Hash Testing Account',
-        'username': 'hash_user',
-        'password': 'hash_password',
+        'username': encrypt_value(GARMIN_USERNAME_ALT_2),
+        'password': encrypt_value(GARMIN_PASSWORD_ALT_2),
         'is_production': False
     }
-} 
+}
 
 # Use different storage for development and production
 if DEBUG:
@@ -339,7 +381,6 @@ SESSION_COOKIE_HTTPONLY = True
 WHOOP_CLIENT_ID = os.getenv('WHOOP_CLIENT_ID')
 WHOOP_CLIENT_SECRET = os.getenv('WHOOP_CLIENT_SECRET')
 WHOOP_REDIRECT_URI = os.getenv('WHOOP_REDIRECT_URI')  # e.g., https://yourdomain.com/oauth/whoop/callback
-ENCRYPTION_KEY = os.getenv('ENCRYPTION_KEY')  # Generate using: Fernet.generate_key()
 
 # Add cache configuration for sync locks
 # CACHES = {

@@ -84,7 +84,7 @@ const HeartRateMetrics = ({ resting, average, max }) => {
       color: '#4CAF50'  // Green for resting
     },
     {
-      label: 'Average HR',
+      label: 'Last 7 Days Average HR',
       value: average,
       icon: <FaRunning />,
       color: '#2196F3'  // Blue for average

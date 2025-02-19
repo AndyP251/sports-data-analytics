@@ -1,4 +1,4 @@
-from celery import shared_task
+# from celery import shared_task
 from .utils.whoop_utils import WhoopClient
 
 # @shared_task

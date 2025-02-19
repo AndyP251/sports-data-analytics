@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react'
+import '../styles/login.css'
 
 // Add CSRF token function
 function getCsrfToken() {
@@ -133,6 +134,7 @@ const Login = ({ setIsAuthenticated }) => {
       <div className="auth-container">
         <div className="auth-box">
           <div className="brand-title">Pulse Project</div>
+          <div className="developer-credit">Developed by Andrew Prince</div>
           <h2 className="auth-title">{isLoginMode ? 'Welcome Back' : 'Create Account'}</h2>
           {error && <div className="error-message">{error}</div>}
           {success && <div className="success-message">{success}</div>}

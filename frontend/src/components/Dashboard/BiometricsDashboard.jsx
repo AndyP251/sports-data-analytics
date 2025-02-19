@@ -877,9 +877,9 @@ const BiometricsDashboard = ({ username }) => {
         )}
 
         <HeartRateMetrics 
-          resting={biometricData?.resting_heart_rate || 0}
-          average={biometricData?.avg_heart_rate || 0}
-          max={biometricData?.max_heart_rate || 0}
+          resting={biometricData.length > 0 ? biometricData[biometricData.length - 1].resting_heart_rate || 0 : 0}
+          average={biometricData.length > 0 ? biometricData[biometricData.length - 1].last_seven_days_avg_resting_heart_rate || 0 : 0}
+          max={biometricData.length > 0 ? biometricData[biometricData.length - 1].max_heart_rate || 0 : 0}
         />
       </Box>
     </Box>

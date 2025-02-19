@@ -30,6 +30,9 @@ import warnings  # Python's built-in warnings module
 from django.conf import settings
 from asgiref.sync import sync_to_async
 from functools import wraps
+from rest_framework import status
+from django.core.cache import cache
+from django.middleware.csrf import get_token
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -41,7 +44,13 @@ logger = logging.getLogger(__name__)
 def home(request):
     return render(request, 'core/home.html')
 
-def register(request):
+@require_http_methods(["POST", "OPTIONS"])
+def login_view(request):
+    if request.method == "OPTIONS":
+        response = JsonResponse({})
+        response["Access-Control-Allow-Headers"] = "Content-Type, X-CSRFToken"
+        return response
+        
     if request.method == 'POST':
         form = CustomUserCreationForm(request.POST)
         if form.is_valid():
@@ -392,4 +401,54 @@ def active_sources(request):
             'success': False,
             'error': str(e)
         }, status=500)
+
+@ensure_csrf_cookie
+@require_http_methods(["GET", "POST"])
+def verify_dev_password(request):
+    if request.method == "GET":
+        # Explicitly set CSRF token
+        csrf_token = get_token(request)
+        logger.info(f"Setting CSRF token: {csrf_token}")
+        response = JsonResponse({'csrfToken': csrf_token})
+        response['X-CSRFToken'] = csrf_token
+        return response
+        
+    try:
+        # Rate limiting
+        ip = request.META.get('REMOTE_ADDR')
+        attempts_key = f'dev_password_attempts_{ip}'
+        attempts = cache.get(attempts_key, 0)
+        
+        if attempts >= 5:  # Max 5 attempts per 15 minutes
+            return JsonResponse(
+                {'error': 'Too many attempts. Please try again later.'}, 
+                status=429
+            )
+            
+        cache.set(attempts_key, attempts + 1, 900)  # 15 minutes timeout
+        
+        data = json.loads(request.body)
+        password = data.get('password')
+        
+        if not settings.DEVELOPMENT_PASSWORD:
+            logger.error("Development password not set in environment")
+            return JsonResponse(
+                {'error': 'Server configuration error'}, 
+                status=500
+            )
+        
+        if password == settings.DEVELOPMENT_PASSWORD:
+            cache.delete(attempts_key)  # Reset attempts on success
+            return JsonResponse({'status': 'success'})
+        
+        return JsonResponse(
+            {'error': 'Invalid development password'}, 
+            status=401
+        )
+    except Exception as e:
+        logger.error(f"Development gate error: {str(e)}")
+        return JsonResponse(
+            {'error': 'Server error'}, 
+            status=500
+        )
 

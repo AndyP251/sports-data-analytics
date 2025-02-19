@@ -12,6 +12,8 @@ https://docs.djangoproject.com/en/5.0/ref/settings/
 
 from pathlib import Path
 import os
+import sys
+import dj_database_url
 from dotenv import load_dotenv
 from cryptography.fernet import Fernet
 from core.utils.encryption_utils import encrypt_value
@@ -34,7 +36,7 @@ SECRET_KEY = os.getenv('DJANGO_SECRET_KEY')
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.getenv('DJANGO_DEBUG', 'False') == 'True'
-
+DEVELOPMENT_MODE = os.getenv("DEVELOPMENT_MODE", "False") == "True"
 ALLOWED_HOSTS = os.getenv('DJANGO_ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
 
 
@@ -102,8 +104,8 @@ WSGI_APPLICATION = 'athlete_platform.wsgi.application'
 
 # Database
 # https://docs.djangoproject.com/en/5.0/ref/settings/#databases
-
-DATABASES = {
+if DEVELOPMENT_MODE:
+    DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
         'NAME': os.getenv('DB_NAME'),
@@ -111,9 +113,14 @@ DATABASES = {
         'PASSWORD': os.getenv('DB_PASSWORD'),
         'HOST': os.getenv('DB_HOST'),
         'PORT': os.getenv('DB_PORT', '5432'),
+        }
     }
-}
-
+elif len(sys.argv) > 0 and sys.argv[1] != 'collectstatic':
+    if os.getenv("DATABASE_URL", None) is None:
+        raise Exception("DATABASE_URL environment variable not defined")
+    DATABASES = {
+        "default": dj_database_url.parse(os.environ.get("DATABASE_URL")),
+    }
 
 # Password validation
 # https://docs.djangoproject.com/en/5.0/ref/settings/#auth-password-validators
@@ -356,6 +363,14 @@ CORS_ALLOW_METHODS = [
     'POST',
     'PUT',
 ]
+
+# CSRF settings
+CSRF_HEADER_NAME = 'HTTP_X_CSRFTOKEN'  # Matches X-Csrftoken
+CSRF_COOKIE_NAME = 'csrftoken'
+CSRF_USE_SESSIONS = False
+CSRF_COOKIE_HTTPONLY = False
+
+# Update CORS headers to match
 CORS_ALLOW_HEADERS = [
     'accept',
     'accept-encoding',
@@ -364,18 +379,13 @@ CORS_ALLOW_HEADERS = [
     'dnt',
     'origin',
     'user-agent',
-    'x-csrftoken',
+    'x-csrftoken',  # Match the case
     'x-requested-with',
 ]
 
 # Cookie settings
-CSRF_COOKIE_NAME = "csrftoken"
-CSRF_COOKIE_HTTPONLY = False  # Must be False to access it via JavaScript
 CSRF_COOKIE_SAMESITE = 'Lax'
-CSRF_HEADER_NAME = 'HTTP_X_CSRFTOKEN'
 SESSION_COOKIE_SAMESITE = 'Lax'
-CSRF_COOKIE_HTTPONLY = False
-SESSION_COOKIE_HTTPONLY = True
 
 # WHOOP Settings
 WHOOP_CLIENT_ID = os.getenv('WHOOP_CLIENT_ID')
@@ -397,3 +407,23 @@ CACHES = {
         'LOCATION': 'unique-snowflake',
     }
 }
+
+# Add this near your other environment variables
+DEVELOPMENT_PASSWORD = os.getenv('DEVELOPMENT_PASSWORD')
+if not DEVELOPMENT_PASSWORD:
+    raise ValueError("DEVELOPMENT_PASSWORD must be set in environment variables")
+
+# Add this to your CORS settings
+CORS_ALLOW_ALL_ORIGINS = False  # Never allow all origins
+
+# Only force SSL in production (HTTPS)
+SECURE_SSL_REDIRECT = not DEBUG
+
+# Make other security settings conditional as well
+SESSION_COOKIE_SECURE = not DEBUG # Cookies only sent over HTTPS
+CSRF_COOKIE_SECURE = not DEBUG # CSRF cookies only sent over HTTPS
+
+# Add these security settings
+SECURE_BROWSER_XSS_FILTER = True
+SECURE_CONTENT_TYPE_NOSNIFF = True
+X_FRAME_OPTIONS = 'DENY'  # Prevent clickjacking

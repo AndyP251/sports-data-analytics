@@ -341,15 +341,16 @@ LOGGING = {
     },
 }
 
-# CORS settings (Cross-Origin Resource Sharing for API endpoints)
-CORS_ALLOW_CREDENTIALS = True
+# CCORS_ALLOW_CREDENTIALS = True
 
-CORS_ALLOWED_ORIGINS = (
-    os.getenv('CORE_ALLOWED_ORIGINS_1', 'http://localhost:5173').split(',') +
-    os.getenv('CORE_ALLOWED_ORIGINS_2', 'http://localhost:5173').split(',')
-)
+CORS_ALLOWED_ORIGINS = [
+    os.getenv('CORE_ALLOWED_ORIGIN_1', 'http://localhost:5173'),
+    os.getenv('CORE_ALLOWED_ORIGIN_2', 'http://localhost:5173'),
+]
 
-CSRF_TRUSTED_ORIGINS = CORS_ALLOWED_ORIGINS
+CSRF_TRUSTED_ORIGINS = [
+    'https://pulse-project-app-2l3iy.ondigitalocean.app',
+]
 
 CORS_ALLOWED_ORIGIN_REGEXES = [
     r"^http://localhost:\d+$",  # Allows all localhost ports

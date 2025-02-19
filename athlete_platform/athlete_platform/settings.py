@@ -343,17 +343,18 @@ LOGGING = {
 
 # CORS settings (Cross-Origin Resource Sharing for API endpoints)
 CORS_ALLOW_CREDENTIALS = True
-CORS_ALLOWED_ORIGINS = [
-    "http://localhost:5173",  # Vite default port
-]
 
-CSRF_TRUSTED_ORIGINS = [
-    "http://localhost:5173",  # Vite default port
-]
+CORS_ALLOWED_ORIGINS = (
+    os.getenv('CORE_ALLOWED_ORIGINS_1', 'http://localhost:5173').split(',') +
+    os.getenv('CORE_ALLOWED_ORIGINS_2', 'http://localhost:5173').split(',')
+)
+
+CSRF_TRUSTED_ORIGINS = CORS_ALLOWED_ORIGINS
 
 CORS_ALLOWED_ORIGIN_REGEXES = [
     r"^http://localhost:\d+$",  # Allows all localhost ports
 ]
+
 
 CORS_ALLOW_METHODS = [
     'DELETE',

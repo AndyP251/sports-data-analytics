@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 
+const APP_VERSION = import.meta.env.VITE_APP_VERSION || 'v1.0';
+
 const DevelopmentGate = () => {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -10,7 +12,7 @@ const DevelopmentGate = () => {
     const getCsrfToken = async () => {
       try {
         setIsLoading(true);
-        console.log('Fetching CSRF token...');
+        console.log('[v1.1] Fetching CSRF token...');
         
         const response = await fetch('/api/verify-dev-password/', {
           method: 'GET',
@@ -18,7 +20,8 @@ const DevelopmentGate = () => {
         });
         
         if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
+          const errorData = await response.json();
+          throw new Error(`HTTP error! status: ${response.status}, message: ${errorData.error || 'Unknown error'}`);
         }
         
         const data = await response.json();
@@ -57,7 +60,7 @@ const DevelopmentGate = () => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'X-CSRFToken': csrfToken,
+          'X-Csrftoken': csrfToken,
         },
         credentials: 'include',
         body: JSON.stringify({ password }),
@@ -86,7 +89,8 @@ const DevelopmentGate = () => {
       display: 'flex',
       justifyContent: 'center',
       alignItems: 'center',
-      backgroundColor: 'white'
+      backgroundColor: 'white',
+      position: 'relative'
     }}>
       <div style={{
         padding: '2rem',
@@ -146,6 +150,18 @@ const DevelopmentGate = () => {
         <div style={{ marginTop: '1rem', fontSize: '0.8rem', color: '#666' }}>
           Status: {isLoading ? 'Loading...' : csrfToken ? 'Ready' : 'No Token'}
         </div>
+      </div>
+      
+      {/* Version display */}
+      <div style={{
+        position: 'absolute',
+        bottom: '10px',
+        left: '10px',
+        fontSize: '12px',
+        color: '#666',
+        fontFamily: 'monospace'
+      }}>
+        {APP_VERSION}
       </div>
     </div>
   );

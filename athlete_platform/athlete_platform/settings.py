@@ -341,15 +341,17 @@ LOGGING = {
     },
 }
 
-# CCORS_ALLOW_CREDENTIALS = True
+CCORS_ALLOW_CREDENTIALS = True
 
 CORS_ALLOWED_ORIGINS = [
     os.getenv('CORE_ALLOWED_ORIGIN_1', 'http://localhost:5173'),
     os.getenv('CORE_ALLOWED_ORIGIN_2', 'http://localhost:5173'),
 ]
 
+CSRF_TRUSTED_ORIGIN_1 = os.getenv('CSRF_TRUSTED_ORIGIN_1', 'http://localhost:5173')
+
 CSRF_TRUSTED_ORIGINS = [
-    'https://pulse-project-app-2l3iy.ondigitalocean.app',
+    CSRF_TRUSTED_ORIGIN_1,
 ]
 
 CORS_ALLOWED_ORIGIN_REGEXES = [

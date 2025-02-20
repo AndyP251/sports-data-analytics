@@ -26,7 +26,7 @@ urlpatterns = [
     path('api/biometrics/garmin-profiles/', get_garmin_profiles, name='garmin_profiles'),
     path('api/biometrics/raw/', get_raw_biometric_data, name='raw-biometric-data'),
     path('api/biometrics/active-sources/', active_sources, name='active_sources'),
-    path('api/verify-dev-password/', views.verify_dev_password, name='verify-dev-password'),
+    path('api/verify-dev-password/', verify_dev_password, name='verify-dev-password'),
     
 
     

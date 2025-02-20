@@ -122,6 +122,20 @@ DATABASES = {
 #         "default": dj_database_url.parse(os.environ.get("DATABASE_URL")),
 #     }
 
+# Add after the DATABASES configuration (around line 117)
+try:
+    logger.info("Initializing database connection...")
+    logger.info(f"Database host: {os.getenv('DB_HOST')}")
+    logger.info(f"Database name: {os.getenv('DB_NAME')}")
+    
+    # Test the connection
+    from django.db import connection
+    with connection.cursor() as cursor:
+        cursor.execute("SELECT 1")
+    logger.info("Database connection successful")
+except Exception as e:
+    logger.error(f"Database initialization failed: {str(e)}")
+
 # Password validation
 # https://docs.djangoproject.com/en/5.0/ref/settings/#auth-password-validators
 

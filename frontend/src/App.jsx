@@ -3,12 +3,18 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import DevelopmentGate from './components/DevelopmentGate'
 import Login from './components/Login'
 import Dashboard from './components/Dashboard/Dashboard'
+import RobotsText from './components/RobotsText'
 import './styles/Auth.css'
 import './styles/Dashboard.css'
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false)
   const hasDevAccess = localStorage.getItem('devAccess') === 'granted'
+
+  // Handle robots.txt request
+  if (window.location.pathname === '/robots.txt') {
+    return <RobotsText />;
+  }
 
   return (
     <Router>

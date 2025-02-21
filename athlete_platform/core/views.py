@@ -88,8 +88,7 @@ def dashboard_view(request):
     except Exception as e:
         logger.error(f"Dashboard error: {e}")
         return render(request, 'core/error.html')
-
-
+@ensure_csrf_cookie
 @login_required
 def logout_view(request):
     logout(request)

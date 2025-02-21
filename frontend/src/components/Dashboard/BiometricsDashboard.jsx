@@ -220,6 +220,9 @@ const BiometricsDashboard = ({ username }) => {
         headers: {
           'Content-Type': 'application/json',
           'X-CSRFToken': document.cookie.split('csrftoken=')[1]?.split(';')[0],
+          'X-CSRF-Token': document.cookie.split('csrftoken=')[1]?.split(';')[0],
+          'X-CSRFToken': document.cookie.split('csrftoken=')[1]?.split(';')[0],
+          'X-Csrftoken': document.cookie.split('csrftoken=')[1]?.split(';')[0],
         },
         credentials: 'include',
       });
@@ -348,6 +351,8 @@ const BiometricsDashboard = ({ username }) => {
         headers: {
           'Content-Type': 'application/json',
           'X-CSRFToken': csrfToken,  // Add CSRF token
+          'X-CSRF-Token': csrfToken,
+          'X-CSRFToken': csrfToken,
         },
         body: JSON.stringify({}),  // Empty body but needed for POST
       });
@@ -378,7 +383,10 @@ const BiometricsDashboard = ({ username }) => {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
-          'X-CSRFToken': getCookie('csrftoken')
+          'X-CSRFToken': getCookie('csrftoken'),
+          'X-CSRF-Token': getCookie('csrftoken'),
+          'X-CSRFToken': getCookie('csrftoken'),
+          'X-Csrftoken': getCookie('csrftoken'),
         },
         credentials: 'include',
         body: JSON.stringify({ 

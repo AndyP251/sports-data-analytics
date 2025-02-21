@@ -61,6 +61,8 @@ const DevelopmentGate = () => {
         headers: {
           'Content-Type': 'application/json',
           'X-Csrftoken': csrfToken,
+          'X-CSRF-Token': csrfToken,
+          'X-CSRFToken': csrfToken,
         },
         credentials: 'include',
         body: JSON.stringify({ password }),

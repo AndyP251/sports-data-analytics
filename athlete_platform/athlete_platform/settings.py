@@ -19,14 +19,41 @@ from cryptography.fernet import Fernet
 from core.utils.encryption_utils import encrypt_value
 import logging
 
-logger = logging.getLogger(__name__)
-
-# Load environment variables from .env file
+# Load environment variables once at the start
 load_dotenv()
+
+logger = logging.getLogger(__name__)
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+# Debugging environment variables
+print("Environment variables loaded:")
+print(f"ENCRYPTION_KEY exists: {'ENCRYPTION_KEY' in os.environ}")
+print(f"Current directory: {os.getcwd()}")
+
+# Add this right after the load_dotenv() call, around line 23-24
+# Encryption setup (must be before any other settings that might use it)
+ENCRYPTION_KEY = os.getenv('ENCRYPTION_KEY') or os.getenv('GARMIN_ACCOUNT_ENCRYPTION_KEY')
+
+if not ENCRYPTION_KEY:
+    logger.warning("No encryption key found in environment variables. Generating new key...")
+    ENCRYPTION_KEY = Fernet.generate_key()
+    logger.warning(f"Generated new encryption key: {ENCRYPTION_KEY.decode()}")
+    logger.warning("Add this key to your .env file as ENCRYPTION_KEY")
+else:
+    # Convert string key to bytes if necessary
+    if isinstance(ENCRYPTION_KEY, str):
+        ENCRYPTION_KEY = ENCRYPTION_KEY.strip().encode()
+
+# Validate the key
+try:
+    Fernet(ENCRYPTION_KEY)
+    logger.info("Encryption key validated successfully")
+except Exception as e:
+    logger.error(f"Invalid encryption key format: {e}")
+    ENCRYPTION_KEY = Fernet.generate_key()
+    logger.warning(f"Generated new encryption key: {ENCRYPTION_KEY.decode()}")
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.0/howto/deployment/checklist/
@@ -186,40 +213,11 @@ STATICFILES_DIRS = [
     os.path.join(BASE_DIR, 'static'),
 ]
 
-# Encryption setup
-raw_key = os.getenv('GARMIN_ACCOUNT_ENCRYPTION_KEY')
-ENCRYPTION_KEY = raw_key
-
-try:
-    if not raw_key:
-        ENCRYPTION_KEY = Fernet.generate_key()
-        logger.warning(f"Generated new encryption key: {ENCRYPTION_KEY.decode()}")
-        logger.warning("Add this key to your .env file as GARMIN_ACCOUNT_ENCRYPTION_KEY")
-    else:
-        # Ensure the key is properly formatted
-        if isinstance(raw_key, str):
-            # Remove any whitespace and ensure proper padding
-            raw_key = raw_key.strip()
-            padding = len(raw_key) % 4
-            if padding:
-                raw_key += '=' * (4 - padding)
-            ENCRYPTION_KEY = raw_key.encode()
-        else:
-            ENCRYPTION_KEY = raw_key
-
-    # Validate the key by creating a Fernet instance
-    Fernet(ENCRYPTION_KEY)
-    
-except Exception as e:
-    logger.error(f"Invalid encryption key: {e}, {raw_key}")
-    ENCRYPTION_KEY = Fernet.generate_key()
-    logger.warning(f"Generated new encryption key: {ENCRYPTION_KEY.decode()}")
-    logger.warning("Add this key to your .env file as GARMIN_ACCOUNT_ENCRYPTION_KEY")
-
-
 # Garmin Settings
 GARMIN_USERNAME = os.getenv('GARMIN_USERNAME')
 GARMIN_PASSWORD = os.getenv('GARMIN_PASSWORD')
+logger.info(f"Garmin Username: {GARMIN_USERNAME}")
+logger.info(f"Garmin Password: {GARMIN_PASSWORD}")
 
 GARMIN_USERNAME_ALT_1 = os.getenv('GARMIN_USERNAME_ALT_1', 'test_user')
 GARMIN_PASSWORD_ALT_1 = os.getenv('GARMIN_PASSWORD_ALT_1', 'test_password')

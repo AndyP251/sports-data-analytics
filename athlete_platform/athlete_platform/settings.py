@@ -421,15 +421,6 @@ CORS_ALLOW_HEADERS = [
     'XSRF-TOKEN',
 ]
 
-# Additional security settings but keeping them permissive for development
-CSRF_COOKIE_SAMESITE = 'Lax'  # Less strict than 'Strict'
-CSRF_TRUSTED_ORIGINS = [
-    'http://localhost:5173',
-    'http://localhost:8000',
-    'http://127.0.0.1:5173',
-    'http://127.0.0.1:8000',
-    # Add your production domains here
-]
 
 # CSRF_COOKIE_SECURE = not DEBUG  # False in development, True in production
 #TODO

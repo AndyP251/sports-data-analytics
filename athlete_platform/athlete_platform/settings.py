@@ -382,13 +382,14 @@ CORS_ALLOW_METHODS = [
     'PUT',
 ]
 
-# CSRF settings
-CSRF_HEADER_NAME = 'HTTP_X_CSRFTOKEN'  # Matches X-Csrftoken
+# CSRF_HEADER_NAME = 'HTTP_X_CSRFTOKEN'
+# CSRF settings - Accept multiple header variations
+CSRF_HEADER_NAME = 'HTTP_X_CSRF_TOKEN'  # Base setting
 CSRF_COOKIE_NAME = 'csrftoken'
 CSRF_USE_SESSIONS = False
 CSRF_COOKIE_HTTPONLY = False
 
-# Update CORS headers to match
+# Comprehensive CORS and CSRF headers
 CORS_ALLOW_HEADERS = [
     'accept',
     'accept-encoding',
@@ -397,10 +398,41 @@ CORS_ALLOW_HEADERS = [
     'dnt',
     'origin',
     'user-agent',
-    'x-csrftoken',  # Match the case
     'x-requested-with',
+    # CSRF Token variations
+    'x-csrftoken',
+    'x-csrf-token',
+    'csrftoken',
+    'csrf-token',
+    'xsrf-token',
+    'x-xsrf-token',
+    'csrf',
+    'xsrf',
+    'x-csrf',
+    'x-xsrf',
+    'csrf-protection',
+    '_csrf',
+    # Case variations
+    'X-CSRFToken',
+    'X-CSRF-TOKEN',
+    'CSRF-TOKEN',
+    'CSRFTOKEN',
+    'X-XSRF-TOKEN',
+    'XSRF-TOKEN',
 ]
 
+# Additional security settings but keeping them permissive for development
+CSRF_COOKIE_SAMESITE = 'Lax'  # Less strict than 'Strict'
+CSRF_TRUSTED_ORIGINS = [
+    'http://localhost:5173',
+    'http://localhost:8000',
+    'http://127.0.0.1:5173',
+    'http://127.0.0.1:8000',
+    # Add your production domains here
+]
+
+# CSRF_COOKIE_SECURE = not DEBUG  # False in development, True in production
+#TODO
 # Cookie settings
 CSRF_COOKIE_SAMESITE = 'Lax'
 SESSION_COOKIE_SAMESITE = 'Lax'

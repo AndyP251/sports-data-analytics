@@ -195,3 +195,4 @@ def fetch_wearable_data():
 - [ ] Deploy MVP and conduct user testing.
 - [ ] Expand to mobile development using React Native.
 
+- [v1.1] integrate OpenSearch for log forwarding - supported natively by DigitalOcean

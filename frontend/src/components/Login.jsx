@@ -93,6 +93,8 @@ const Login = ({ setIsAuthenticated }) => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'X-CSRF-Token': csrfToken,
+          'X-CSRFToken': csrfToken,
           'X-Csrftoken': csrfToken,
         },
         credentials: 'include',

@@ -44,6 +44,7 @@ logger = logging.getLogger(__name__)
 def home(request):
     return render(request, 'core/home.html')
 
+@ensure_csrf_cookie
 @require_http_methods(["POST", "OPTIONS"])
 def login_view(request):
     if request.method == "OPTIONS":

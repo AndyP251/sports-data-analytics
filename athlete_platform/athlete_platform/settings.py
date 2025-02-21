@@ -216,8 +216,6 @@ STATICFILES_DIRS = [
 # Garmin Settings
 GARMIN_USERNAME = os.getenv('GARMIN_USERNAME')
 GARMIN_PASSWORD = os.getenv('GARMIN_PASSWORD')
-logger.info(f"Garmin Username: {GARMIN_USERNAME}")
-logger.info(f"Garmin Password: {GARMIN_PASSWORD}")
 
 GARMIN_USERNAME_ALT_1 = os.getenv('GARMIN_USERNAME_ALT_1', 'test_user')
 GARMIN_PASSWORD_ALT_1 = os.getenv('GARMIN_PASSWORD_ALT_1', 'test_password')

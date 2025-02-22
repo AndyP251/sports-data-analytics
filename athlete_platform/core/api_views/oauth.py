@@ -52,17 +52,15 @@ class WhoopCallbackView(View):
             return JsonResponse({'error': 'No authorization code provided'}, status=400)
 
         try:
-            # Create Basic Auth header
-            auth = requests.auth.HTTPBasicAuth(settings.WHOOP_CLIENT_ID, settings.WHOOP_CLIENT_SECRET)
-            
-            # Direct token request with Basic Auth
+            # Direct token request with client credentials in body (client_secret_post method)
             response = requests.post(
                 "https://api.prod.whoop.com/oauth/oauth2/token",
-                auth=auth,
                 data={
                     'grant_type': 'authorization_code',
                     'code': code,
-                    'redirect_uri': settings.WHOOP_REDIRECT_URI
+                    'redirect_uri': settings.WHOOP_REDIRECT_URI,
+                    'client_id': settings.WHOOP_CLIENT_ID,
+                    'client_secret': settings.WHOOP_CLIENT_SECRET
                 },
                 headers={
                     'Content-Type': 'application/x-www-form-urlencoded',
@@ -98,20 +96,24 @@ class WhoopCallbackView(View):
 def refresh_whoop_token(oauth_token):
     """Utility function to refresh WHOOP token"""
     try:
-        oauth = OAuth2Session(
-            client_id=settings.WHOOP_CLIENT_ID,
-            token={
+        response = requests.post(
+            "https://api.prod.whoop.com/oauth/oauth2/token",
+            data={
+                'grant_type': 'refresh_token',
                 'refresh_token': oauth_token.decrypt_token(oauth_token.refresh_token),
-                'token_type': 'Bearer'
+                'client_id': settings.WHOOP_CLIENT_ID,
+                'client_secret': settings.WHOOP_CLIENT_SECRET
+            },
+            headers={
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'Accept': 'application/json'
             }
         )
         
-        new_token = oauth.refresh_token(
-            token_url="https://api.prod.whoop.com/oauth/oauth2/token",
-            client_id=settings.WHOOP_CLIENT_ID,
-            client_secret=settings.WHOOP_CLIENT_SECRET,
-            refresh_token=oauth_token.decrypt_token(oauth_token.refresh_token)
-        )
+        if response.status_code != 200:
+            raise Exception(f"Token refresh failed: {response.text}")
+            
+        new_token = response.json()
         
         # Update token in database
         oauth_token.access_token = new_token['access_token']

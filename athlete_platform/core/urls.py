@@ -31,7 +31,7 @@ urlpatterns = [
 
     
     # OAuth endpoints
-    path('oauth/whoop/authorize', WhoopOAuthView.as_view(), name='whoop-oauth'),
-    path('oauth/whoop/callback', WhoopCallbackView.as_view(), name='whoop-callback'),
-    path('webhooks/whoop', WhoopWebhookView.as_view(), name='whoop-webhook'),
+    path('api/oauth/whoop/authorize', WhoopOAuthView.as_view(), name='whoop-oauth'),
+    path('api/oauth/whoop/callback', WhoopCallbackView.as_view(), name='whoop-callback'),
+    path('api/webhooks/whoop', WhoopWebhookView.as_view(), name='whoop-webhook'),
 ] 

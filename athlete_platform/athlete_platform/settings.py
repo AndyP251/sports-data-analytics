@@ -427,7 +427,7 @@ SESSION_COOKIE_SAMESITE = 'Lax'
 # WHOOP Settings
 WHOOP_CLIENT_ID = os.getenv('WHOOP_CLIENT_ID')
 WHOOP_CLIENT_SECRET = os.getenv('WHOOP_CLIENT_SECRET')
-WHOOP_REDIRECT_URI = os.getenv('WHOOP_REDIRECT_URI')  # e.g., https://yourdomain.com/oauth/whoop/callback
+WHOOP_REDIRECT_URI = os.getenv('WHOOP_REDIRECT_URI') 
 
 # Add cache configuration for sync locks
 # CACHES = {

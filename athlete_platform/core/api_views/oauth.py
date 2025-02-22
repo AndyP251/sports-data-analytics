@@ -27,6 +27,16 @@ class WhoopOAuthView(View):
 
     def get(self, request):
         """Initiate OAuth flow by redirecting to WHOOP authorization page"""
+        if not all([settings.WHOOP_CLIENT_ID, settings.WHOOP_CLIENT_SECRET, settings.WHOOP_REDIRECT_URI]):
+            logger.error("Missing required WHOOP OAuth settings")
+            return JsonResponse({
+                'error': 'OAuth configuration incomplete'
+            }, status=500)
+
+        logger.debug(f"WHOOP OAuth Settings - Client ID exists: {bool(settings.WHOOP_CLIENT_ID)}")
+        logger.debug(f"WHOOP OAuth Settings - Client Secret exists: {bool(settings.WHOOP_CLIENT_SECRET)}")
+        logger.debug(f"WHOOP OAuth Settings - Redirect URI: {settings.WHOOP_REDIRECT_URI}")
+
         oauth = OAuth2Session(
             client_id=self.client_id,
             redirect_uri=self.redirect_uri,
@@ -35,6 +45,8 @@ class WhoopOAuthView(View):
 
         authorization_url, state = oauth.authorization_url(self.auth_url)
         request.session['oauth_state'] = state
+        
+        logger.debug(f"Redirecting to WHOOP authorization URL: {authorization_url}")
         return redirect(authorization_url)
 
 class WhoopCallbackView(View):
@@ -42,6 +54,10 @@ class WhoopCallbackView(View):
         """Handle OAuth callback from WHOOP"""
         code = request.GET.get('code')
         state = request.GET.get('state')
+
+        # Add debug logging
+        logger.debug(f"WHOOP callback received - code exists: {bool(code)}")
+        logger.debug(f"State validation: received={state}, stored={request.session.get('oauth_state')}")
 
         # Validate state to prevent CSRF attacks
         if not state or state != request.session.get('oauth_state'):
@@ -51,19 +67,25 @@ class WhoopCallbackView(View):
             return JsonResponse({'error': 'No authorization code provided'}, status=400)
 
         try:
-            client = BackendApplicationClient(client_id=settings.WHOOP_CLIENT_ID)
+            # Create OAuth session
             oauth = OAuth2Session(
-                client=client,
-                redirect_uri=settings.WHOOP_REDIRECT_URI,
-                state=state
+                client_id=settings.WHOOP_CLIENT_ID,
+                redirect_uri=settings.WHOOP_REDIRECT_URI
             )
 
+            # Add debug logging for credentials
+            logger.debug(f"Using client_id: {settings.WHOOP_CLIENT_ID[:5]}...")
+            logger.debug(f"Using redirect_uri: {settings.WHOOP_REDIRECT_URI}")
+
+            # Fetch token with proper headers and auth
             token = oauth.fetch_token(
-                settings.WHOOP_TOKEN_URL,
+                token_url='https://api.prod.whoop.com/oauth/oauth2/token',
                 code=code,
-                client_id=settings.WHOOP_CLIENT_ID,
                 client_secret=settings.WHOOP_CLIENT_SECRET,
-                include_client_id=True
+                include_client_id=True,
+                headers={
+                    'Content-Type': 'application/x-www-form-urlencoded'
+                }
             )
 
             # Store tokens in database
@@ -71,16 +93,16 @@ class WhoopCallbackView(View):
                 user=request.user,
                 provider='whoop',
                 defaults={
-                    'access_token': token.get('access_token'),
-                    'refresh_token': token.get('refresh_token'),
-                    'expires_at': datetime.now() + timedelta(seconds=token.get('expires_in', 0))
+                    'access_token': token['access_token'],
+                    'refresh_token': token['refresh_token'],
+                    'expires_at': datetime.now() + timedelta(seconds=token['expires_in'])
                 }
             )
 
             return redirect('dashboard')
 
         except Exception as e:
-            logger.error(f"WHOOP OAuth Error: {e}")
+            logger.error(f"WHOOP OAuth Error: {str(e)}", exc_info=True)
             return JsonResponse({'error': str(e)}, status=400)
 
 def refresh_whoop_token(oauth_token):

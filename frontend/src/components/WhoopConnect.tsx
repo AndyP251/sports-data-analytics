@@ -1,18 +1,21 @@
 import React from 'react';
+import { Button } from '@mui/material';
 
 const WhoopConnect: React.FC = () => {
   const handleConnect = () => {
     // Redirect to Django OAuth endpoint
-    window.location.href = '/oauth/whoop/authorize';
+    window.location.href = '/api/oauth/whoop/authorize';
   };
 
   return (
-    <button
+    <Button
+      variant="contained"
+      color="primary"
       onClick={handleConnect}
-      className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+      fullWidth
     >
-      Connect WHOOP
-    </button>
+      Connect WHOOP Account
+    </Button>
   );
 };
 

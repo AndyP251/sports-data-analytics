@@ -20,6 +20,7 @@ import BugReportIcon from '@mui/icons-material/BugReport';
 import TableChartIcon from '@mui/icons-material/TableChart';
 import HeartRateMetrics from '../HeartRateMetrics';
 import axios from 'axios';
+import WhoopConnect from '../WhoopConnect';
 
 // Modern, professional color palette
 const colors = {
@@ -126,10 +127,11 @@ const BiometricsDashboard = ({ username }) => {
   const [hasActiveSources, setHasActiveSources] = useState(true);
   const [garminProfiles, setGarminProfiles] = useState([]);
   const [activeSource, setActiveSource] = useState(null);
+  const [showWhoopConnect, setShowWhoopConnect] = useState(false);
   
   const sources = [
     { id: 'garmin', name: 'Garmin' },
-    { id: 'whoop', name: 'Whoop (Coming Soon)' }
+    { id: 'whoop', name: 'WHOOP' }
   ];
 
   const openMenu = (event) => {
@@ -608,12 +610,13 @@ const BiometricsDashboard = ({ username }) => {
               key={source.id}
               onClick={() => {
                 if (source.id === 'whoop') {
-                  setSyncMessage('Whoop integration coming soon!');
-                  return;
+                  setShowSourceMenu(false);
+                  setShowWhoopConnect(true);
+                } else {
+                  setSelectedSource(source.id);
+                  setShowSourceMenu(false);
+                  setShowCredentialsMenu(true);
                 }
-                setSelectedSource(source.id);
-                setShowSourceMenu(false);
-                setShowCredentialsMenu(true);
               }}
             >
               <Typography>{source.name}</Typography>
@@ -647,6 +650,27 @@ const BiometricsDashboard = ({ username }) => {
               <Typography>{profile.name}</Typography>
             </StyledMenuItem>
           ))}
+        </DialogContent>
+      </Dialog>
+
+      {/* WHOOP Connect Dialog */}
+      <Dialog 
+        open={showWhoopConnect} 
+        onClose={() => setShowWhoopConnect(false)}
+        PaperProps={{
+          sx: {
+            width: '300px',
+            backgroundColor: '#2C3E50',
+            color: 'white'
+          }
+        }}
+      >
+        <DialogTitle>Connect WHOOP Account</DialogTitle>
+        <DialogContent>
+          <Typography sx={{ mb: 2 }}>
+            Connect your WHOOP account to sync your biometric data.
+          </Typography>
+          <WhoopConnect />
         </DialogContent>
       </Dialog>
 

@@ -7,7 +7,11 @@ from django.views.decorators.csrf import csrf_exempt
 from django.utils.decorators import method_decorator
 from datetime import datetime, timedelta
 from requests_oauthlib import OAuth2Session
+from oauthlib.oauth2 import BackendApplicationClient
 from ..db_models.oauth_tokens import OAuthTokens
+import logging
+
+logger = logging.getLogger(__name__)
 
 # reference: https://developer.whoop.com/docs/developing/oauth
 
@@ -26,9 +30,9 @@ class WhoopOAuthView(View):
         oauth = OAuth2Session(
             client_id=self.client_id,
             redirect_uri=self.redirect_uri,
-            scope=self.scope  # Pass the space-separated string directly
+            scope=self.scope
         )
-        
+
         authorization_url, state = oauth.authorization_url(self.auth_url)
         request.session['oauth_state'] = state
         return redirect(authorization_url)
@@ -38,42 +42,45 @@ class WhoopCallbackView(View):
         """Handle OAuth callback from WHOOP"""
         code = request.GET.get('code')
         state = request.GET.get('state')
-        
+
         # Validate state to prevent CSRF attacks
         if not state or state != request.session.get('oauth_state'):
             return JsonResponse({'error': 'Invalid state parameter'}, status=400)
-        
+
         if not code:
             return JsonResponse({'error': 'No authorization code provided'}, status=400)
 
         try:
+            client = BackendApplicationClient(client_id=settings.WHOOP_CLIENT_ID)
             oauth = OAuth2Session(
-                client_id=settings.WHOOP_CLIENT_ID,
+                client=client,
                 redirect_uri=settings.WHOOP_REDIRECT_URI,
                 state=state
             )
-            
+
             token = oauth.fetch_token(
-                "https://api.prod.whoop.com/oauth/oauth2/token",
+                settings.WHOOP_TOKEN_URL,
                 code=code,
+                client_id=settings.WHOOP_CLIENT_ID,
                 client_secret=settings.WHOOP_CLIENT_SECRET,
                 include_client_id=True
             )
-            
+
             # Store tokens in database
             oauth_token, created = OAuthTokens.objects.update_or_create(
                 user=request.user,
                 provider='whoop',
                 defaults={
-                    'access_token': token['access_token'],
-                    'refresh_token': token['refresh_token'],
-                    'expires_at': datetime.now() + timedelta(seconds=token['expires_in'])
+                    'access_token': token.get('access_token'),
+                    'refresh_token': token.get('refresh_token'),
+                    'expires_at': datetime.now() + timedelta(seconds=token.get('expires_in', 0))
                 }
             )
 
             return redirect('dashboard')
 
         except Exception as e:
+            logger.error(f"WHOOP OAuth Error: {e}")
             return JsonResponse({'error': str(e)}, status=400)
 
 def refresh_whoop_token(oauth_token):
@@ -86,21 +93,22 @@ def refresh_whoop_token(oauth_token):
                 'token_type': 'Bearer'
             }
         )
-        
+
         new_token = oauth.refresh_token(
-            "https://api.prod.whoop.com/oauth/oauth2/token",
+            settings.WHOOP_TOKEN_URL,
             client_id=settings.WHOOP_CLIENT_ID,
             client_secret=settings.WHOOP_CLIENT_SECRET
         )
-        
-        oauth_token.access_token = new_token['access_token']
-        oauth_token.refresh_token = new_token['refresh_token']
-        oauth_token.expires_at = datetime.now() + timedelta(seconds=new_token['expires_in'])
+
+        oauth_token.access_token = new_token.get('access_token')
+        oauth_token.refresh_token = new_token.get('refresh_token')
+        oauth_token.expires_at = datetime.now() + timedelta(seconds=new_token.get('expires_in', 0))
         oauth_token.save()
-        
+
         return new_token
-        
+
     except Exception as e:
+        logger.error(f"Token refresh failed: {str(e)}")
         raise Exception(f"Token refresh failed: {str(e)}")
 
 @method_decorator(csrf_exempt, name='dispatch')
@@ -112,4 +120,5 @@ class WhoopWebhookView(View):
             # You might want to trigger a Celery task here to fetch updated data
             return HttpResponse(status=200)
         except Exception as e:
-            return JsonResponse({'error': str(e)}, status=400) 
+            logger.error(f"Webhook processing failed: {str(e)}")
+            return JsonResponse({'error': str(e)}, status=400)

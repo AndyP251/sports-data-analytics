@@ -333,7 +333,7 @@ class GarminCredentials(models.Model):
 
 
 class WhoopCredentials(models.Model):
-    """Temporary model for storing Whoop credentials"""
+    """Model for storing Whoop credentials"""
     id = models.UUIDField(
         primary_key=True,
         default=uuid.uuid4,
@@ -350,12 +350,17 @@ class WhoopCredentials(models.Model):
     expires_at = models.DateTimeField()
     created_at = models.DateTimeField(default=timezone.now)
     updated_at = models.DateTimeField(auto_now=True)
+    scope = models.CharField(max_length=255, default='offline read:recovery read:cycles read:sleep read:workout read:profile')
 
     class Meta:
         db_table = 'core_whoop_credentials'
 
     def __str__(self):
         return f"Whoop credentials for {self.athlete.user.username}"
+
+    def is_expired(self):
+        """Check if the token is expired"""
+        return timezone.now() >= self.expires_at
 
 class CoreBiometricTimeSeries(models.Model):
     """Stores detailed time-series biometric data"""

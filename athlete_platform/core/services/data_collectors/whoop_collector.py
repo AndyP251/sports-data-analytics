@@ -18,18 +18,38 @@ class WhoopCollector(BaseDataCollector):
     def authenticate(self) -> bool:
         """Authenticate with Whoop API"""
         try:
+            logger.info(f"Attempting WHOOP authentication for athlete {self.athlete.user.username}")
+            
             if not hasattr(self.athlete, 'whoop_credentials'):
+                logger.error(f"No WHOOP credentials found for athlete {self.athlete.user.username}")
                 raise CollectorError("No Whoop credentials found")
                 
-            self.whoop_client = WhoopClient(
-                client_id=self.athlete.whoop_credentials.client_id,
-                client_secret=self.athlete.whoop_credentials.client_secret,
-                access_token=self.athlete.whoop_credentials.access_token,
-                refresh_token=self.athlete.whoop_credentials.refresh_token
-            )
+            whoop_creds = self.athlete.whoop_credentials
+            
+            # Check if token is expired and refresh if needed
+            if whoop_creds.is_expired():
+                logger.info(f"WHOOP token expired for athlete {self.athlete.user.username}, attempting refresh")
+                self._refresh_token(whoop_creds)
+                logger.info("WHOOP token refresh successful")
+            
+            self.access_token = whoop_creds.access_token
+            logger.info(f"WHOOP authentication successful for athlete {self.athlete.user.username}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"WHOOP authentication failed for athlete {self.athlete.user.username}: {e}")
+            return False
+
+    def _refresh_token(self, whoop_creds):
+        """Refresh expired token"""
+        try:
+            logger.info("Starting WHOOP token refresh")
+            from core.api_views.oauth import refresh_whoop_token
+            new_token = refresh_whoop_token(whoop_creds)
+            logger.info("WHOOP token refresh completed successfully")
             return True
         except Exception as e:
-            logger.error(f"Whoop authentication failed: {e}")
+            logger.error(f"Failed to refresh WHOOP token: {e}")
             return False
 
     def validate_credentials(self) -> bool:

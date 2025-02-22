@@ -9,6 +9,8 @@ from datetime import datetime, timedelta
 from requests_oauthlib import OAuth2Session
 from oauthlib.oauth2 import BackendApplicationClient
 from ..db_models.oauth_tokens import OAuthTokens
+from ..models import WhoopCredentials
+from django.utils import timezone
 import logging
 
 logger = logging.getLogger(__name__)
@@ -55,14 +57,16 @@ class WhoopCallbackView(WhoopOAuthBaseView):
         code = request.GET.get('code')
         state = request.GET.get('state')
 
+        logger.info(f"Processing WHOOP OAuth callback for user: {request.user.username}")
         logger.debug(f"WHOOP callback received - code exists: {bool(code)}")
         logger.debug(f"State validation: received={state}, stored={request.session.get('oauth_state')}")
-        logger.debug(f"Full callback URL: {request.build_absolute_uri()}")
 
         if not state or state != request.session.get('oauth_state'):
+            logger.error("Invalid state parameter in WHOOP callback")
             return JsonResponse({'error': 'Invalid state parameter'}, status=400)
 
         if not code:
+            logger.error("No authorization code provided in WHOOP callback")
             return JsonResponse({'error': 'No authorization code provided'}, status=400)
 
         try:
@@ -71,29 +75,36 @@ class WhoopCallbackView(WhoopOAuthBaseView):
                 redirect_uri=self.redirect_uri
             )
 
-            logger.debug(f"Using client_id: {self.client_id[:5]}...")
-            logger.debug(f"Using redirect_uri: {self.redirect_uri}")
-
             token = oauth.fetch_token(
                 token_url=self.token_url,
                 authorization_response=request.build_absolute_uri(),
                 client_id=self.client_id,
-                client_secret=self.client_secret,  # Added here instead of `auth=`
+                client_secret=self.client_secret,
                 include_client_id=True
             )
+            logger.info("Successfully exchanged code for WHOOP access token")
 
-
-            oauth_token, created = OAuthTokens.objects.update_or_create(
-                user=request.user,
-                provider='whoop',
+            # Store the token in WhoopCredentials
+            whoop_creds, created = WhoopCredentials.objects.update_or_create(
+                athlete=request.user.athlete,
                 defaults={
                     'access_token': token['access_token'],
                     'refresh_token': token['refresh_token'],
-                    'expires_at': datetime.now() + timedelta(seconds=token['expires_in'])
+                    'expires_at': timezone.now() + timedelta(seconds=token['expires_in']),
+                    'scope': token.get('scope', self.scope)
                 }
             )
+            
+            action = "Created" if created else "Updated"
+            logger.info(f"{action} WHOOP credentials for user {request.user.username}")
 
-            return redirect('dashboard')
+            # Update user's active data sources
+            if 'whoop' not in request.user.active_data_sources:
+                request.user.active_data_sources.append('whoop')
+                request.user.save()
+                logger.info(f"Added WHOOP to active data sources for user {request.user.username}")
+
+            return redirect('/dashboard')  # Direct redirect to dashboard
 
         except Exception as e:
             logger.error(f"WHOOP OAuth Error: {str(e)}", exc_info=True)

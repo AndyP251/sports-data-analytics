@@ -58,6 +58,7 @@ class WhoopCallbackView(View):
         # Add debug logging
         logger.debug(f"WHOOP callback received - code exists: {bool(code)}")
         logger.debug(f"State validation: received={state}, stored={request.session.get('oauth_state')}")
+        logger.debug(f"Full callback URL: {request.build_absolute_uri()}")
 
         # Validate state to prevent CSRF attacks
         if not state or state != request.session.get('oauth_state'):
@@ -77,15 +78,12 @@ class WhoopCallbackView(View):
             logger.debug(f"Using client_id: {settings.WHOOP_CLIENT_ID[:5]}...")
             logger.debug(f"Using redirect_uri: {settings.WHOOP_REDIRECT_URI}")
 
-            # Fetch token with proper headers and auth
+            # Fetch token with proper authorization response
             token = oauth.fetch_token(
                 token_url=settings.WHOOP_TOKEN_URL,
-                client_id=settings.WHOOP_CLIENT_ID,
+                authorization_response=request.build_absolute_uri(),
                 client_secret=settings.WHOOP_CLIENT_SECRET,
-                include_client_id=True,
-                headers={
-                    'Content-Type': 'application/x-www-form-urlencoded'
-                }
+                include_client_id=True
             )
 
             # Store tokens in database

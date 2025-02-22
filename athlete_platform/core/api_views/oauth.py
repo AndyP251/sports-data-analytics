@@ -52,23 +52,30 @@ class WhoopCallbackView(View):
             return JsonResponse({'error': 'No authorization code provided'}, status=400)
 
         try:
-            # Direct token request instead of using OAuth2Session
+            # Create Basic Auth header
+            auth = requests.auth.HTTPBasicAuth(settings.WHOOP_CLIENT_ID, settings.WHOOP_CLIENT_SECRET)
+            
+            # Direct token request with Basic Auth
             response = requests.post(
                 "https://api.prod.whoop.com/oauth/oauth2/token",
+                auth=auth,
                 data={
                     'grant_type': 'authorization_code',
                     'code': code,
-                    'redirect_uri': settings.WHOOP_REDIRECT_URI,
-                    'client_id': settings.WHOOP_CLIENT_ID,
-                    'client_secret': settings.WHOOP_CLIENT_SECRET
+                    'redirect_uri': settings.WHOOP_REDIRECT_URI
                 },
                 headers={
-                    'Content-Type': 'application/x-www-form-urlencoded'
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                    'Accept': 'application/json'
                 }
             )
             
             if response.status_code != 200:
-                return JsonResponse({'error': response.text}, status=400)
+                error_detail = response.json() if response.text else 'No error details available'
+                return JsonResponse({
+                    'error': f'Token exchange failed: {error_detail}',
+                    'status_code': response.status_code
+                }, status=400)
 
             token = response.json()
             

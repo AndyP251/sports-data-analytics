@@ -15,7 +15,8 @@ logger = logging.getLogger(__name__)
 
 # reference: https://developer.whoop.com/docs/developing/oauth
 
-class WhoopOAuthView(View):
+class WhoopOAuthBaseView(View):
+    """Base view to initialize WHOOP OAuth configuration for reuse."""
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
         self.client_id = settings.WHOOP_CLIENT_ID
@@ -25,6 +26,7 @@ class WhoopOAuthView(View):
         self.token_url = "https://api.prod.whoop.com/oauth/oauth2/token"
         self.scope = "offline read:recovery read:cycles read:sleep read:workout read:profile read:body_measurement"
 
+class WhoopOAuthView(WhoopOAuthBaseView):
     def get(self, request):
         """Initiate OAuth flow by redirecting to WHOOP authorization page"""
         if not all([self.client_id, self.client_secret, self.redirect_uri]):
@@ -47,7 +49,7 @@ class WhoopOAuthView(View):
         logger.debug(f"Redirecting to WHOOP authorization URL: {authorization_url}")
         return redirect(authorization_url)
 
-class WhoopCallbackView(View):
+class WhoopCallbackView(WhoopOAuthBaseView):
     def get(self, request):
         """Handle OAuth callback from WHOOP"""
         code = request.GET.get('code')
@@ -72,7 +74,6 @@ class WhoopCallbackView(View):
             logger.debug(f"Using client_id: {self.client_id[:5]}...")
             logger.debug(f"Using redirect_uri: {self.redirect_uri}")
 
-            # Use Basic Authentication for client authentication
             token = oauth.fetch_token(
                 token_url=self.token_url,
                 authorization_response=request.build_absolute_uri(),
@@ -132,4 +133,3 @@ class WhoopWebhookView(View):
         except Exception as e:
             logger.error(f"Webhook processing failed: {str(e)}")
             return JsonResponse({'error': str(e)}, status=400)
-        

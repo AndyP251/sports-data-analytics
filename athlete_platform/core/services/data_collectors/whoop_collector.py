@@ -59,3 +59,30 @@ class WhoopCollector(BaseDataCollector):
         except Exception as e:
             logger.error(f"Error collecting Whoop data: {e}")
             return None 
+        
+
+
+"""
+example oauth collector:
+import requests
+from django.http import JsonResponse
+from ..db_models.oauth_tokens import OAuthTokens
+
+def get_whoop_profile(request):
+    #Fetch WHOOP profile data using access token
+    try:
+        oauth_token = OAuthTokens.objects.get(user=request.user, provider='whoop')
+        headers = {
+            'Authorization': f"Bearer {oauth_token.access_token}"
+        }
+
+        response = requests.get('https://api.prod.whoop.com/users/profile', headers=headers)
+        response.raise_for_status()  # Raise error for non-200 responses
+        return JsonResponse(response.json(), safe=False)
+
+    except OAuthTokens.DoesNotExist:
+        return JsonResponse({'error': 'No WHOOP token found for user.'}, status=404)
+    except requests.HTTPError as e:
+        return JsonResponse({'error': f'Failed to fetch WHOOP data: {str(e)}'}, status=400)
+
+"""

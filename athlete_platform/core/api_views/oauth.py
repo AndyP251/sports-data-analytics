@@ -24,7 +24,7 @@ class WhoopOAuthBaseView(View):
         self.redirect_uri = settings.WHOOP_REDIRECT_URI
         self.auth_url = "https://api.prod.whoop.com/oauth/oauth2/auth"
         self.token_url = "https://api.prod.whoop.com/oauth/oauth2/token"
-        self.scope = "offline read:recovery read:cycles read:sleep read:workout read:profile read:body_measurement"
+        self.scope = "offline read:recovery read:cycles read:sleep read:workout read:profile"
 
 class WhoopOAuthView(WhoopOAuthBaseView):
     def get(self, request):
@@ -77,9 +77,11 @@ class WhoopCallbackView(WhoopOAuthBaseView):
             token = oauth.fetch_token(
                 token_url=self.token_url,
                 authorization_response=request.build_absolute_uri(),
-                auth=(self.client_id, self.client_secret),
+                client_id=self.client_id,
+                client_secret=self.client_secret,  # Added here instead of `auth=`
                 include_client_id=True
             )
+
 
             oauth_token, created = OAuthTokens.objects.update_or_create(
                 user=request.user,

@@ -5,10 +5,8 @@ from django.conf import settings
 from django.http import HttpResponse, JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.utils.decorators import method_decorator
-import requests
 from datetime import datetime, timedelta
 from requests_oauthlib import OAuth2Session
-from oauthlib.oauth2 import BackendApplicationClient
 from ..db_models.oauth_tokens import OAuthTokens
 
 # reference: https://developer.whoop.com/docs/developing/oauth
@@ -28,14 +26,11 @@ class WhoopOAuthView(View):
         oauth = OAuth2Session(
             client_id=self.client_id,
             redirect_uri=self.redirect_uri,
-            scope=self.scope
+            scope=self.scope  # Pass the space-separated string directly
         )
         
         authorization_url, state = oauth.authorization_url(self.auth_url)
-        
-        # Store state in session for validation in callback
         request.session['oauth_state'] = state
-        
         return redirect(authorization_url)
 
 class WhoopCallbackView(View):
@@ -52,30 +47,18 @@ class WhoopCallbackView(View):
             return JsonResponse({'error': 'No authorization code provided'}, status=400)
 
         try:
-            # Direct token request with client credentials in body (client_secret_post method)
-            response = requests.post(
-                "https://api.prod.whoop.com/oauth/oauth2/token",
-                data={
-                    'grant_type': 'authorization_code',
-                    'code': code,
-                    'redirect_uri': settings.WHOOP_REDIRECT_URI,
-                    'client_id': settings.WHOOP_CLIENT_ID,
-                    'client_secret': settings.WHOOP_CLIENT_SECRET
-                },
-                headers={
-                    'Content-Type': 'application/x-www-form-urlencoded',
-                    'Accept': 'application/json'
-                }
+            oauth = OAuth2Session(
+                client_id=settings.WHOOP_CLIENT_ID,
+                redirect_uri=settings.WHOOP_REDIRECT_URI,
+                state=state
             )
             
-            if response.status_code != 200:
-                error_detail = response.json() if response.text else 'No error details available'
-                return JsonResponse({
-                    'error': f'Token exchange failed: {error_detail}',
-                    'status_code': response.status_code
-                }, status=400)
-
-            token = response.json()
+            token = oauth.fetch_token(
+                "https://api.prod.whoop.com/oauth/oauth2/token",
+                code=code,
+                client_secret=settings.WHOOP_CLIENT_SECRET,
+                include_client_id=True
+            )
             
             # Store tokens in database
             oauth_token, created = OAuthTokens.objects.update_or_create(
@@ -96,26 +79,20 @@ class WhoopCallbackView(View):
 def refresh_whoop_token(oauth_token):
     """Utility function to refresh WHOOP token"""
     try:
-        response = requests.post(
-            "https://api.prod.whoop.com/oauth/oauth2/token",
-            data={
-                'grant_type': 'refresh_token',
+        oauth = OAuth2Session(
+            client_id=settings.WHOOP_CLIENT_ID,
+            token={
                 'refresh_token': oauth_token.decrypt_token(oauth_token.refresh_token),
-                'client_id': settings.WHOOP_CLIENT_ID,
-                'client_secret': settings.WHOOP_CLIENT_SECRET
-            },
-            headers={
-                'Content-Type': 'application/x-www-form-urlencoded',
-                'Accept': 'application/json'
+                'token_type': 'Bearer'
             }
         )
         
-        if response.status_code != 200:
-            raise Exception(f"Token refresh failed: {response.text}")
-            
-        new_token = response.json()
+        new_token = oauth.refresh_token(
+            "https://api.prod.whoop.com/oauth/oauth2/token",
+            client_id=settings.WHOOP_CLIENT_ID,
+            client_secret=settings.WHOOP_CLIENT_SECRET
+        )
         
-        # Update token in database
         oauth_token.access_token = new_token['access_token']
         oauth_token.refresh_token = new_token['refresh_token']
         oauth_token.expires_at = datetime.now() + timedelta(seconds=new_token['expires_in'])

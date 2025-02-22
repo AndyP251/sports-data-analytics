@@ -51,19 +51,21 @@ class WhoopCallbackView(View):
             return JsonResponse({'error': 'No authorization code provided'}, status=400)
 
         try:
-            client = BackendApplicationClient(client_id=settings.WHOOP_CLIENT_ID)
+            # Create OAuth session without BackendApplicationClient
             oauth = OAuth2Session(
-                client=client,
+                client_id=settings.WHOOP_CLIENT_ID,
                 redirect_uri=settings.WHOOP_REDIRECT_URI,
                 state=state
             )
 
+            # Fetch token with proper parameters
             token = oauth.fetch_token(
-                settings.WHOOP_TOKEN_URL,
-                code=code,
+                token_url=settings.WHOOP_TOKEN_URL,
                 client_id=settings.WHOOP_CLIENT_ID,
                 client_secret=settings.WHOOP_CLIENT_SECRET,
-                include_client_id=True
+                code=code,
+                include_client_id=True,
+                authorization_response=request.build_absolute_uri()
             )
 
             # Store tokens in database

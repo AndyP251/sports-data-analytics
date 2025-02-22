@@ -21,8 +21,7 @@ class WhoopOAuthView(View):
         self.redirect_uri = settings.WHOOP_REDIRECT_URI
         self.auth_url = "https://api.prod.whoop.com/oauth/oauth2/auth"
         self.token_url = "https://api.prod.whoop.com/oauth/oauth2/token"
-        self.scope = ["offline", "read:recovery", "read:cycles", "read:sleep", 
-                     "read:workout", "read:profile", "read:body_measurement"]
+        self.scope = "offline read:recovery read:cycles read:sleep read:workout read:profile read:body_measurement"
 
     def get(self, request):
         """Initiate OAuth flow by redirecting to WHOOP authorization page"""
@@ -53,19 +52,26 @@ class WhoopCallbackView(View):
             return JsonResponse({'error': 'No authorization code provided'}, status=400)
 
         try:
-            oauth = OAuth2Session(
-                client_id=settings.WHOOP_CLIENT_ID,
-                redirect_uri=settings.WHOOP_REDIRECT_URI,
-                state=state
+            # Direct token request instead of using OAuth2Session
+            response = requests.post(
+                "https://api.prod.whoop.com/oauth/oauth2/token",
+                data={
+                    'grant_type': 'authorization_code',
+                    'code': code,
+                    'redirect_uri': settings.WHOOP_REDIRECT_URI,
+                    'client_id': settings.WHOOP_CLIENT_ID,
+                    'client_secret': settings.WHOOP_CLIENT_SECRET
+                },
+                headers={
+                    'Content-Type': 'application/x-www-form-urlencoded'
+                }
             )
             
-            token = oauth.fetch_token(
-                token_url="https://api.prod.whoop.com/oauth/oauth2/token",
-                code=code,
-                client_secret=settings.WHOOP_CLIENT_SECRET,
-                include_client_id=True
-            )
+            if response.status_code != 200:
+                return JsonResponse({'error': response.text}, status=400)
 
+            token = response.json()
+            
             # Store tokens in database
             oauth_token, created = OAuthTokens.objects.update_or_create(
                 user=request.user,

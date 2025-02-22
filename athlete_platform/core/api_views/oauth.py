@@ -79,8 +79,8 @@ class WhoopCallbackView(View):
 
             # Fetch token with proper headers and auth
             token = oauth.fetch_token(
-                token_url='https://api.prod.whoop.com/oauth/oauth2/token',
-                code=code,
+                token_url=settings.WHOOP_TOKEN_URL,
+                client_id=settings.WHOOP_CLIENT_ID,
                 client_secret=settings.WHOOP_CLIENT_SECRET,
                 include_client_id=True,
                 headers={

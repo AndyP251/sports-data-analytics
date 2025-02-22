@@ -13,7 +13,6 @@ https://docs.djangoproject.com/en/5.0/ref/settings/
 from pathlib import Path
 import os
 import sys
-import dj_database_url
 from dotenv import load_dotenv
 from cryptography.fernet import Fernet
 from core.utils.encryption_utils import encrypt_value
@@ -29,8 +28,8 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 # Debugging environment variables
 print("Environment variables loaded:")
-print(f"ENCRYPTION_KEY exists: {'ENCRYPTION_KEY' in os.environ}")
-print(f"Current directory: {os.getcwd()}")
+
+# print(f"Current directory: {os.getcwd()}")
 
 # Add this right after the load_dotenv() call, around line 23-24
 # Encryption setup (must be before any other settings that might use it)
@@ -464,3 +463,6 @@ CSRF_COOKIE_SECURE = not DEBUG # CSRF cookies only sent over HTTPS
 SECURE_BROWSER_XSS_FILTER = True
 SECURE_CONTENT_TYPE_NOSNIFF = True
 X_FRAME_OPTIONS = 'DENY'  # Prevent clickjacking
+
+
+print(f"ENCRYPTION_KEY exists: {'ENCRYPTION_KEY' in os.environ}")

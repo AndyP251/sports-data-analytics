@@ -224,6 +224,7 @@ const BiometricsDashboard = ({ username }) => {
           'X-CSRFToken': document.cookie.split('csrftoken=')[1]?.split(';')[0],
           'X-CSRF-Token': document.cookie.split('csrftoken=')[1]?.split(';')[0],
           'X-Csrftoken': document.cookie.split('csrftoken=')[1]?.split(';')[0],
+          'X-CSRF-Token': document.cookie.split('csrftoken=')[1]?.split(';')[0],
         },
         credentials: 'include',
       });
@@ -385,7 +386,6 @@ const BiometricsDashboard = ({ username }) => {
           'Content-Type': 'application/json',
           'X-CSRFToken': getCookie('csrftoken'),
           'X-CSRF-Token': getCookie('csrftoken'),
-          'X-CSRFToken': getCookie('csrftoken'),
           'X-Csrftoken': getCookie('csrftoken'),
         },
         credentials: 'include',

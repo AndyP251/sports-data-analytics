@@ -25,7 +25,7 @@ const DevelopmentGate = () => {
         }
         
         const data = await response.json();
-        console.log('Response data:', data);
+        console.log('CSRF Response:', data);
         
         if (data.csrfToken) {
           console.log('CSRF token received:', data.csrfToken);
@@ -60,9 +60,10 @@ const DevelopmentGate = () => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'X-Csrftoken': csrfToken,
           'X-CSRF-Token': csrfToken,
-          'X-CSRFToken': csrfToken,
+          // 'X-Csrftoken': csrfToken,
+          // 'X-CSRF-Token': csrfToken,
+          // 'X-CSRFToken': csrfToken,
         },
         credentials: 'include',
         body: JSON.stringify({ password }),

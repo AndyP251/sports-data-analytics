@@ -109,39 +109,34 @@ class WhoopProcessor(BaseDataProcessor):
             metrics = processed_data.get('metrics', {})
             date = processed_data.get('date')
             
+            # Set default values for required fields
+            defaults = {
+                'total_sleep_seconds': metrics.get('total_sleep_seconds', 0),
+                'deep_sleep_seconds': metrics.get('deep_sleep_seconds', 0),
+                'light_sleep_seconds': metrics.get('light_sleep_seconds', 0),
+                'rem_sleep_seconds': metrics.get('rem_sleep_seconds', 0),
+                'sleep_score': metrics.get('sleep_score', 0),
+                'resting_heart_rate': metrics.get('resting_heart_rate', 0),
+                'max_heart_rate': metrics.get('max_heart_rate', 0),
+                'average_heart_rate': metrics.get('average_heart_rate', 0),
+                'recovery_score': metrics.get('recovery_score', 0),
+                'hrv_ms': metrics.get('hrv_ms', 0),
+                'respiratory_rate': metrics.get('respiratory_rate', 0),
+                'day_strain': metrics.get('day_strain', 0),
+                'calories_burned': metrics.get('calories_burned', 0),
+                'sleep_resting_heart_rate': metrics.get('sleep_resting_heart_rate', 0)  # Add default
+            }
+
             biometric_data, created = CoreBiometricData.objects.get_or_create(
                 athlete=self.athlete,
                 date=date,
                 source='whoop',
-                defaults={
-                    # Sleep metrics
-                    'total_sleep_seconds': metrics.get('total_sleep_seconds', 0),
-                    'deep_sleep_seconds': metrics.get('deep_sleep_seconds', 0),
-                    'light_sleep_seconds': metrics.get('light_sleep_seconds', 0),
-                    'rem_sleep_seconds': metrics.get('rem_sleep_seconds', 0),
-                    'sleep_score': metrics.get('sleep_score', 0),
-                    
-                    # Heart rate metrics
-                    'resting_heart_rate': metrics.get('resting_heart_rate', 0),
-                    'max_heart_rate': metrics.get('max_heart_rate', 0),
-                    'average_heart_rate': metrics.get('average_heart_rate', 0),
-                    
-                    # Recovery metrics
-                    'recovery_score': metrics.get('recovery_score', 0),
-                    'hrv_ms': metrics.get('hrv_ms', 0),
-                    'respiratory_rate': metrics.get('respiratory_rate', 0),
-                    
-                    # Strain metrics
-                    'day_strain': metrics.get('day_strain', 0),
-                    'calories_burned': metrics.get('calories_burned', 0),
-                }
+                defaults=defaults
             )
 
             if not created:
-                # Update existing record
-                for field, value in metrics.items():
-                    if hasattr(biometric_data, field):
-                        setattr(biometric_data, field, value)
+                for field, value in defaults.items():
+                    setattr(biometric_data, field, value)
                 biometric_data.save()
 
             # Store time series data in S3
@@ -156,7 +151,7 @@ class WhoopProcessor(BaseDataProcessor):
             return True
 
         except Exception as e:
-            logger.error(f"Error storing Whoop data: {e}", exc_info=True)
+            logger.error(f"Error storing WHOOP data: {e}", exc_info=True)
             return False
     
     def _get_from_db(self, date_range: List[date]) -> Optional[List[Dict[str, Any]]]:

@@ -10,6 +10,7 @@ from requests_oauthlib import OAuth2Session
 from oauthlib.oauth2 import BackendApplicationClient
 from ..db_models.oauth_tokens import OAuthTokens
 import logging
+from django.core.signing import Signer
 
 logger = logging.getLogger(__name__)
 
@@ -45,20 +46,21 @@ class WhoopCallbackView(View):
 
         # Validate state to prevent CSRF attacks
         if not state or state != request.session.get('oauth_state'):
+            logger.error("Invalid OAuth state parameter")
             return JsonResponse({'error': 'Invalid state parameter'}, status=400)
 
         if not code:
+            logger.error("No authorization code provided")
             return JsonResponse({'error': 'No authorization code provided'}, status=400)
 
         try:
-            # Create OAuth session without BackendApplicationClient
             oauth = OAuth2Session(
                 client_id=settings.WHOOP_CLIENT_ID,
                 redirect_uri=settings.WHOOP_REDIRECT_URI,
                 state=state
             )
 
-            # Fetch token with proper parameters
+            # Fetch token
             token = oauth.fetch_token(
                 token_url=settings.WHOOP_TOKEN_URL,
                 client_id=settings.WHOOP_CLIENT_ID,
@@ -68,30 +70,38 @@ class WhoopCallbackView(View):
                 authorization_response=request.build_absolute_uri()
             )
 
-            # Store tokens in database
+            # Store encrypted tokens
+            signer = Signer()
+            
             oauth_token, created = OAuthTokens.objects.update_or_create(
                 user=request.user,
                 provider='whoop',
                 defaults={
-                    'access_token': token.get('access_token'),
-                    'refresh_token': token.get('refresh_token'),
+                    'access_token': signer.sign(token.get('access_token')),
+                    'refresh_token': signer.sign(token.get('refresh_token')),
                     'expires_at': datetime.now() + timedelta(seconds=token.get('expires_in', 0))
                 }
             )
 
+            logger.info(f"Successfully stored WHOOP tokens for user {request.user.id}")
             return redirect('dashboard')
 
         except Exception as e:
-            logger.error(f"WHOOP OAuth Error: {e}")
+            logger.error(f"WHOOP OAuth Error: {e}", exc_info=True)
             return JsonResponse({'error': str(e)}, status=400)
 
 def refresh_whoop_token(oauth_token):
     """Utility function to refresh WHOOP token"""
     try:
+        signer = Signer()
+        
+        # Decrypt the refresh token
+        decrypted_refresh_token = signer.unsign(oauth_token.refresh_token)
+        
         oauth = OAuth2Session(
             client_id=settings.WHOOP_CLIENT_ID,
             token={
-                'refresh_token': oauth_token.decrypt_token(oauth_token.refresh_token),
+                'refresh_token': decrypted_refresh_token,
                 'token_type': 'Bearer'
             }
         )
@@ -102,15 +112,17 @@ def refresh_whoop_token(oauth_token):
             client_secret=settings.WHOOP_CLIENT_SECRET
         )
 
-        oauth_token.access_token = new_token.get('access_token')
-        oauth_token.refresh_token = new_token.get('refresh_token')
+        # Store encrypted tokens
+        oauth_token.access_token = signer.sign(new_token.get('access_token'))
+        oauth_token.refresh_token = signer.sign(new_token.get('refresh_token'))
         oauth_token.expires_at = datetime.now() + timedelta(seconds=new_token.get('expires_in', 0))
         oauth_token.save()
 
+        logger.info(f"Successfully refreshed WHOOP token for user {oauth_token.user.id}")
         return new_token
 
     except Exception as e:
-        logger.error(f"Token refresh failed: {str(e)}")
+        logger.error(f"Token refresh failed: {str(e)}", exc_info=True)
         raise Exception(f"Token refresh failed: {str(e)}")
 
 @method_decorator(csrf_exempt, name='dispatch')

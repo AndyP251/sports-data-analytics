@@ -40,16 +40,17 @@ def sync_lock(timeout=300):
 class DataSyncService:
     """High-level service to coordinate data syncing."""
     
-    SUPPORTED_SOURCES = {
-        'garmin': 'garmin_credentials',
-        'whoop': 'whoop_credentials',
-    }
+
 
     def __init__(self, athlete: Athlete):
         self.athlete = athlete
         self.active_sources = []
         self.processors = []
         self.s3_utils = S3Utils()
+        self.SUPPORTED_SOURCES = {
+            'garmin': 'garmin_credentials',
+            'whoop': 'whoop_credentials',
+        }
 
         
         # Check for active sources and initialize processors
@@ -90,20 +91,59 @@ class DataSyncService:
 
     def sync_specific_sources(self, sources: List[str], start_date: Optional[datetime] = None, end_date: Optional[datetime] = None) -> bool:
         """Sync data from specific sources"""
-        logger.info(f"Syncing data from sources: {sources} for athlete {self.athlete.id} with processors: {self.processors}")
-        if not sources or not self.processors:
-            logger.info("No sources to sync or no processors initialized")
+        logger.info(f"Starting data sync for athlete {self.athlete.id} with sources: {sources}")
+        
+        if not sources:
+            logger.warning("No sources specified for sync")
             return False
 
         success = True
-        for processor in self.processors:
-            if start_date and end_date:
-                success = processor.sync_data(start_date, end_date)
-            else:
-                success = processor.sync_data()
-            if not success:
-                logger.error(f"Sync failed for processor: {processor.__class__.__name__}")
-
+        
+        for source in sources:
+            try:
+                if source not in self.SUPPORTED_SOURCES:
+                    logger.warning(f"Unsupported source: {source}")
+                    continue
+                    
+                # Get the credential attribute name for this source
+                cred_attr = self.SUPPORTED_SOURCES[source]
+                
+                # Check if athlete has credentials for this source
+                if not hasattr(self.athlete, cred_attr):
+                    logger.warning(f"Athlete {self.athlete.id} missing credentials for {source}")
+                    continue
+                    
+                # Initialize appropriate processor
+                processor = None
+                if source == 'whoop':
+                    from .data_processors import WhoopProcessor
+                    processor = WhoopProcessor(self.athlete)
+                elif source == 'garmin':
+                    from .data_processors import GarminProcessor
+                    creds = self.athlete.garmin_credentials
+                    profile_type = getattr(creds, 'profile_type', 'default')
+                    processor = GarminProcessor(self.athlete, profile_type)
+                
+                if not processor:
+                    logger.error(f"Failed to initialize processor for {source}")
+                    success = False
+                    continue
+                    
+                # Convert datetime to date if needed
+                sync_start = start_date.date() if start_date else None
+                sync_end = end_date.date() if end_date else None
+                
+                # Perform the sync
+                if not processor.sync_data(sync_start, sync_end):
+                    logger.error(f"Sync failed for {source}")
+                    success = False
+                else:
+                    logger.info(f"Successfully synced {source} data")
+                    
+            except Exception as e:
+                logger.error(f"Error syncing {source} data: {e}", exc_info=True)
+                success = False
+                
         return success
 
     def get_biometric_data(self, days: int = 7):

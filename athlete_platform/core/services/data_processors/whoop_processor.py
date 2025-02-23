@@ -224,6 +224,9 @@ class WhoopProcessor(BaseDataProcessor):
             logger.error(f"Error getting Whoop API data: {e}")
             return None
 
+    def process_data(self, raw_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Process raw data into standardized format"""
+        pass
 
     def sync_data(self, start_date: Optional[date] = None, end_date: Optional[date] = None) -> bool:
         """Simple WHOOP data sync that just fetches from API and stores in S3"""

@@ -1,5 +1,5 @@
 from typing import Dict, Any, Optional, List
-from datetime import date
+from datetime import date, timedelta
 from .base_processor import BaseDataProcessor
 from ..exceptions import ValidationError
 from core.models import Athlete, CoreBiometricData
@@ -7,6 +7,7 @@ from core.utils.s3_utils import S3Utils
 import logging
 from datetime import datetime
 from ...utils.validation_utils import DataValidator
+from ..data_collectors.whoop_collector import WhoopCollector
 
 logger = logging.getLogger(__name__)
 
@@ -222,16 +223,123 @@ class WhoopProcessor(BaseDataProcessor):
         except Exception as e:
             logger.error(f"Error getting Whoop API data: {e}")
             return None
-    
+
+
     def sync_data(self, start_date: Optional[date] = None, end_date: Optional[date] = None) -> bool:
-        """Whoop-specific sync implementation"""
+        """Simple WHOOP data sync that just fetches from API and stores in S3"""
         try:
-            if not hasattr(self.athlete, 'whoop_credentials'):
-                logger.error("No Whoop credentials found")
+            logger.info(f"Starting simple WHOOP data sync for athlete {self.athlete.user.username}")
+            
+            # Use today if no dates provided
+            if not start_date:
+                start_date = date.today() - timedelta(days=7)
+            if not end_date:
+                end_date = date.today()
+                
+            logger.info(f"Fetching WHOOP data from {start_date} to {end_date}")
+
+            # Get data from API
+            collector = WhoopCollector(self.athlete)
+            
+            if not collector.authenticate():
+                logger.error("Failed to authenticate with WHOOP API")
+                return False
+                
+            raw_data = collector._get_from_api(start_date, end_date)
+            
+            if not raw_data:
+                logger.warning("No data retrieved from WHOOP API")
                 return False
 
-            return super().sync_data(start_date, end_date)
+            # Store each day's data in S3
+            for daily_data in raw_data:
+                try:
+                    current_date = datetime.strptime(daily_data['date'], '%Y-%m-%d').date()
+                    s3_path = f"accounts/{self.athlete.user.id}/biometric-data/whoop/{current_date.strftime('%Y-%m-%d')}_raw.json"
+                    
+                    logger.info(f"Storing WHOOP data in S3: {s3_path}")
+                    self.s3_utils.store_json(s3_path, daily_data)    
+                except Exception as e:
+                    logger.error(f"Error storing data in S3 for {daily_data.get('date')}: {e}")
+                    continue
+
+            logger.info("Simple WHOOP data sync completed")
+            return True
 
         except Exception as e:
-            logger.error(f"Error in Whoop sync: {e}")
+            logger.error(f"Error in simple WHOOP data sync: {e}", exc_info=True)
+            return False
+
+
+    
+    def sync_data_complex(self, start_date: Optional[date] = None, end_date: Optional[date] = None) -> bool:
+        """Sync Whoop data for the specified date range"""
+        try:
+            logger.info(f"Starting WHOOP data sync for athlete {self.athlete.user.username}")
+            
+            # Validate dates
+            if not start_date:
+                start_date = date.today() - timedelta(days=7)
+            if not end_date:
+                end_date = date.today()
+            
+            logger.info(f"Syncing WHOOP data from {start_date} to {end_date}")
+
+            # First check DB for existing data
+            existing_data = self._get_from_db(date_range=[start_date + timedelta(days=x) 
+                                                         for x in range((end_date - start_date).days + 1)])
+            
+            if existing_data:
+                logger.info(f"Found {len(existing_data)} existing records in DB")
+                # Create a set of dates we already have data for
+                existing_dates = {item['date'] for item in existing_data}
+                
+                # Update date range to only fetch missing dates
+                missing_dates = [d for d in (start_date + timedelta(days=x) 
+                               for x in range((end_date - start_date).days + 1)) 
+                               if d not in existing_dates]
+                
+                if not missing_dates:
+                    logger.info("No missing dates to sync")
+                    return True
+                    
+                logger.info(f"Fetching data for {len(missing_dates)} missing dates")
+                start_date = min(missing_dates)
+                end_date = max(missing_dates)
+
+            # Try to get data from API
+            from core.services.data_collectors.whoop_collector import WhoopCollector
+            collector = WhoopCollector(self.athlete)
+            
+            if not collector.authenticate():
+                logger.error("Failed to authenticate with WHOOP API")
+                return False
+            
+            raw_data = collector._get_from_api(start_date, end_date)
+            
+            if not raw_data:
+                logger.warning("No new data retrieved from WHOOP API")
+                return False
+
+            # Process and store the data
+            success = True
+            for daily_data in raw_data:
+                try:
+                    processed_data = self.process_raw_data(daily_data)
+                    if processed_data:
+                        if not self.store_processed_data(processed_data):
+                            logger.error(f"Failed to store processed data for {daily_data.get('date')}")
+                            success = False
+                    else:
+                        logger.warning(f"Failed to process data for {daily_data.get('date')}")
+                        success = False
+                except Exception as e:
+                    logger.error(f"Error processing/storing data for {daily_data.get('date')}: {e}")
+                    success = False
+
+            logger.info(f"WHOOP data sync completed with status: {success}")
+            return success
+
+        except Exception as e:
+            logger.error(f"Error in WHOOP data sync: {e}", exc_info=True)
             return False 

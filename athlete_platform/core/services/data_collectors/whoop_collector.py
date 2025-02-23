@@ -36,53 +36,84 @@ class WhoopCollector(BaseDataCollector):
         """Validate stored Whoop credentials"""
         return self.authenticate()
 
-    def collect_data(self, start_date: date, end_date: date) -> Optional[List[Dict[str, Any]]]:
-        """Collect data from Whoop API"""
+    def _get_from_api(self, start_date: date, end_date: date) -> Optional[List[Dict[str, Any]]]:
+        """Get data directly from WHOOP API for the specified date range"""
         try:
+            logger.info(f"Fetching WHOOP data from API for {start_date} to {end_date}")
+            
             if not self.whoop_client:
                 if not self.authenticate():
-                    raise CollectorError("Failed to authenticate with Whoop")
+                    logger.error("Failed to authenticate with WHOOP API")
+                    return None
 
             raw_data = []
             current_date = start_date
+            
             while current_date <= end_date:
-                daily_stats = self.whoop_client.get_daily_stats(current_date)
-                if daily_stats:
+                logger.debug(f"Fetching WHOOP data for date: {current_date}")
+                
+                try:
+                    # Get recovery data
+                    recovery = self.whoop_client.get_recovery(current_date)
+                    
+                    # Get sleep data
+                    sleep = self.whoop_client.get_sleep(current_date)
+                    
+                    # Get workout data
+                    workouts = self.whoop_client.get_workouts(current_date)
+                    
+                    # Get strain data
+                    strain = self.whoop_client.get_strain(current_date)
+                    
+                    # Combine all data for the day
+                    daily_stats = {
+                        'recovery': recovery,
+                        'sleep': sleep,
+                        'workouts': workouts,
+                        'strain': strain
+                    }
+                    
                     raw_data.append({
                         'date': current_date.strftime('%Y-%m-%d'),
                         'daily_stats': daily_stats
                     })
+                    
+                    logger.debug(f"Successfully collected WHOOP data for {current_date}")
+                    
+                except Exception as e:
+                    logger.warning(f"Failed to fetch WHOOP data for {current_date}: {e}")
+                    # Continue to next date even if this one fails
+                    
                 current_date += timedelta(days=1)
-
+                
+            if not raw_data:
+                logger.warning(f"No WHOOP data found for date range {start_date} to {end_date}")
+                return None
+                
+            logger.info(f"Successfully collected WHOOP data for {len(raw_data)} days")
             return raw_data
 
         except Exception as e:
-            logger.error(f"Error collecting Whoop data: {e}")
+            logger.error(f"Error fetching WHOOP data from API: {e}", exc_info=True)
+            return None
+
+    def collect_data(self, start_date: date, end_date: date) -> Optional[List[Dict[str, Any]]]:
+        """Collect data from Whoop API"""
+        try:
+            logger.info(f"Starting WHOOP data collection for {start_date} to {end_date}")
+            
+            # First try to get data from API
+            raw_data = self._get_from_api(start_date, end_date)
+            
+            if raw_data:
+                logger.info(f"Successfully collected {len(raw_data)} days of WHOOP data")
+                return raw_data
+            else:
+                logger.warning("Failed to collect WHOOP data")
+                return None
+
+        except Exception as e:
+            logger.error(f"Error in WHOOP data collection: {e}", exc_info=True)
             return None 
         
 
-
-"""
-example oauth collector:
-import requests
-from django.http import JsonResponse
-from ..db_models.oauth_tokens import OAuthTokens
-
-def get_whoop_profile(request):
-    #Fetch WHOOP profile data using access token
-    try:
-        oauth_token = OAuthTokens.objects.get(user=request.user, provider='whoop')
-        headers = {
-            'Authorization': f"Bearer {oauth_token.access_token}"
-        }
-
-        response = requests.get('https://api.prod.whoop.com/users/profile', headers=headers)
-        response.raise_for_status()  # Raise error for non-200 responses
-        return JsonResponse(response.json(), safe=False)
-
-    except OAuthTokens.DoesNotExist:
-        return JsonResponse({'error': 'No WHOOP token found for user.'}, status=404)
-    except requests.HTTPError as e:
-        return JsonResponse({'error': f'Failed to fetch WHOOP data: {str(e)}'}, status=400)
-
-"""

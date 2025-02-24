@@ -128,6 +128,7 @@ const BiometricsDashboard = ({ username }) => {
   const [garminProfiles, setGarminProfiles] = useState([]);
   const [activeSource, setActiveSource] = useState(null);
   const [showWhoopConnect, setShowWhoopConnect] = useState(false);
+  const [activeSources, setActiveSources] = useState([]);
   
   const sources = [
     { id: 'garmin', name: 'Garmin' },
@@ -183,11 +184,17 @@ const BiometricsDashboard = ({ username }) => {
   const fetchActiveSources = async () => {
     try {
       const response = await axios.get('/api/biometrics/active-sources/');
-      if (response.data.success) {
-        setActiveSource(response.data.sources.length > 0 ? response.data.sources[0] : null);
+      if (response.data.success && response.data.sources.length > 0) {
+        // Set active source to the first source's ID
+        setActiveSource(response.data.sources[0].id);
+        // Store the full sources data if needed
+        setActiveSources(response.data.sources);
+      } else {
+        setActiveSource(null);
       }
     } catch (err) {
       console.error('Error fetching active sources:', err);
+      setActiveSource(null);
     }
   };
 
@@ -400,8 +407,7 @@ const BiometricsDashboard = ({ username }) => {
       if (data.success) {
         setActiveSource(source);
         setSyncMessage(`${source} source activated successfully!`);
-        
-        
+        await fetchActiveSources();
         await syncData();
 
           // Fetch raw data after successful activation
@@ -481,6 +487,10 @@ const BiometricsDashboard = ({ username }) => {
     };
     
     fetchGarminProfiles();
+  }, []);
+
+  useEffect(() => {
+    fetchActiveSources();
   }, []);
 
   const handleChangeTab = (event, newValue) => {
@@ -723,8 +733,9 @@ const BiometricsDashboard = ({ username }) => {
             gap: 2,
             flexWrap: 'wrap'
           }}>
-            {activeSource && (
+            {activeSources && activeSources.map((source) => (
               <Box
+                key={source.id}
                 sx={{
                   backgroundColor: 'rgba(255, 255, 255, 0.1)',
                   padding: '8px 16px',
@@ -745,10 +756,11 @@ const BiometricsDashboard = ({ username }) => {
                   letterSpacing: '0.5px',
                   textTransform: 'uppercase'
                 }}>
-                  {activeSource}
+                  {source.name}
+                  {source.profile_type && ` - ${source.profile_type}`}
                 </Typography>
               </Box>
-            )}
+            ))}
           </Box>
         </Card>
 

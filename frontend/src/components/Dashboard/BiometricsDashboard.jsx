@@ -705,6 +705,53 @@ const BiometricsDashboard = ({ username }) => {
           </Alert>
         )}
 
+        {/* Active Sources Panel */}
+        <Card 
+          sx={{ 
+            mb: 3,
+            p: 2,
+            backgroundColor: colors.primary,
+            color: 'white',
+            boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)'
+          }}
+        >
+          <Typography variant="h6" sx={{ mb: 2, fontWeight: 600 }}>
+            Active Integrations
+          </Typography>
+          <Box sx={{ 
+            display: 'flex',
+            gap: 2,
+            flexWrap: 'wrap'
+          }}>
+            {activeSource && (
+              <Box
+                sx={{
+                  backgroundColor: 'rgba(255, 255, 255, 0.1)',
+                  padding: '8px 16px',
+                  borderRadius: '4px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 1,
+                  transition: 'transform 0.2s ease',
+                  '&:hover': {
+                    transform: 'translateY(-2px)',
+                    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+                  }
+                }}
+              >
+                <SyncIcon sx={{ fontSize: 20 }} />
+                <Typography sx={{ 
+                  fontWeight: 500,
+                  letterSpacing: '0.5px',
+                  textTransform: 'uppercase'
+                }}>
+                  {activeSource}
+                </Typography>
+              </Box>
+            )}
+          </Box>
+        </Card>
+
         <Box sx={{ mb: 2 }}>
           <Box sx={{ mb: 2 }}>
             <Button

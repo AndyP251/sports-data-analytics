@@ -9,6 +9,8 @@ from datetime import datetime, timedelta
 from requests_oauthlib import OAuth2Session
 from oauthlib.oauth2 import BackendApplicationClient
 from ..db_models.oauth_tokens import OAuthTokens
+from ..models import WhoopCredentials
+from django.utils import timezone
 import logging
 from django.core.signing import Signer
 
@@ -16,7 +18,8 @@ logger = logging.getLogger(__name__)
 
 # reference: https://developer.whoop.com/docs/developing/oauth
 
-class WhoopOAuthView(View):
+class WhoopOAuthBaseView(View):
+    """Base view to initialize WHOOP OAuth configuration for reuse."""
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
         self.client_id = settings.WHOOP_CLIENT_ID
@@ -24,10 +27,19 @@ class WhoopOAuthView(View):
         self.redirect_uri = settings.WHOOP_REDIRECT_URI
         self.auth_url = "https://api.prod.whoop.com/oauth/oauth2/auth"
         self.token_url = "https://api.prod.whoop.com/oauth/oauth2/token"
-        self.scope = "offline read:recovery read:cycles read:sleep read:workout read:profile read:body_measurement"
+        self.scope = "offline read:recovery read:cycles read:sleep read:workout read:profile"
 
+class WhoopOAuthView(WhoopOAuthBaseView):
     def get(self, request):
         """Initiate OAuth flow by redirecting to WHOOP authorization page"""
+        if not all([self.client_id, self.client_secret, self.redirect_uri]):
+            logger.error("Missing required WHOOP OAuth settings")
+            return JsonResponse({'error': 'OAuth configuration incomplete'}, status=500)
+
+        logger.debug(f"WHOOP OAuth Settings - Client ID exists: {bool(self.client_id)}")
+        logger.debug(f"WHOOP OAuth Settings - Client Secret exists: {bool(self.client_secret)}")
+        logger.debug(f"WHOOP OAuth Settings - Redirect URI: {self.redirect_uri}")
+
         oauth = OAuth2Session(
             client_id=self.client_id,
             redirect_uri=self.redirect_uri,
@@ -36,39 +48,42 @@ class WhoopOAuthView(View):
 
         authorization_url, state = oauth.authorization_url(self.auth_url)
         request.session['oauth_state'] = state
+
+        logger.debug(f"Redirecting to WHOOP authorization URL: {authorization_url}")
         return redirect(authorization_url)
 
-class WhoopCallbackView(View):
+class WhoopCallbackView(WhoopOAuthBaseView):
     def get(self, request):
         """Handle OAuth callback from WHOOP"""
         code = request.GET.get('code')
         state = request.GET.get('state')
 
-        # Validate state to prevent CSRF attacks
+        logger.info(f"Processing WHOOP OAuth callback for user: {request.user.username}")
+        logger.debug(f"WHOOP callback received - code exists: {bool(code)}")
+        logger.debug(f"State validation: received={state}, stored={request.session.get('oauth_state')}")
+
         if not state or state != request.session.get('oauth_state'):
-            logger.error("Invalid OAuth state parameter")
+            logger.error("Invalid state parameter in WHOOP callback")
             return JsonResponse({'error': 'Invalid state parameter'}, status=400)
 
         if not code:
-            logger.error("No authorization code provided")
+            logger.error("No authorization code provided in WHOOP callback")
             return JsonResponse({'error': 'No authorization code provided'}, status=400)
 
         try:
             oauth = OAuth2Session(
-                client_id=settings.WHOOP_CLIENT_ID,
-                redirect_uri=settings.WHOOP_REDIRECT_URI,
-                state=state
+                client_id=self.client_id,
+                redirect_uri=self.redirect_uri
             )
 
-            # Fetch token
             token = oauth.fetch_token(
-                token_url=settings.WHOOP_TOKEN_URL,
-                client_id=settings.WHOOP_CLIENT_ID,
-                client_secret=settings.WHOOP_CLIENT_SECRET,
-                code=code,
-                include_client_id=True,
-                authorization_response=request.build_absolute_uri()
+                token_url=self.token_url,
+                authorization_response=request.build_absolute_uri(),
+                client_id=self.client_id,
+                client_secret=self.client_secret,
+                include_client_id=True
             )
+            logger.info("Successfully exchanged code for WHOOP access token")
 
             # Store encrypted tokens
             signer = Signer()
@@ -80,8 +95,27 @@ class WhoopCallbackView(View):
                     'access_token': signer.sign(token.get('access_token')),
                     'refresh_token': signer.sign(token.get('refresh_token')),
                     'expires_at': datetime.now() + timedelta(seconds=token.get('expires_in', 0))
-                }
-            )
+                  
+
+            # Store the token in WhoopCredentials
+#             whoop_creds, created = WhoopCredentials.objects.update_or_create(
+#                 athlete=request.user.athlete,
+#                 defaults={
+#                     'access_token': token['access_token'],
+#                     'refresh_token': token['refresh_token'],
+#                     'expires_at': timezone.now() + timedelta(seconds=token['expires_in']),
+#                     'scope': token.get('scope', self.scope)
+#                 }
+#             )
+            
+            action = "Created" if created else "Updated"
+            logger.info(f"{action} WHOOP credentials for user {request.user.username}")
+
+            # Update user's active data sources
+            if 'whoop' not in request.user.active_data_sources:
+                request.user.active_data_sources.append('whoop')
+                request.user.save()
+                logger.info(f"Added WHOOP to active data sources for user {request.user.username}")
 
             logger.info(f"Successfully stored WHOOP tokens for user {request.user.id}")
             return redirect('dashboard')
@@ -108,8 +142,7 @@ def refresh_whoop_token(oauth_token):
 
         new_token = oauth.refresh_token(
             settings.WHOOP_TOKEN_URL,
-            client_id=settings.WHOOP_CLIENT_ID,
-            client_secret=settings.WHOOP_CLIENT_SECRET
+            auth=(settings.WHOOP_CLIENT_ID, settings.WHOOP_CLIENT_SECRET)
         )
 
         # Store encrypted tokens
@@ -130,8 +163,6 @@ class WhoopWebhookView(View):
     def post(self, request):
         """Handle WHOOP webhooks"""
         try:
-            # Process webhook data
-            # You might want to trigger a Celery task here to fetch updated data
             return HttpResponse(status=200)
         except Exception as e:
             logger.error(f"Webhook processing failed: {str(e)}")

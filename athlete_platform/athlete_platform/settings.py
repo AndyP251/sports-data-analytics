@@ -305,12 +305,13 @@ EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
 
 SITE_ID = 1  # Required for allauth
 
+# Logging Configuration
 LOGGING = {
     'version': 1,
     'disable_existing_loggers': False,
     'formatters': {
-        'simple': {
-            'format': '[{asctime}] {levelname}: {message}',
+        'verbose': {
+            'format': '[{asctime}] [{levelname}] {message}',
             'style': '{',
             'datefmt': '%Y-%m-%d %H:%M:%S'
         },
@@ -318,34 +319,28 @@ LOGGING = {
     'handlers': {
         'console': {
             'class': 'logging.StreamHandler',
-            'formatter': 'simple',
+            'formatter': 'verbose',
         },
         'file': {
             'class': 'logging.FileHandler',
-            'filename': 'app.log',
-            'formatter': 'simple',
+            'filename': 'debug.log',
+            'formatter': 'verbose',
         },
     },
     'loggers': {
-        'core': {  # Your app logger
-            'handlers': ['console', 'file'],
-            'level': 'INFO',  # Changed from DEBUG to INFO
+        '': {  # Root logger
+            'handlers': ['console'],
+            'level': 'INFO',
+        },
+        'core.api_views.oauth': {  # Specific to your OAuth module
+            'handlers': ['console'],
+            'level': 'DEBUG',
             'propagate': False,
         },
-        'django.db.backends': {  # Database queries
+        'django': {
             'handlers': ['console'],
-            'level': 'WARNING',  # Only log database warnings and errors
-            'propagate': False,
-        },
-        'boto3': {
-            'handlers': ['console'],
-            'level': 'WARNING',  # Reduce AWS SDK noise
-            'propagate': False,
-        },
-        'botocore': {
-            'handlers': ['console'],
-            'level': 'WARNING',  # Reduce AWS SDK noise
-            'propagate': False,
+            'level': 'INFO',
+            'propagate': True,
         },
     },
 }

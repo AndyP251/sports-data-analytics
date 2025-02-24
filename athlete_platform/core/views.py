@@ -148,12 +148,20 @@ def sync_biometric_data(request):
         athlete = request.user.athlete
         
         # Get active sources directly from the user model
-        active_sources = request.user.active_data_sources
+        # active_sources = request.user.active_data_sources
         
-        if not active_sources:
-            # Update active sources and try again
-            request.user.update_active_sources()
-            active_sources = request.user.active_data_sources
+        # if not active_sources:
+        #     # Update active sources and try again
+        #     request.user.update_active_sources()
+        #     active_sources = request.user.active_data_sources
+        active_sources = []
+        
+        # Check for active sources directly from credentials
+        if hasattr(athlete, 'garmin_credentials'):
+            active_sources.append('garmin')
+            
+        if hasattr(athlete, 'whoop_credentials'):
+            active_sources.append('whoop')
             
             if not active_sources:
                 return JsonResponse({

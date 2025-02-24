@@ -12,6 +12,7 @@ from ..db_models.oauth_tokens import OAuthTokens
 from ..models import WhoopCredentials
 from django.utils import timezone
 import logging
+from django.core.signing import Signer
 
 logger = logging.getLogger(__name__)
 
@@ -84,16 +85,28 @@ class WhoopCallbackView(WhoopOAuthBaseView):
             )
             logger.info("Successfully exchanged code for WHOOP access token")
 
-            # Store the token in WhoopCredentials
-            whoop_creds, created = WhoopCredentials.objects.update_or_create(
-                athlete=request.user.athlete,
+            # Store encrypted tokens
+            signer = Signer()
+            
+            oauth_token, created = OAuthTokens.objects.update_or_create(
+                user=request.user,
+                provider='whoop',
                 defaults={
-                    'access_token': token['access_token'],
-                    'refresh_token': token['refresh_token'],
-                    'expires_at': timezone.now() + timedelta(seconds=token['expires_in']),
-                    'scope': token.get('scope', self.scope)
-                }
-            )
+                    'access_token': signer.sign(token.get('access_token')),
+                    'refresh_token': signer.sign(token.get('refresh_token')),
+                    'expires_at': datetime.now() + timedelta(seconds=token.get('expires_in', 0))
+                  
+
+            # Store the token in WhoopCredentials
+#             whoop_creds, created = WhoopCredentials.objects.update_or_create(
+#                 athlete=request.user.athlete,
+#                 defaults={
+#                     'access_token': token['access_token'],
+#                     'refresh_token': token['refresh_token'],
+#                     'expires_at': timezone.now() + timedelta(seconds=token['expires_in']),
+#                     'scope': token.get('scope', self.scope)
+#                 }
+#             )
             
             action = "Created" if created else "Updated"
             logger.info(f"{action} WHOOP credentials for user {request.user.username}")
@@ -104,19 +117,25 @@ class WhoopCallbackView(WhoopOAuthBaseView):
                 request.user.save()
                 logger.info(f"Added WHOOP to active data sources for user {request.user.username}")
 
-            return redirect('/dashboard')  # Direct redirect to dashboard
+            logger.info(f"Successfully stored WHOOP tokens for user {request.user.id}")
+            return redirect('dashboard')
 
         except Exception as e:
-            logger.error(f"WHOOP OAuth Error: {str(e)}", exc_info=True)
+            logger.error(f"WHOOP OAuth Error: {e}", exc_info=True)
             return JsonResponse({'error': str(e)}, status=400)
 
 def refresh_whoop_token(oauth_token):
     """Utility function to refresh WHOOP token"""
     try:
+        signer = Signer()
+        
+        # Decrypt the refresh token
+        decrypted_refresh_token = signer.unsign(oauth_token.refresh_token)
+        
         oauth = OAuth2Session(
             client_id=settings.WHOOP_CLIENT_ID,
             token={
-                'refresh_token': oauth_token.decrypt_token(oauth_token.refresh_token),
+                'refresh_token': decrypted_refresh_token,
                 'token_type': 'Bearer'
             }
         )
@@ -126,15 +145,17 @@ def refresh_whoop_token(oauth_token):
             auth=(settings.WHOOP_CLIENT_ID, settings.WHOOP_CLIENT_SECRET)
         )
 
-        oauth_token.access_token = new_token.get('access_token')
-        oauth_token.refresh_token = new_token.get('refresh_token')
+        # Store encrypted tokens
+        oauth_token.access_token = signer.sign(new_token.get('access_token'))
+        oauth_token.refresh_token = signer.sign(new_token.get('refresh_token'))
         oauth_token.expires_at = datetime.now() + timedelta(seconds=new_token.get('expires_in', 0))
         oauth_token.save()
 
+        logger.info(f"Successfully refreshed WHOOP token for user {oauth_token.user.id}")
         return new_token
 
     except Exception as e:
-        logger.error(f"Token refresh failed: {str(e)}")
+        logger.error(f"Token refresh failed: {str(e)}", exc_info=True)
         raise Exception(f"Token refresh failed: {str(e)}")
 
 @method_decorator(csrf_exempt, name='dispatch')

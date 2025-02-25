@@ -135,6 +135,7 @@ def refresh_whoop_token(oauth_token):
         # Decrypt the refresh token
         decrypted_refresh_token = signer.unsign(oauth_token.refresh_token)
         
+
         oauth = OAuth2Session(
             client_id=settings.WHOOP_CLIENT_ID,
             token={

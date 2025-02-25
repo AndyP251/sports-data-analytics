@@ -4,6 +4,10 @@ from django.conf import settings
 from .s3_utils import S3Utils
 from ..db_models.oauth_tokens import OAuthTokens
 import json
+from typing import Optional, Dict
+import logging
+
+logger = logging.getLogger(__name__)
 
 class WhoopClient:
     BASE_URL = "https://api.whoop.com/v1"
@@ -11,40 +15,27 @@ class WhoopClient:
     def __init__(self, user_id):
         self.user_id = user_id
         self.s3_utils = S3Utils()
-        self.oauth_tokens = OAuthTokens.objects.get(
-            user_id=user_id,
-            provider='whoop'
-        )
+        from core.models import Athlete
+        self.whoop_credentials = Athlete.objects.get(
+            user_id=user_id
+        ).whoop_credentials
 
     def _get_headers(self):
         """Get authorization headers with current access token"""
         return {
-            "Authorization": f"Bearer {self.oauth_tokens.decrypt_token(self.oauth_tokens.access_token)}",
+            "Authorization": f"Bearer {self.whoop_credentials.decrypt_token(self.whoop_credentials.access_token)}",
             "Content-Type": "application/json"
         }
 
     def _refresh_token_if_needed(self):
         """Check and refresh token if it's close to expiring"""
-        if self.oauth_tokens.expires_at - timedelta(minutes=5) <= datetime.now():
+        if self.whoop_credentials.expires_at - timedelta(minutes=5) <= datetime.now():
             self._refresh_token()
 
     def _refresh_token(self):
         """Refresh the OAuth token"""
-        response = requests.post(
-            f"{self.BASE_URL}/oauth/token",
-            data={
-                "grant_type": "refresh_token",
-                "refresh_token": self.oauth_tokens.decrypt_token(self.oauth_tokens.refresh_token),
-                "client_id": settings.WHOOP_CLIENT_ID,
-                "client_secret": settings.WHOOP_CLIENT_SECRET
-            }
-        )
-        data = response.json()
-        
-        self.oauth_tokens.access_token = data["access_token"]
-        self.oauth_tokens.refresh_token = data["refresh_token"]
-        self.oauth_tokens.expires_at = datetime.now() + timedelta(seconds=data["expires_in"])
-        self.oauth_tokens.save()
+        from core.api_views.oauth import refresh_whoop_token
+        refresh_whoop_token(self.whoop_credentials)
 
     def get_formatted_data(self, date):
         """Collect all WHOOP data in a structured format"""
@@ -104,11 +95,164 @@ class WhoopClient:
 
     # Individual data collection methods
     def _get_recovery_data(self, date):
-        response = requests.get(
-            f"{self.BASE_URL}/recovery/{date.strftime('%Y-%m-%d')}",
-            headers=self._get_headers()
-        )
-        return response.json()
+        """Get recovery data for a specific date"""
+        try:
+            response = requests.get(
+                f"https://api.prod.whoop.com/developer/v1/recovery/{date.strftime('%Y-%m-%d')}",
+                headers=self._get_headers()
+            )
+            if response.status_code == 200:
+                return response.json()
+            return None
+        except Exception as e:
+            logger.error(f"Error getting recovery data: {e}")
+            return None
+
+    def _get_sleep_data(self, date):
+        """Get sleep data for a specific date"""
+        try:
+            # First get sleep IDs for the date
+            response = requests.get(
+                "https://api.prod.whoop.com/developer/v1/activity/sleep",
+                params={
+                    'start': f"{date.strftime('%Y-%m-%d')}T00:00:00.000Z",
+                    'end': f"{date.strftime('%Y-%m-%d')}T23:59:59.999Z"
+                },
+                headers=self._get_headers()
+            )
+            if response.status_code != 200:
+                return None
+
+            sleep_records = response.json().get('records', [])
+            if not sleep_records:
+                return None
+
+            # Get detailed sleep data for the most recent sleep record
+            sleep_id = sleep_records[0].get('id')
+            if not sleep_id:
+                return None
+
+            detail_response = requests.get(
+                f"https://api.prod.whoop.com/developer/v1/activity/sleep/{sleep_id}",
+                headers=self._get_headers()
+            )
+            if detail_response.status_code == 200:
+                return detail_response.json()
+            return None
+        except Exception as e:
+            logger.error(f"Error getting sleep data: {e}")
+            return None
+
+    def _get_cycles_data(self, date):
+        """Get cycle data for a specific date"""
+        try:
+            # First get cycle IDs for the date
+            response = requests.get(
+                "https://api.prod.whoop.com/developer/v1/cycle",
+                params={
+                    'start': f"{date.strftime('%Y-%m-%d')}T00:00:00.000Z",
+                    'end': f"{date.strftime('%Y-%m-%d')}T23:59:59.999Z"
+                },
+                headers=self._get_headers()
+            )
+            if response.status_code != 200:
+                return None
+
+            cycle_records = response.json().get('records', [])
+            if not cycle_records:
+                return None
+
+            # Get detailed cycle data for the most recent cycle
+            cycle_id = cycle_records[0].get('id')
+            if not cycle_id:
+                return None
+
+            detail_response = requests.get(
+                f"https://api.prod.whoop.com/developer/v1/cycle/{cycle_id}",
+                headers=self._get_headers()
+            )
+            if detail_response.status_code == 200:
+                return detail_response.json()
+            return None
+        except Exception as e:
+            logger.error(f"Error getting cycle data: {e}")
+            return None
+
+    def _get_workout_data(self, date):
+        """Get workout data for a specific date"""
+        try:
+            # First get workout IDs for the date
+            response = requests.get(
+                "https://api.prod.whoop.com/developer/v1/activity/workout",
+                params={
+                    'start': f"{date.strftime('%Y-%m-%d')}T00:00:00.000Z",
+                    'end': f"{date.strftime('%Y-%m-%d')}T23:59:59.999Z"
+                },
+                headers=self._get_headers()
+            )
+            if response.status_code != 200:
+                return []
+
+            workout_records = response.json().get('records', [])
+            if not workout_records:
+                return []
+
+            # Get detailed data for each workout
+            detailed_workouts = []
+            for workout in workout_records:
+                workout_id = workout.get('id')
+                if not workout_id:
+                    continue
+
+                detail_response = requests.get(
+                    f"https://api.prod.whoop.com/developer/v1/activity/workout/{workout_id}",
+                    headers=self._get_headers()
+                )
+                if detail_response.status_code == 200:
+                    detailed_workouts.append(detail_response.json())
+
+            return detailed_workouts
+        except Exception as e:
+            logger.error(f"Error getting workout data: {e}")
+            return []
+
+    def _get_body_measurements(self, date):
+        """Get body measurements for a specific date"""
+        try:
+            response = requests.get(
+                "https://api.prod.whoop.com/developer/v1/user/measurement/body",
+                params={
+                    'start': f"{date.strftime('%Y-%m-%d')}T00:00:00.000Z",
+                    'end': f"{date.strftime('%Y-%m-%d')}T23:59:59.999Z"
+                },
+                headers=self._get_headers()
+            )
+            if response.status_code == 200:
+                return response.json()
+            return None
+        except Exception as e:
+            logger.error(f"Error getting body measurements: {e}")
+            return None
+
+    def make_request(self, method: str, url: str, params: dict = None) -> Optional[Dict]:
+        """Make an authenticated request to the WHOOP API"""
+        try:
+            response = requests.request(
+                method,
+                url,
+                headers=self._get_headers(),
+                params=params
+            )
+            
+            if response.status_code == 200:
+                return response.json()
+            else:
+                logger.error(f"API request failed: {response.status_code} - {response.text}")
+                return None
+            
+        except Exception as e:
+            logger.error(f"Error making API request: {e}")
+            return None
 
     # Add other methods for sleep, cycles, workout, etc.
     # Following similar pattern as above 

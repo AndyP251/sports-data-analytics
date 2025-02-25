@@ -146,14 +146,6 @@ def sync_biometric_data(request):
     """API endpoint for syncing biometric data"""
     try:
         athlete = request.user.athlete
-        
-        # Get active sources directly from the user model
-        # active_sources = request.user.active_data_sources
-        
-        # if not active_sources:
-        #     # Update active sources and try again
-        #     request.user.update_active_sources()
-        #     active_sources = request.user.active_data_sources
         active_sources = []
         
         # Check for active sources directly from credentials

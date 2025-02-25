@@ -135,20 +135,22 @@ def refresh_whoop_token(oauth_token):
         # Decrypt the refresh token
         decrypted_refresh_token = signer.unsign(oauth_token.refresh_token)
         
-
+        print("Initializing OAuth2Session for refresh...")
         oauth = OAuth2Session(
             client_id=settings.WHOOP_CLIENT_ID,
+            client_secret=settings.WHOOP_CLIENT_SECRET,
+            include_client_id=True,
             token={
                 'refresh_token': decrypted_refresh_token,
                 'token_type': 'Bearer'
             }
         )
-
+        print("Refreshing token...")
         new_token = oauth.refresh_token(
             settings.WHOOP_TOKEN_URL,
             auth=(settings.WHOOP_CLIENT_ID, settings.WHOOP_CLIENT_SECRET)
         )
-
+        print("Token refreshed, storing in DB...")
         # Store encrypted tokens
         oauth_token.access_token = signer.sign(new_token.get('access_token'))
         oauth_token.refresh_token = signer.sign(new_token.get('refresh_token'))

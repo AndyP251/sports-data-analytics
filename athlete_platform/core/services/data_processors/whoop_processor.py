@@ -253,10 +253,10 @@ class WhoopProcessor(BaseDataProcessor):
             for daily_data in raw_data:
                 try:
                     current_date = datetime.strptime(daily_data['date'], '%Y-%m-%d').date()
-                    s3_path = f"accounts/{self.athlete.user.id}/biometric-data/whoop/{current_date.strftime('%Y-%m-%d')}_raw.json"
+                    s3_path = f"{self.base_path}/{current_date.strftime('%Y-%m-%d')}_raw.json"
                     
                     logger.info(f"Storing WHOOP data in S3: {s3_path}")
-                    self.s3_utils.store_json(s3_path, daily_data)    
+                    self.s3_utils.store_json_data(s3_path, daily_data)    
                 except Exception as e:
                     logger.error(f"Error storing data in S3 for {daily_data.get('date')}: {e}")
                     continue

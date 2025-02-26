@@ -34,6 +34,7 @@ class WhoopCollector(BaseDataCollector):
             if whoop_creds.is_expired():
                 logger.info(f"WHOOP token expired for athlete {self.athlete.user.username}, attempting refresh")
                 if not self._refresh_token(whoop_creds):
+                    logger.error(f"Failed to refresh WHOOP token for athlete {self.athlete.user.username}")
                     return False
             
             signer = Signer()

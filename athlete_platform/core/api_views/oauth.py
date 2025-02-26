@@ -158,7 +158,7 @@ def refresh_whoop_token(oauth_token):
         oauth_token.expires_at = datetime.now() + timedelta(seconds=new_token.get('expires_in', 0))
         oauth_token.save()
 
-        logger.info(f"Successfully refreshed WHOOP token for user {oauth_token.user.id}")
+        logger.info(f"Successfully refreshed WHOOP token!")
         return new_token
 
     except Exception as e:

@@ -106,7 +106,7 @@ class WhoopCallbackView(WhoopOAuthBaseView):
                 defaults={
                     'access_token': signer.sign(token['access_token']),
                     'refresh_token': signer.sign(token['refresh_token']),
-                    'expires_at': datetime.now() + timedelta(seconds=token['expires_in']),
+                    'expires_at': timezone.now() + timedelta(seconds=token['expires_in']),
                     'scope': token.get('scope', self.scope)
                 }
             )
@@ -155,7 +155,7 @@ def refresh_whoop_token(oauth_token):
         # Store encrypted tokens
         oauth_token.access_token = signer.sign(new_token.get('access_token'))
         oauth_token.refresh_token = signer.sign(new_token.get('refresh_token'))
-        oauth_token.expires_at = datetime.now() + timedelta(seconds=new_token.get('expires_in', 0))
+        oauth_token.expires_at = timezone.now() + timedelta(seconds=new_token.get('expires_in', 0))
         oauth_token.save()
 
         logger.info(f"Successfully refreshed WHOOP token!")

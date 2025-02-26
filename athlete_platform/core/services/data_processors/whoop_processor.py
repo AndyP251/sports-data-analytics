@@ -8,6 +8,7 @@ import logging
 from datetime import datetime
 from ...utils.validation_utils import DataValidator
 from ..data_collectors.whoop_collector import WhoopCollector
+import json
 
 logger = logging.getLogger(__name__)
 
@@ -256,7 +257,7 @@ class WhoopProcessor(BaseDataProcessor):
                     s3_path = f"{self.base_path}/{current_date.strftime('%Y-%m-%d')}_raw.json"
                     
                     logger.info(f"Storing WHOOP data in S3: {s3_path}")
-                    self.s3_utils.store_json_data(s3_path, daily_data)    
+                    self.s3_utils.store_json_data(s3_path, json.dumps(daily_data))    
                 except Exception as e:
                     logger.error(f"Error storing data in S3 for {daily_data.get('date')}: {e}")
                     continue

@@ -277,8 +277,11 @@ class WhoopCollector(BaseDataCollector):
             logger.info("Starting WHOOP token refresh")
             from core.api_views.oauth import refresh_whoop_token
             new_token = refresh_whoop_token(whoop_creds)
-            logger.info("WHOOP token refresh completed successfully")
-            return True
+            if new_token:
+                self.access_token = new_token.get('access_token')
+                logger.info("WHOOP token refresh completed successfully")
+                return True
+            return False
         except Exception as e:
             logger.error(f"Failed to refresh WHOOP token: {e}")
             return False

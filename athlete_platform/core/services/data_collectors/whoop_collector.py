@@ -39,6 +39,7 @@ class WhoopCollector(BaseDataCollector):
             
             signer = Signer()
             self.access_token = signer.unsign(whoop_creds.access_token)
+            logger.info(f"[DEBUG]Unsigned token (first 10 chars): {self.access_token[:10]}")
             logger.info(f"WHOOP authentication successful for athlete {self.athlete.user.username}")
             return True
             

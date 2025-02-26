@@ -103,9 +103,22 @@ class WhoopCollector(BaseDataCollector):
                 if next_token:
                     params['nextToken'] = next_token
 
+                # Different endpoint structure for different data types
+                if data_type == 'recovery':
+                    url = f"{self.BASE_URL}/recovery"
+                elif data_type == 'sleep':
+                    url = f"{self.BASE_URL}/activity/sleep"
+                elif data_type == 'workout':
+                    url = f"{self.BASE_URL}/activity/workout"
+                elif data_type == 'cycle':
+                    url = f"{self.BASE_URL}/cycle"
+                else:
+                    logger.error(f"Invalid data type: {data_type}")
+                    return None
+
                 response = self.make_request(
                     'GET',
-                    f"{self.BASE_URL}/activity/{data_type}",
+                    url,
                     params=params
                 )
                 
@@ -131,7 +144,7 @@ class WhoopCollector(BaseDataCollector):
             logger.error(f"Error getting {data_type} data: {e}")
             return None if data_type != 'workout' else []
 
-    def _get_detailed_workouts(self, workout_records):
+    def _get_detailed_workouts(self, workout_records: List[Dict]) -> List[Dict]:
         """Get detailed data for each workout"""
         detailed_workouts = []
         for workout in workout_records:
@@ -141,17 +154,77 @@ class WhoopCollector(BaseDataCollector):
                     f"{self.BASE_URL}/activity/workout/{workout_id}"
                 )
                 if detail:
-                    detailed_workouts.append(detail)
+                    # Extract relevant fields from the workout detail
+                    workout_data = {
+                        'id': detail.get('id'),
+                        'start': detail.get('start'),
+                        'end': detail.get('end'),
+                        'sport_id': detail.get('sport_id'),
+                        'score': detail.get('score', {})
+                    }
+                    detailed_workouts.append(workout_data)
         return detailed_workouts
 
-    def _get_detailed_record(self, data_type: str, record: Dict):
+    def _get_detailed_record(self, data_type: str, record: Dict) -> Optional[Dict]:
         """Get detailed data for a single record"""
-        if record_id := record.get('id'):
+        if not record or not (record_id := record.get('id')):
+            return None
+
+        try:
+            if data_type == 'sleep':
+                url = f"{self.BASE_URL}/activity/sleep/{record_id}"
+            elif data_type == 'recovery':
+                # Recovery data is already detailed in the records response
+                return record.get('score', {})
+            elif data_type == 'cycle':
+                url = f"{self.BASE_URL}/cycle/{record_id}"
+            else:
+                logger.error(f"Unsupported data type for detailed record: {data_type}")
+                return None
+
+            detail = self.make_request('GET', url)
+            if not detail:
+                return None
+
+            # Extract relevant fields based on data type
+            if data_type == 'sleep':
+                return {
+                    'id': detail.get('id'),
+                    'start': detail.get('start'),
+                    'end': detail.get('end'),
+                    'nap': detail.get('nap', False),
+                    'score': {
+                        'stage_summary': detail.get('score', {}).get('stage_summary', {}),
+                        'respiratory_rate': detail.get('score', {}).get('respiratory_rate'),
+                        'sleep_performance_percentage': detail.get('score', {}).get('sleep_performance_percentage'),
+                        'sleep_consistency_percentage': detail.get('score', {}).get('sleep_consistency_percentage'),
+                        'sleep_efficiency_percentage': detail.get('score', {}).get('sleep_efficiency_percentage')
+                    }
+                }
+            elif data_type == 'cycle':
+                return {
+                    'id': detail.get('id'),
+                    'start': detail.get('start'),
+                    'end': detail.get('end'),
+                    'score': detail.get('score', {})
+                }
+
+            return detail
+
+        except Exception as e:
+            logger.error(f"Error getting detailed {data_type} record: {e}")
+            return None
+
+    def _get_user_measurements(self) -> Optional[Dict]:
+        """Get user body measurements"""
+        try:
             return self.make_request(
                 'GET',
-                f"{self.BASE_URL}/activity/{data_type}/{record_id}"
+                f"{self.BASE_URL}/user/measurement/body"
             )
-        return None
+        except Exception as e:
+            logger.error(f"Error getting user measurements: {e}")
+            return None
 
     def _get_from_api(self, start_date: date, end_date: date) -> Optional[List[Dict[str, Any]]]:
         """Get data directly from WHOOP API for the specified date range"""
@@ -178,6 +251,11 @@ class WhoopCollector(BaseDataCollector):
                 
                 # Only add days with actual data
                 if any(daily_data['daily_stats'].values()):
+                    # Add user measurements only once
+                    if not raw_data:
+                        measurements = self._get_user_measurements()
+                        if measurements:
+                            daily_data['user_measurements'] = measurements
                     raw_data.append(daily_data)
                 
                 current_date += timedelta(days=1)

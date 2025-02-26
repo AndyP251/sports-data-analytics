@@ -6,7 +6,6 @@ from .forms import CustomUserCreationForm
 from .utils.s3_utils import S3Utils
 from .models import Athlete, CoreBiometricData, create_biometric_data, get_athlete_biometrics
 from django.http import JsonResponse
-from .utils.garmin_utils import GarminDataCollector
 from django.views.decorators.http import require_POST, require_http_methods
 from datetime import datetime
 from django.contrib.auth import get_user_model
@@ -17,7 +16,6 @@ import boto3
 from botocore.exceptions import ClientError
 import json
 from .services.data_sync_service import DataSyncService
-# from .services.data_pipeline_service import DataPipelineService
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from django.views.decorators.csrf import ensure_csrf_cookie, csrf_exempt
@@ -73,11 +71,7 @@ def login_view(request):
 def dashboard_view(request):
     try:
         athlete = request.user.athlete
-        
-        # Use DataPipelineService instead of DataSyncService
-        # pipeline_service = DataPipelineService(athlete)
-        # pipeline_service.sync_athlete_data()
-        
+
         # Get latest data from database
         latest_data = get_athlete_biometrics(athlete, timezone.now().date())
         

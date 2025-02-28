@@ -253,6 +253,19 @@ class CoreBiometricData(models.Model):
     low_stress_percentage = models.FloatField(default=0)
     medium_stress_percentage = models.FloatField(default=0)
     high_stress_percentage = models.FloatField(default=0)
+    
+    # Whoop-specific metrics
+    sleep_score = models.FloatField(default=0)
+    sleep_efficiency = models.FloatField(default=0) 
+    sleep_consistency = models.FloatField(default=0)
+    sleep_disturbances = models.IntegerField(default=0)
+    recovery_score = models.FloatField(default=0)
+    hrv_ms = models.FloatField(default=0)
+    day_strain = models.FloatField(default=0)
+    calories_burned = models.FloatField(default=0)
+    spo2_percentage = models.FloatField(default=0)
+    skin_temp_celsius = models.FloatField(default=0)
+    respiratory_rate = models.FloatField(default=0)
 
     source = models.CharField(max_length=20, default='garmin')
     created_at = models.DateTimeField(default=timezone.now)

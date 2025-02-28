@@ -1,5 +1,5 @@
 from typing import Dict, Any, Optional, List
-from datetime import date, timedelta
+from datetime import date, timedelta, datetime
 from .base_processor import BaseDataProcessor
 from ..exceptions import ValidationError
 from core.models import Athlete, CoreBiometricData
@@ -8,6 +8,7 @@ import logging
 from datetime import datetime
 from ...utils.validation_utils import DataValidator
 from ..data_collectors.whoop_collector import WhoopCollector
+from ..data_transformers.whoop_transformer import WhoopTransformer
 import json
 
 logger = logging.getLogger(__name__)
@@ -19,6 +20,8 @@ class WhoopProcessor(BaseDataProcessor):
         super().__init__(athlete)
         self.s3_utils = S3Utils()
         self.base_path = f"accounts/{self.athlete.user.id}/biometric-data/whoop"
+        self.collector = WhoopCollector(self.athlete)
+        self.transformer = WhoopTransformer()
     
     def check_s3_freshness(self, date_range: List[date]) -> bool:
         """Check if S3 data is fresh for the given date range"""
@@ -36,51 +39,80 @@ class WhoopProcessor(BaseDataProcessor):
                 return None
 
             # Extract date and daily stats
-            date = raw_data.get('date')
+            date_str = raw_data.get('date')
             daily_stats = raw_data.get('daily_stats', {})
             if not daily_stats:
-                logger.error(f"No daily stats found for {date}, data: {raw_data}")
+                logger.error(f"No daily stats found for {date_str}, data: {raw_data}")
                 return None
 
             # Extract all data components
             sleep_data = daily_stats.get('sleep', {})
             recovery_data = daily_stats.get('recovery', {})
-            strain_data = daily_stats.get('strain', {})
+            cycle_data = daily_stats.get('cycle', {})
             workout_data = daily_stats.get('workouts', [])
-
+            
+            # Additional recovery data might be nested within cycle data
+            cycle_recovery_data = cycle_data.get('recovery', {})
+            
+            # Combine recovery data sources if available
+            if not recovery_data and cycle_recovery_data:
+                recovery_data = cycle_recovery_data
+            
+            # Process sleep data with proper null handling
+            sleep_score = sleep_data.get('score', {})
+            stage_summary = sleep_score.get('stage_summary', {})
+            
+            # Extract user measurements if available
+            user_measurements = raw_data.get('user_measurements', {})
+            
+            # Safely extract values with proper null handling
             return {
-                'date': date,
+                'date': date_str,
                 'source': 'whoop',
                 'metrics': {
                     # Sleep metrics
-                    'total_sleep_seconds': sleep_data.get('total_sleep_seconds', 0),
-                    'deep_sleep_seconds': sleep_data.get('slow_wave_sleep_seconds', 0),
-                    'light_sleep_seconds': sleep_data.get('light_sleep_seconds', 0),
-                    'rem_sleep_seconds': sleep_data.get('rem_sleep_seconds', 0),
-                    'sleep_score': sleep_data.get('sleep_score', 0),
-                    'sleep_quality': sleep_data.get('sleep_quality', 0),
-                    'sleep_consistency': sleep_data.get('sleep_consistency', 0),
-                    'sleep_efficiency': sleep_data.get('sleep_efficiency', 0),
-                    'respiratory_rate': sleep_data.get('respiratory_rate', 0),
+                    'total_sleep_seconds': self._safe_get(stage_summary, 'total_in_bed_time_milli', 0) / 1000,
+                    'deep_sleep_seconds': self._safe_get(stage_summary, 'total_slow_wave_sleep_time_milli', 0) / 1000,
+                    'light_sleep_seconds': self._safe_get(stage_summary, 'total_light_sleep_time_milli', 0) / 1000,
+                    'rem_sleep_seconds': self._safe_get(stage_summary, 'total_rem_sleep_time_milli', 0) / 1000,
+                    'awake_sleep_seconds': self._safe_get(stage_summary, 'total_awake_time_milli', 0) / 1000,
+                    'sleep_score': self._safe_get(sleep_score, 'sleep_performance_percentage', 0),
+                    'sleep_quality': self._safe_get(sleep_score, 'sleep_efficiency_percentage', 0),
+                    'sleep_consistency': self._safe_get(sleep_score, 'sleep_consistency_percentage', 0),
+                    'sleep_efficiency': self._safe_get(sleep_score, 'sleep_efficiency_percentage', 0),
+                    'respiratory_rate': self._safe_get(sleep_score, 'respiratory_rate', 0),
+                    'sleep_cycle_count': self._safe_get(stage_summary, 'sleep_cycle_count', 0),
+                    'sleep_disturbances': self._safe_get(stage_summary, 'disturbance_count', 0),
                     
                     # Recovery metrics
-                    'recovery_score': recovery_data.get('recovery_score', 0),
-                    'resting_heart_rate': recovery_data.get('resting_heart_rate', 0),
-                    'hrv_ms': recovery_data.get('hrv_milliseconds', 0),
-                    'spo2_percentage': recovery_data.get('spo2_percentage', 0),
-                    'skin_temp_celsius': recovery_data.get('skin_temp_celsius', 0),
+                    'recovery_score': self._safe_get(recovery_data, 'recovery_score', 0),
+                    'resting_heart_rate': self._safe_get(recovery_data, 'resting_heart_rate', 0),
+                    'hrv_ms': self._safe_get(recovery_data, 'hrv_rmssd_milli', 0),
+                    'spo2_percentage': self._safe_get(recovery_data, 'spo2_percentage', 0),
+                    'skin_temp_celsius': self._safe_get(recovery_data, 'skin_temp_celsius', 0),
                     
-                    # Strain metrics
-                    'day_strain': strain_data.get('day_strain', 0),
-                    'max_heart_rate': strain_data.get('max_heart_rate', 0),
-                    'average_heart_rate': strain_data.get('average_heart_rate', 0),
-                    'kilojoules': strain_data.get('kilojoules', 0),
-                    'calories_burned': strain_data.get('calories', 0),
+                    # Cycle/strain metrics
+                    'day_strain': self._safe_get(cycle_data.get('score', {}), 'strain', 0),
+                    'max_heart_rate': self._safe_get(cycle_data.get('score', {}), 'max_heart_rate', 0),
+                    'average_heart_rate': self._safe_get(cycle_data.get('score', {}), 'average_heart_rate', 0),
+                    'kilojoules': self._safe_get(cycle_data.get('score', {}), 'kilojoule', 0),
+                    'calories_burned': self._safe_get(cycle_data.get('score', {}), 'kilojoule', 0) / 4.184,  # Convert kJ to calories
+                    
+                    # User measurements
+                    'height_m': user_measurements.get('height_meter', 0),
+                    'weight_kg': user_measurements.get('weight_kilogram', 0),
+                    'max_possible_hr': user_measurements.get('max_heart_rate', 0),
                 },
                 # Store raw time series data for potential future use
                 'time_series': {
-                    'heart_rate_data': strain_data.get('heart_rate_data', {}),
-                    'hrv_samples': recovery_data.get('hrv_samples', {}),
+                    'sleep': {
+                        'start': sleep_data.get('start', ''),
+                        'end': sleep_data.get('end', ''),
+                    },
+                    'cycle': {
+                        'start': cycle_data.get('start', ''),
+                        'end': cycle_data.get('end', ''),
+                    },
                     'workout_data': workout_data
                 }
             }
@@ -89,26 +121,60 @@ class WhoopProcessor(BaseDataProcessor):
             logger.error(f"Error processing Whoop data: {e}", exc_info=True)
             return None
     
+    def _safe_get(self, data, key, default=0):
+        """Safely get a value from a dictionary with proper type handling"""
+        if not data or key not in data:
+            return default
+            
+        value = data.get(key)
+        
+        if value is None:
+            return default
+            
+        # Handle numeric values
+        if isinstance(default, (int, float)):
+            try:
+                return float(value)
+            except (ValueError, TypeError):
+                return default
+                
+        return value
+    
     def validate_data(self, processed_data: Dict[str, Any]) -> bool:
         """Validate processed Whoop data"""
-        return DataValidator.validate_required_fields(
-            processed_data,
-            ['date', 'source'],
-            {
-                'metrics': [
-                    'total_sleep_seconds', 'deep_sleep_seconds', 'light_sleep_seconds', 'rem_sleep_seconds',
-                    'sleep_score', 'sleep_quality', 'sleep_consistency', 'sleep_efficiency', 'respiratory_rate',
-                    'recovery_score', 'resting_heart_rate', 'hrv_ms', 'spo2_percentage', 'skin_temp_celsius',
-                    'day_strain', 'max_heart_rate', 'average_heart_rate', 'kilojoules', 'calories_burned'
-                ]
-            }
-        )
+        if not processed_data:
+            return False
+            
+        required_fields = ['date', 'source']
+        
+        # Only validate the existence of these fields, not their values
+        for field in required_fields:
+            if field not in processed_data:
+                logger.error(f"Missing required field: {field}")
+                return False
+                
+        # Ensure metrics dictionary exists
+        if 'metrics' not in processed_data:
+            logger.error("Missing metrics dictionary")
+            return False
+            
+        return True
     
     def store_processed_data(self, processed_data: Dict[str, Any]) -> bool:
         """Store processed Whoop data"""
         try:
+            if not processed_data:
+                logger.error("No processed data to store")
+                return False
+                
             metrics = processed_data.get('metrics', {})
-            date = processed_data.get('date')
+            date_str = processed_data.get('date')
+            
+            try:
+                data_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+            except (ValueError, TypeError):
+                logger.error(f"Invalid date format: {date_str}")
+                return False
             
             # Set default values for required fields
             defaults = {
@@ -125,12 +191,16 @@ class WhoopProcessor(BaseDataProcessor):
                 'respiratory_rate': metrics.get('respiratory_rate', 0),
                 'day_strain': metrics.get('day_strain', 0),
                 'calories_burned': metrics.get('calories_burned', 0),
-                'sleep_resting_heart_rate': metrics.get('sleep_resting_heart_rate', 0)  # Add default
+                'sleep_efficiency': metrics.get('sleep_efficiency', 0),
+                'sleep_consistency': metrics.get('sleep_consistency', 0),
+                'sleep_disturbances': metrics.get('sleep_disturbances', 0),
+                'spo2_percentage': metrics.get('spo2_percentage', 0),
+                'skin_temp_celsius': metrics.get('skin_temp_celsius', 0)
             }
 
             biometric_data, created = CoreBiometricData.objects.get_or_create(
                 athlete=self.athlete,
-                date=date,
+                date=data_date,
                 source='whoop',
                 defaults=defaults
             )
@@ -142,7 +212,7 @@ class WhoopProcessor(BaseDataProcessor):
 
             # Store time series data in S3
             if processed_data.get('time_series'):
-                file_name = f"{date.strftime('%Y%m%d')}_time_series.json"
+                file_name = f"{data_date.strftime('%Y%m%d')}_time_series.json"
                 self.s3_utils.store_json_data(
                     f"{self.base_path}/time_series",
                     file_name,
@@ -168,14 +238,20 @@ class WhoopProcessor(BaseDataProcessor):
                 'date': item.date,
                 'source': 'whoop',
                 'metrics': {
-                    'total_sleep': item.total_sleep_seconds,
-                    'deep_sleep': item.deep_sleep_seconds,
-                    'light_sleep': item.light_sleep_seconds,
-                    'rem_sleep': item.rem_sleep_seconds,
+                    'total_sleep_seconds': item.total_sleep_seconds,
+                    'deep_sleep_seconds': item.deep_sleep_seconds,
+                    'light_sleep_seconds': item.light_sleep_seconds,
+                    'rem_sleep_seconds': item.rem_sleep_seconds,
                     'resting_heart_rate': item.resting_heart_rate,
                     'max_heart_rate': item.max_heart_rate,
                     'recovery_score': item.recovery_score,
-                    'strain_score': item.strain_score
+                    'day_strain': item.day_strain,
+                    'calories_burned': item.calories_burned,
+                    'hrv_ms': item.hrv_ms,
+                    'respiratory_rate': item.respiratory_rate,
+                    'sleep_score': item.sleep_score,
+                    'sleep_efficiency': item.sleep_efficiency,
+                    'sleep_consistency': item.sleep_consistency
                 }
             } for item in data]
             
@@ -202,19 +278,12 @@ class WhoopProcessor(BaseDataProcessor):
     def _get_from_api(self, date_range: List[date]) -> Optional[List[Dict[str, Any]]]:
         """Whoop-specific API data fetch"""
         try:
-            from core.utils.whoop_utils import WhoopClient
-            client = WhoopClient(self.athlete.whoop_credentials)
+            raw_data = self.collector.collect_data(min(date_range), max(date_range))
             
-            raw_data = []
-            for current_date in date_range:
-                daily_data = client.get_daily_stats(current_date)
-                if daily_data:
-                    raw_data.append({
-                        'date': current_date,
-                        'daily_stats': daily_data
-                    })
-            
-            return [self.process_raw_data(data) for data in raw_data] if raw_data else None
+            if not raw_data:
+                return None
+                
+            return [self.process_raw_data(data) for data in raw_data]
             
         except Exception as e:
             logger.error(f"Error getting Whoop API data: {e}")
@@ -222,12 +291,21 @@ class WhoopProcessor(BaseDataProcessor):
 
     def process_data(self, raw_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """Process raw data into standardized format"""
-        pass
+        try:
+            # Use the transformer to standardize the data
+            standardized_data = self.transformer.transform_to_standard_format(raw_data)
+            
+            # Convert standardized data to flat structure for storage
+            return self.process_raw_data(raw_data)
+            
+        except Exception as e:
+            logger.error(f"Error processing Whoop data: {e}", exc_info=True)
+            return None
 
     def sync_data(self, start_date: Optional[date] = None, end_date: Optional[date] = None) -> bool:
-        """Simple WHOOP data sync that just fetches from API and stores in S3"""
+        """Simple WHOOP data sync that fetches from API and stores in S3"""
         try:
-            logger.info(f"Starting simple WHOOP data sync for athlete {self.athlete.user.username}")
+            logger.info(f"Starting WHOOP data sync for athlete {self.athlete.user.username}")
             
             # Use today if no dates provided
             if not start_date:
@@ -237,106 +315,43 @@ class WhoopProcessor(BaseDataProcessor):
                 
             logger.info(f"Fetching WHOOP data from {start_date} to {end_date}")
 
-            # Get data from API
-            collector = WhoopCollector(self.athlete)
-            
-            if not collector.authenticate():
+            # Get data from API using collector
+            if not self.collector.authenticate():
                 logger.error("Failed to authenticate with WHOOP API")
                 return False
                 
-            raw_data = collector._get_from_api(start_date, end_date)
+            raw_data = self.collector.collect_data(start_date, end_date)
             
             if not raw_data:
                 logger.warning("No data retrieved from WHOOP API")
                 return False
 
-            # Store each day's data in S3
-            for daily_data in raw_data:
-                try:
-                    current_date = datetime.strptime(daily_data['date'], '%Y-%m-%d').date()
-                    
-                    logger.info(f"Storing WHOOP data in S3: {self.base_path}")
-                    self.s3_utils.store_json_data(
-                        self.base_path, 
-                        f"{current_date.strftime('%Y-%m-%d')}_raw.json",
-                        json.dumps(daily_data),
-                        )    
-                except Exception as e:
-                    logger.error(f"Error storing data in S3 for {daily_data.get('date')}: {e}")
-                    continue
-
-            logger.info("Simple WHOOP data sync completed")
-            return True
-
-        except Exception as e:
-            logger.error(f"Error in simple WHOOP data sync: {e}", exc_info=True)
-            return False
-
-
-    
-    def sync_data_complex(self, start_date: Optional[date] = None, end_date: Optional[date] = None) -> bool:
-        """Sync Whoop data for the specified date range"""
-        try:
-            logger.info(f"Starting WHOOP data sync for athlete {self.athlete.user.username}")
-            
-            # Validate dates
-            if not start_date:
-                start_date = date.today() - timedelta(days=7)
-            if not end_date:
-                end_date = date.today()
-            
-            logger.info(f"Syncing WHOOP data from {start_date} to {end_date}")
-
-            # First check DB for existing data
-            existing_data = self._get_from_db(date_range=[start_date + timedelta(days=x) 
-                                                         for x in range((end_date - start_date).days + 1)])
-            
-            if existing_data:
-                logger.info(f"Found {len(existing_data)} existing records in DB")
-                # Create a set of dates we already have data for
-                existing_dates = {item['date'] for item in existing_data}
-                
-                # Update date range to only fetch missing dates
-                missing_dates = [d for d in (start_date + timedelta(days=x) 
-                               for x in range((end_date - start_date).days + 1)) 
-                               if d not in existing_dates]
-                
-                if not missing_dates:
-                    logger.info("No missing dates to sync")
-                    return True
-                    
-                logger.info(f"Fetching data for {len(missing_dates)} missing dates")
-                start_date = min(missing_dates)
-                end_date = max(missing_dates)
-
-            # Try to get data from API
-            from core.services.data_collectors.whoop_collector import WhoopCollector
-            collector = WhoopCollector(self.athlete)
-            
-            if not collector.authenticate():
-                logger.error("Failed to authenticate with WHOOP API")
-                return False
-            
-            raw_data = collector._get_from_api(start_date, end_date)
-            
-            if not raw_data:
-                logger.warning("No new data retrieved from WHOOP API")
-                return False
-
-            # Process and store the data
+            # Store each day's raw data in S3 and process for DB
             success = True
             for daily_data in raw_data:
                 try:
+                    # Store raw data in S3
+                    current_date = datetime.strptime(daily_data['date'], '%Y-%m-%d').date()
+                    
+                    logger.info(f"Storing raw WHOOP data in S3 for {current_date}")
+                    self.s3_utils.store_json_data(
+                        self.base_path, 
+                        f"{current_date.strftime('%Y-%m-%d')}_raw.json",
+                        daily_data
+                    )
+                    
+                    # Process and store in database
                     processed_data = self.process_raw_data(daily_data)
-                    if processed_data:
+                    if processed_data and self.validate_data(processed_data):
                         if not self.store_processed_data(processed_data):
-                            logger.error(f"Failed to store processed data for {daily_data.get('date')}")
+                            logger.error(f"Failed to store processed data for {current_date}")
                             success = False
                     else:
-                        logger.warning(f"Failed to process data for {daily_data.get('date')}")
+                        logger.warning(f"Invalid processed data for {current_date}")
                         success = False
+                        
                 except Exception as e:
-                    logger.error(f"Error processing/storing data for {daily_data.get('date')}: {e}")
+                    logger.error(f"Error processing data for {daily_data.get('date')}: {e}", exc_info=True)
                     success = False
 
             logger.info(f"WHOOP data sync completed with status: {success}")
@@ -344,4 +359,20 @@ class WhoopProcessor(BaseDataProcessor):
 
         except Exception as e:
             logger.error(f"Error in WHOOP data sync: {e}", exc_info=True)
-            return False 
+            return False
+
+    def store_raw_data_in_s3(self, raw_data):
+        """Store raw data in S3"""
+        for daily_data in raw_data:
+            try:
+                current_date = datetime.strptime(daily_data['date'], '%Y-%m-%d').date()
+                
+                logger.info(f"Storing WHOOP data in S3 for {current_date}")
+                self.s3_utils.store_json_data(
+                    self.base_path, 
+                    f"{current_date.strftime('%Y-%m-%d')}_raw.json",
+                    daily_data
+                )
+            except Exception as e:
+                logger.error(f"Error storing data in S3 for {daily_data.get('date')}: {e}")
+                continue 

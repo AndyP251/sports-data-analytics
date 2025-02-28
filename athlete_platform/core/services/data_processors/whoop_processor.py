@@ -36,89 +36,59 @@ class WhoopProcessor(BaseDataProcessor):
         """Process raw Whoop data into standardized format"""
         try:
             if not raw_data:
+                logger.error("No raw data to process")
                 return None
-
-            # Extract date and daily stats
-            date_str = raw_data.get('date')
+            
+            # Extract daily stats from raw data
             daily_stats = raw_data.get('daily_stats', {})
             if not daily_stats:
-                logger.error(f"No daily stats found for {date_str}, data: {raw_data}")
+                logger.error("No daily stats found in raw data")
                 return None
-
-            # Extract all data components
-            sleep_data = daily_stats.get('sleep', {})
-            recovery_data = daily_stats.get('recovery', {})
-            cycle_data = daily_stats.get('cycle', {})
-            workout_data = daily_stats.get('workouts', [])
             
-            # Additional recovery data might be nested within cycle data
-            cycle_recovery_data = cycle_data.get('recovery', {})
+            # Extract data components safely
+            sleep_data = daily_stats.get('sleep_data', {}) or {}  
+            recovery_data = daily_stats.get('recovery_data', {}) or {}
+            cycle_data = daily_stats.get('cycle_data', {}) or {}
+            workout_data = daily_stats.get('workout_data', {}) or {}
             
-            # Combine recovery data sources if available
-            if not recovery_data and cycle_recovery_data:
-                recovery_data = cycle_recovery_data
+            # If no recovery data in main structure, try to get from cycle data
+            if not recovery_data and cycle_data:
+                recovery_data = cycle_data.get('recovery', {}) or {}
             
-            # Process sleep data with proper null handling
-            sleep_score = sleep_data.get('score', {})
-            stage_summary = sleep_score.get('stage_summary', {})
-            
-            # Extract user measurements if available
-            user_measurements = raw_data.get('user_measurements', {})
-            
-            # Safely extract values with proper null handling
-            return {
-                'date': date_str,
-                'source': 'whoop',
-                'metrics': {
-                    # Sleep metrics
-                    'total_sleep_seconds': self._safe_get(stage_summary, 'total_in_bed_time_milli', 0) / 1000,
-                    'deep_sleep_seconds': self._safe_get(stage_summary, 'total_slow_wave_sleep_time_milli', 0) / 1000,
-                    'light_sleep_seconds': self._safe_get(stage_summary, 'total_light_sleep_time_milli', 0) / 1000,
-                    'rem_sleep_seconds': self._safe_get(stage_summary, 'total_rem_sleep_time_milli', 0) / 1000,
-                    'awake_sleep_seconds': self._safe_get(stage_summary, 'total_awake_time_milli', 0) / 1000,
-                    'sleep_score': self._safe_get(sleep_score, 'sleep_performance_percentage', 0),
-                    'sleep_quality': self._safe_get(sleep_score, 'sleep_efficiency_percentage', 0),
-                    'sleep_consistency': self._safe_get(sleep_score, 'sleep_consistency_percentage', 0),
-                    'sleep_efficiency': self._safe_get(sleep_score, 'sleep_efficiency_percentage', 0),
-                    'respiratory_rate': self._safe_get(sleep_score, 'respiratory_rate', 0),
-                    'sleep_cycle_count': self._safe_get(stage_summary, 'sleep_cycle_count', 0),
-                    'sleep_disturbances': self._safe_get(stage_summary, 'disturbance_count', 0),
-                    
-                    # Recovery metrics
-                    'recovery_score': self._safe_get(recovery_data, 'recovery_score', 0),
-                    'resting_heart_rate': self._safe_get(recovery_data, 'resting_heart_rate', 0),
-                    'hrv_ms': self._safe_get(recovery_data, 'hrv_rmssd_milli', 0),
-                    'spo2_percentage': self._safe_get(recovery_data, 'spo2_percentage', 0),
-                    'skin_temp_celsius': self._safe_get(recovery_data, 'skin_temp_celsius', 0),
-                    
-                    # Cycle/strain metrics
-                    'day_strain': self._safe_get(cycle_data.get('score', {}), 'strain', 0),
-                    'max_heart_rate': self._safe_get(cycle_data.get('score', {}), 'max_heart_rate', 0),
-                    'average_heart_rate': self._safe_get(cycle_data.get('score', {}), 'average_heart_rate', 0),
-                    'kilojoules': self._safe_get(cycle_data.get('score', {}), 'kilojoule', 0),
-                    'calories_burned': self._safe_get(cycle_data.get('score', {}), 'kilojoule', 0) / 4.184,  # Convert kJ to calories
-                    
-                    # User measurements
-                    'height_m': user_measurements.get('height_meter', 0),
-                    'weight_kg': user_measurements.get('weight_kilogram', 0),
-                    'max_possible_hr': user_measurements.get('max_heart_rate', 0),
-                },
-                # Store raw time series data for potential future use
-                'time_series': {
-                    'sleep': {
-                        'start': sleep_data.get('start', ''),
-                        'end': sleep_data.get('end', ''),
-                    },
-                    'cycle': {
-                        'start': cycle_data.get('start', ''),
-                        'end': cycle_data.get('end', ''),
-                    },
-                    'workout_data': workout_data
-                }
+            # Initialize processed data structure
+            processed_data = {
+                'date': daily_stats.get('date'),
+                'sleep_score': self._safe_get(sleep_data, 'score', 0),
+                'sleep_efficiency': self._safe_get(sleep_data, 'efficiency', 0),
+                'sleep_consistency': self._safe_get(sleep_data, 'sleep_consistency', 0),
+                'sleep_disturbances': self._safe_get(sleep_data, 'disturbances', 0),
+                'recovery_score': self._safe_get(recovery_data, 'score', 0),
+                'resting_heart_rate': self._safe_get(recovery_data, 'resting_heart_rate', 0),
+                'sleep_resting_heart_rate': self._safe_get(sleep_data, 'resting_heart_rate', 0),
+                'hrv_ms': self._safe_get(recovery_data, 'heart_rate_variability', 0),
+                'day_strain': self._safe_get(cycle_data, 'strain', 0),
+                'calories_burned': self._safe_get(cycle_data, 'kilojoules', 0) / 4.184,  # Convert kJ to calories
+                'spo2_percentage': self._safe_get(sleep_data, 'spo2_percentage', 0),
+                'respiratory_rate': self._safe_get(sleep_data, 'respiratory_rate', 0),
+                'skin_temp_celsius': self._safe_get(sleep_data, 'skin_temp_celsius', 0),
+                'sleep_needed_seconds': self._safe_get(sleep_data, 'sleep_needed_seconds', 0),
+                'sleep_debt_seconds': self._safe_get(sleep_data, 'sleep_debt_seconds', 0),
+                'deep_sleep_seconds': self._safe_get(sleep_data, 'deep_sleep_seconds', 0),
+                'rem_sleep_seconds': self._safe_get(sleep_data, 'rem_sleep_seconds', 0),
+                'light_sleep_seconds': self._safe_get(sleep_data, 'light_sleep_seconds', 0),
+                'awake_seconds': self._safe_get(sleep_data, 'awake_seconds', 0),  # Changed from awake_sleep_seconds
             }
             
+            # Process workout data if available
+            if workout_data:
+                # Add workout metrics to processed data
+                processed_data['workout_count'] = len(workout_data) if isinstance(workout_data, list) else 0
+            
+            logger.info(f"Successfully processed raw WHOOP data for {processed_data.get('date')}")
+            return processed_data
+            
         except Exception as e:
-            logger.error(f"Error processing Whoop data: {e}", exc_info=True)
+            logger.error(f"Error processing raw WHOOP data: {e}", exc_info=True)
             return None
     
     def _safe_get(self, data, key, default=0):
@@ -160,70 +130,55 @@ class WhoopProcessor(BaseDataProcessor):
             
         return True
     
-    def store_processed_data(self, processed_data: Dict[str, Any]) -> bool:
-        """Store processed Whoop data"""
+    def store_processed_data(self, processed_data, date):
+        """Store processed data in CoreBiometricData model"""
         try:
             if not processed_data:
-                logger.error("No processed data to store")
-                return False
-                
-            metrics = processed_data.get('metrics', {})
-            date_str = processed_data.get('date')
+                logger.warning(f"No processed data to store for date {date}")
+                return None
             
-            try:
-                data_date = datetime.strptime(date_str, '%Y-%m-%d').date()
-            except (ValueError, TypeError):
-                logger.error(f"Invalid date format: {date_str}")
-                return False
+            logger.info(f"Storing processed WHOOP data for {self.athlete.user.username} on {date}")
             
-            # Set default values for required fields
-            defaults = {
-                'total_sleep_seconds': metrics.get('total_sleep_seconds', 0),
-                'deep_sleep_seconds': metrics.get('deep_sleep_seconds', 0),
-                'light_sleep_seconds': metrics.get('light_sleep_seconds', 0),
-                'rem_sleep_seconds': metrics.get('rem_sleep_seconds', 0),
-                'sleep_score': metrics.get('sleep_score', 0),
-                'resting_heart_rate': metrics.get('resting_heart_rate', 0),
-                'max_heart_rate': metrics.get('max_heart_rate', 0),
-                'average_heart_rate': metrics.get('average_heart_rate', 0),
-                'recovery_score': metrics.get('recovery_score', 0),
-                'hrv_ms': metrics.get('hrv_ms', 0),
-                'respiratory_rate': metrics.get('respiratory_rate', 0),
-                'day_strain': metrics.get('day_strain', 0),
-                'calories_burned': metrics.get('calories_burned', 0),
-                'sleep_efficiency': metrics.get('sleep_efficiency', 0),
-                'sleep_consistency': metrics.get('sleep_consistency', 0),
-                'sleep_disturbances': metrics.get('sleep_disturbances', 0),
-                'spo2_percentage': metrics.get('spo2_percentage', 0),
-                'skin_temp_celsius': metrics.get('skin_temp_celsius', 0)
+            # Extract values from processed data with sensible defaults
+            fields_map = {
+                'sleep_score': processed_data.get('sleep_score', 0),
+                'sleep_efficiency': processed_data.get('sleep_efficiency', 0),
+                'sleep_consistency': processed_data.get('sleep_consistency', 0),
+                'sleep_disturbances': processed_data.get('sleep_disturbances', 0),
+                'recovery_score': processed_data.get('recovery_score', 0),
+                'resting_heart_rate': processed_data.get('resting_heart_rate', 0),
+                'hrv_ms': processed_data.get('hrv_ms', 0),
+                'day_strain': processed_data.get('day_strain', 0),
+                'calories_burned': processed_data.get('calories_burned', 0),
+                'spo2_percentage': processed_data.get('spo2_percentage', 0),
+                'respiratory_rate': processed_data.get('respiratory_rate', 0),
+                'skin_temp_celsius': processed_data.get('skin_temp_celsius', 0),
+                'sleep_needed_seconds': processed_data.get('sleep_needed_seconds', 0),
+                'sleep_debt_seconds': processed_data.get('sleep_debt_seconds', 0),
+                'deep_sleep_seconds': processed_data.get('deep_sleep_seconds', 0),
+                'rem_sleep_seconds': processed_data.get('rem_sleep_seconds', 0),
+                'light_sleep_seconds': processed_data.get('light_sleep_seconds', 0),
+                'awake_seconds': processed_data.get('awake_seconds', 0),
+                'sleep_resting_heart_rate': processed_data.get('sleep_resting_heart_rate', 0),
             }
-
-            biometric_data, created = CoreBiometricData.objects.get_or_create(
+            
+            # Log the fields for debugging
+            logger.debug(f"Field values for storage: {fields_map}")
+            
+            # Store the data
+            bio_data, created = CoreBiometricData.objects.update_or_create(
                 athlete=self.athlete,
-                date=data_date,
-                source='whoop',
-                defaults=defaults
+                date=date,
+                data_source='whoop',
+                defaults=fields_map
             )
-
-            if not created:
-                for field, value in defaults.items():
-                    setattr(biometric_data, field, value)
-                biometric_data.save()
-
-            # Store time series data in S3
-            if processed_data.get('time_series'):
-                file_name = f"{data_date.strftime('%Y%m%d')}_time_series.json"
-                self.s3_utils.store_json_data(
-                    f"{self.base_path}/time_series",
-                    file_name,
-                    processed_data['time_series']
-                )
-
-            return True
-
+            
+            logger.info(f"Successfully stored WHOOP data for {date}, record {'created' if created else 'updated'}")
+            return bio_data
+            
         except Exception as e:
-            logger.error(f"Error storing WHOOP data: {e}", exc_info=True)
-            return False
+            logger.error(f"Error storing processed WHOOP data: {e}", exc_info=True)
+            return None
     
     def _get_from_db(self, date_range: List[date]) -> Optional[List[Dict[str, Any]]]:
         """Get data from database"""
@@ -343,7 +298,7 @@ class WhoopProcessor(BaseDataProcessor):
                     # Process and store in database
                     processed_data = self.process_raw_data(daily_data)
                     if processed_data and self.validate_data(processed_data):
-                        if not self.store_processed_data(processed_data):
+                        if not self.store_processed_data(processed_data, current_date):
                             logger.error(f"Failed to store processed data for {current_date}")
                             success = False
                     else:

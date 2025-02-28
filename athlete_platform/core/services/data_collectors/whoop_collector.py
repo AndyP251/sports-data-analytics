@@ -31,17 +31,33 @@ class WhoopCollector(BaseDataCollector):
                 
             whoop_creds = self.athlete.whoop_credentials
             
+            # Check if token is expired and refresh if needed
             if whoop_creds.is_expired():
                 logger.info(f"WHOOP token expired for athlete {self.athlete.user.username}, attempting refresh")
-                if not self._refresh_token(whoop_creds):
-                    logger.error(f"Failed to refresh WHOOP token for athlete {self.athlete.user.username}")
+                # Use the existing refresh_whoop_token function from oauth.py
+                from core.api_views.oauth import refresh_whoop_token
+                try:
+                    refreshed_token = refresh_whoop_token(whoop_creds)
+                    if refreshed_token:
+                        logger.info(f"Successfully refreshed WHOOP token for athlete {self.athlete.user.username}")
+                        # Get the updated credentials after refresh
+                        whoop_creds = self.athlete.whoop_credentials
+                    else:
+                        logger.error(f"Failed to refresh WHOOP token for athlete {self.athlete.user.username}")
+                        return False
+                except Exception as e:
+                    logger.error(f"Error refreshing WHOOP token: {e}")
                     return False
             
+            # Unsign the access token
             signer = Signer()
             self.access_token = signer.unsign(whoop_creds.access_token)
-            logger.info(f"[DEBUG]Unsigned token (first 10 chars): {self.access_token[:10]}")
-
-            # self.access_token = whoop_creds.access_token
+            
+            # Verify token works with a test API call
+            test_response = self._verify_token()
+            if not test_response:
+                logger.error(f"WHOOP token validation failed for athlete {self.athlete.user.username}")
+                return False
 
             logger.info(f"WHOOP authentication successful for athlete {self.athlete.user.username}")
             return True
@@ -50,12 +66,29 @@ class WhoopCollector(BaseDataCollector):
             logger.error(f"WHOOP authentication failed for athlete {self.athlete.user.username}: {e}")
             return False
 
+    def _verify_token(self) -> bool:
+        """Verify token is valid with a simple API call"""
+        try:
+            # Make a simple API call to verify token works
+            response = requests.get(
+                f"{self.BASE_URL}/user/profile/basic",
+                headers=self._get_headers()
+            )
+            return response.status_code == 200
+        except Exception as e:
+            logger.error(f"Error verifying token: {e}")
+            return False
+
     def _get_headers(self):
         """Get authorization headers with current access token"""
-        return {
-            "Authorization": f"Bearer {self.access_token}",
-            "Content-Type": "application/json"
-        }
+        if self.access_token:
+            return {
+                "Authorization": f"Bearer {self.access_token}",
+                "Content-Type": "application/json"
+            }
+        else:
+            logger.error("No access token available for authorization headers")
+            return None
 
     def make_request(self, method: str, url: str, params: dict = None) -> Optional[Dict]:
         """Make an authenticated request to the WHOOP API"""
@@ -334,43 +367,141 @@ class WhoopCollector(BaseDataCollector):
             logger.error(f"Error fetching WHOOP data from API: {e}", exc_info=True)
             return None
 
-    def _refresh_token(self, whoop_creds):
-        """Refresh expired token"""
-        try:
-            logger.info("Starting WHOOP token refresh")
-            from core.api_views.oauth import refresh_whoop_token
-            new_token = refresh_whoop_token(whoop_creds)
-            if new_token:
-                self.access_token = new_token.get('access_token')
-                logger.info("WHOOP token refresh completed successfully")
-                return True
-            return False
-        except Exception as e:
-            logger.error(f"Failed to refresh WHOOP token: {e}")
-            return False
-
     def validate_credentials(self) -> bool:
         """Validate stored Whoop credentials"""
         return self.authenticate()
 
-    def collect_data(self, start_date: date, end_date: date) -> Optional[List[Dict[str, Any]]]:
-        """Collect data from Whoop API"""
+    def collect_data(self, start_date: Optional[date] = None, end_date: Optional[date] = None) -> Optional[List[Dict]]:
+        """Collect Whoop data for a given date range
+        
+        Args:
+            start_date (date, optional): Start date. Defaults to today.
+            end_date (date, optional): End date. Defaults to today.
+            
+        Returns:
+            Optional[List[Dict]]: List of daily data
+        """
         try:
-            logger.info(f"Starting WHOOP data collection for {start_date} to {end_date}")
+            logger.info(f"Starting WHOOP data collection for athlete {self.athlete.user.username}")
             
-            # First try to get data from API
-            raw_data = self._get_from_api(start_date, end_date)
-            
-            if raw_data:
-                logger.info(f"Successfully collected {len(raw_data)} days of WHOOP data")
-                return raw_data
-            else:
-                logger.warning("Failed to collect WHOOP data")
+            # Authenticate with Whoop API
+            if not self.authenticate():
+                logger.error(f"WHOOP authentication failed for athlete {self.athlete.user.username}")
                 return None
-
+            
+            # Default to today if no date provided
+            if not start_date:
+                start_date = date.today()
+            if not end_date:
+                end_date = date.today()
+            
+            logger.info(f"Collecting WHOOP data for {self.athlete.user.username} from {start_date} to {end_date}")
+            
+            # Get user profile data
+            user_profile = self._get_user_profile()
+            
+            # Create date range to collect data for
+            date_range = []
+            current_date = start_date
+            while current_date <= end_date:
+                date_range.append(current_date)
+                current_date += timedelta(days=1)
+            
+            # Collect data for each day
+            results = []
+            for current_date in date_range:
+                date_str = current_date.strftime('%Y-%m-%d')
+                logger.info(f"Collecting WHOOP data for {date_str}")
+                
+                try:
+                    # Collect daily data
+                    sleep_data = self._get_data_for_date(current_date, 'sleep')
+                    recovery_data = self._get_data_for_date(current_date, 'recovery')
+                    cycle_data = self._get_data_for_date(current_date, 'cycle')
+                    workout_data = self._get_data_for_date(current_date, 'workout')
+                    
+                    # Combine all daily data
+                    daily_data = {
+                        'date': date_str,
+                        'daily_stats': {
+                            'date': date_str,
+                            'sleep_data': sleep_data,
+                            'recovery_data': recovery_data,
+                            'cycle_data': cycle_data,
+                            'workout_data': workout_data
+                        },
+                        'user_profile': user_profile
+                    }
+                    
+                    # Verify data structure integrity
+                    if self._verify_data_structure(daily_data):
+                        results.append(daily_data)
+                    else:
+                        # Create a minimal valid structure if verification fails
+                        logger.warning(f"Creating minimal data structure for {date_str} due to validation failure")
+                        minimal_data = {
+                            'date': date_str,
+                            'daily_stats': {
+                                'date': date_str,
+                                'sleep_data': {},
+                                'recovery_data': {},
+                                'cycle_data': {},
+                                'workout_data': []
+                            },
+                            'user_profile': user_profile or {}
+                        }
+                        results.append(minimal_data)
+                except Exception as e:
+                    logger.error(f"Error collecting WHOOP data for {date_str}: {e}", exc_info=True)
+                    # Add empty structure for this date to maintain sequence
+                    results.append({
+                        'date': date_str,
+                        'daily_stats': {
+                            'date': date_str
+                        }
+                    })
+            
+            logger.info(f"Completed WHOOP data collection for {self.athlete.user.username}, collected {len(results)} days")
+            return results
+            
         except Exception as e:
-            logger.error(f"Error in WHOOP data collection: {e}", exc_info=True)
+            logger.error(f"WHOOP data collection failed for athlete {self.athlete.user.username}: {e}", exc_info=True)
             return None
+
+    def _verify_data_structure(self, data: Dict) -> bool:
+        """Verify data structure integrity
+        
+        Args:
+            data (Dict): Data to verify
+            
+        Returns:
+            bool: True if data structure is valid
+        """
+        try:
+            # Check for required top-level fields
+            if not isinstance(data, dict):
+                logger.warning("Data is not a dictionary")
+                return False
+            
+            if 'date' not in data:
+                logger.warning("Missing date in data")
+                return False
+            
+            if 'daily_stats' not in data or not isinstance(data['daily_stats'], dict):
+                logger.warning("Missing or invalid daily_stats in data")
+                return False
+            
+            # Check that daily_stats has date field
+            daily_stats = data['daily_stats']
+            if 'date' not in daily_stats:
+                logger.warning("Missing date in daily_stats")
+                return False
+            
+            # All checks passed
+            return True
+        except Exception as e:
+            logger.error(f"Error verifying data structure: {e}")
+            return False
 
         
 

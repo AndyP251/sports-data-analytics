@@ -84,28 +84,15 @@ class WhoopCallbackView(WhoopOAuthBaseView):
                 include_client_id=True
             )
             logger.info("Successfully exchanged code for WHOOP access token")
-
-            # Store encrypted tokens
             signer = Signer()
-            
-            # oauth_token, created = OAuthTokens.objects.update_or_create(
-            #     user=request.user,
-            #     provider='whoop',
-            #     defaults={
-            #         'access_token': signer.sign(token.get('access_token')),
-            #         'refresh_token': signer.sign(token.get('refresh_token')),
-            #         'expires_at': datetime.now() + timedelta(seconds=token.get('expires_in', 0)),
-            #         'scope': token.get('scope', self.scope)
-            #     }
-            # )
-                  
-
             # Store the token in WhoopCredentials
             whoop_creds, created = WhoopCredentials.objects.update_or_create(
                 athlete=request.user.athlete,
                 defaults={
                     'access_token': signer.sign(token['access_token']),
                     'refresh_token': signer.sign(token['refresh_token']),
+                    # 'access_token': token['access_token'],
+                    # 'refresh_token': token['refresh_token'],
                     'expires_at': timezone.now() + timedelta(seconds=token['expires_in']),
                     'scope': token.get('scope', self.scope)
                 }

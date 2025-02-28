@@ -40,6 +40,9 @@ class WhoopCollector(BaseDataCollector):
             signer = Signer()
             self.access_token = signer.unsign(whoop_creds.access_token)
             logger.info(f"[DEBUG]Unsigned token (first 10 chars): {self.access_token[:10]}")
+
+            # self.access_token = whoop_creds.access_token
+
             logger.info(f"WHOOP authentication successful for athlete {self.athlete.user.username}")
             return True
             
@@ -74,72 +77,115 @@ class WhoopCollector(BaseDataCollector):
             logger.error(f"Error making API request: {e}")
             return None
 
-    def _get_recovery_data(self, date):
-        """Get recovery data for a specific date"""
-        try:
-            response = self.make_request(
-                'GET',
-                f"{self.BASE_URL}/recovery/{date.strftime('%Y-%m-%d')}",
-                params={
-                    'start': f"{date.strftime('%Y-%m-%d')}T00:00:00.000Z",
-                    'end': f"{date.strftime('%Y-%m-%d')}T23:59:59.999Z"
-                }
-            )
-            return response
-        except Exception as e:
-            logger.error(f"Error getting recovery data: {e}")
-            return None
-
-    def _get_data_for_date(self, date: date, data_type: str) -> Optional[Dict]:
-        """Get data for a specific date and type with pagination support"""
+    def _get_all_records(self, url: str, params: dict = None) -> List[Dict]:
+        """Get all records with pagination support"""
         try:
             all_records = []
             next_token = None
             
             while True:
-                params = {
-                    'start': f"{date.strftime('%Y-%m-%d')}T00:00:00.000Z",
-                    'end': f"{date.strftime('%Y-%m-%d')}T23:59:59.999Z"
-                }
+                request_params = params.copy() if params else {}
                 if next_token:
-                    params['nextToken'] = next_token
-
-                # Different endpoint structure for different data types
-                if data_type == 'recovery':
-                    url = f"{self.BASE_URL}/recovery"
-                elif data_type == 'sleep':
-                    url = f"{self.BASE_URL}/activity/sleep"
-                elif data_type == 'workout':
-                    url = f"{self.BASE_URL}/activity/workout"
-                elif data_type == 'cycle':
-                    url = f"{self.BASE_URL}/cycle"
-                else:
-                    logger.error(f"Invalid data type: {data_type}")
-                    return None
-
-                response = self.make_request(
-                    'GET',
-                    url,
-                    params=params
-                )
+                    request_params['nextToken'] = next_token
+                
+                response = self.make_request('GET', url, request_params)
                 
                 if not response or 'records' not in response:
-                    return None if data_type != 'workout' else []
-
-                records = response['records']
-                all_records.extend(records)
+                    break
+                    
+                all_records.extend(response['records'])
                 
                 next_token = response.get('next_token')
                 if not next_token:
                     break
+                    
+            return all_records
+            
+        except Exception as e:
+            logger.error(f"Error getting paginated records: {e}")
+            return []
 
-            if not all_records:
+    def _get_recovery_data(self, date):
+        """Get recovery data for a specific date"""
+        try:
+            params = {
+                'start': f"{date.strftime('%Y-%m-%d')}T00:00:00.000Z",
+                'end': f"{date.strftime('%Y-%m-%d')}T23:59:59.999Z"
+            }
+            
+            recovery_records = self._get_all_records(f"{self.BASE_URL}/recovery", params)
+            
+            if not recovery_records:
+                return None
+                
+            # Get the detailed recovery data for the first record
+            if recovery_record := recovery_records[0]:
+                # Recovery data is already detailed in the records response
+                return recovery_record.get('score', {})
+                
+            return None
+            
+        except Exception as e:
+            logger.error(f"Error getting recovery data: {e}")
+            return None
+
+    def _get_cycle_recovery_data(self, cycle_id):
+        """Get recovery data for a specific cycle"""
+        try:
+            recovery_data = self.make_request(
+                'GET',
+                f"{self.BASE_URL}/cycle/{cycle_id}/recovery"
+            )
+            
+            return recovery_data.get('score', {}) if recovery_data else None
+            
+        except Exception as e:
+            logger.error(f"Error getting cycle recovery data: {e}")
+            return None
+
+    def _get_data_for_date(self, date: date, data_type: str) -> Optional[Dict]:
+        """Get data for a specific date and type with pagination support"""
+        try:
+            params = {
+                'start': f"{date.strftime('%Y-%m-%d')}T00:00:00.000Z",
+                'end': f"{date.strftime('%Y-%m-%d')}T23:59:59.999Z"
+            }
+            
+            # Different endpoint structure for different data types
+            if data_type == 'recovery':
+                return self._get_recovery_data(date)
+            elif data_type == 'sleep':
+                url = f"{self.BASE_URL}/activity/sleep"
+            elif data_type == 'workout':
+                url = f"{self.BASE_URL}/activity/workout"
+            elif data_type == 'cycle':
+                url = f"{self.BASE_URL}/cycle"
+            else:
+                logger.error(f"Invalid data type: {data_type}")
+                return None
+
+            # For sleep, workout, and cycle, use pagination to get all records
+            records = self._get_all_records(url, params)
+            
+            if not records:
                 return None if data_type != 'workout' else []
 
             if data_type == 'workout':
-                return self._get_detailed_workouts(all_records)
+                return self._get_detailed_workouts(records)
+            elif data_type == 'sleep':
+                return self._get_detailed_record('sleep', records[0])
+            elif data_type == 'cycle':
+                cycle_data = self._get_detailed_record('cycle', records[0])
+                
+                # Enhance cycle data with recovery data if available
+                if cycle_data and (cycle_id := cycle_data.get('id')):
+                    cycle_recovery = self._get_cycle_recovery_data(cycle_id)
+                    if cycle_recovery:
+                        cycle_data['recovery'] = cycle_recovery
+                        
+                return cycle_data
             else:
-                return self._get_detailed_record(data_type, all_records[0])
+                return None
 
         except Exception as e:
             logger.error(f"Error getting {data_type} data: {e}")
@@ -174,9 +220,6 @@ class WhoopCollector(BaseDataCollector):
         try:
             if data_type == 'sleep':
                 url = f"{self.BASE_URL}/activity/sleep/{record_id}"
-            elif data_type == 'recovery':
-                # Recovery data is already detailed in the records response
-                return record.get('score', {})
             elif data_type == 'cycle':
                 url = f"{self.BASE_URL}/cycle/{record_id}"
             else:
@@ -194,13 +237,7 @@ class WhoopCollector(BaseDataCollector):
                     'start': detail.get('start'),
                     'end': detail.get('end'),
                     'nap': detail.get('nap', False),
-                    'score': {
-                        'stage_summary': detail.get('score', {}).get('stage_summary', {}),
-                        'respiratory_rate': detail.get('score', {}).get('respiratory_rate'),
-                        'sleep_performance_percentage': detail.get('score', {}).get('sleep_performance_percentage'),
-                        'sleep_consistency_percentage': detail.get('score', {}).get('sleep_consistency_percentage'),
-                        'sleep_efficiency_percentage': detail.get('score', {}).get('sleep_efficiency_percentage')
-                    }
+                    'score': detail.get('score', {})
                 }
             elif data_type == 'cycle':
                 return {
@@ -214,6 +251,17 @@ class WhoopCollector(BaseDataCollector):
 
         except Exception as e:
             logger.error(f"Error getting detailed {data_type} record: {e}")
+            return None
+
+    def _get_user_profile(self) -> Optional[Dict]:
+        """Get user profile data"""
+        try:
+            return self.make_request(
+                'GET',
+                f"{self.BASE_URL}/user/profile/basic"
+            )
+        except Exception as e:
+            logger.error(f"Error getting user profile: {e}")
             return None
 
     def _get_user_measurements(self) -> Optional[Dict]:
@@ -239,27 +287,41 @@ class WhoopCollector(BaseDataCollector):
             raw_data = []
             current_date = start_date
             
+            # Get user profile and measurements once
+            user_profile = self._get_user_profile()
+            user_measurements = self._get_user_measurements()
+            
             while current_date <= end_date:
+                logger.info(f"Collecting WHOOP data for {current_date}")
+                
+                # Get all data types for this date
+                cycle_data = self._get_data_for_date(current_date, 'cycle')
+                sleep_data = self._get_data_for_date(current_date, 'sleep')
+                recovery_data = self._get_data_for_date(current_date, 'recovery')
+                workout_data = self._get_data_for_date(current_date, 'workout')
+                
                 daily_data = {
                     'date': current_date.strftime('%Y-%m-%d'),
                     'daily_stats': {
-                        'recovery': self._get_data_for_date(current_date, 'recovery'),
-                        'sleep': self._get_data_for_date(current_date, 'sleep'),
-                        'workouts': self._get_data_for_date(current_date, 'workout'),
-                        'cycle': self._get_data_for_date(current_date, 'cycle')
+                        'recovery': recovery_data,
+                        'sleep': sleep_data,
+                        'workouts': workout_data,
+                        'cycle': cycle_data
                     }
                 }
                 
                 # Only add days with actual data
                 if any(daily_data['daily_stats'].values()):
-                    # Add user measurements only once
-                    if not raw_data:
-                        measurements = self._get_user_measurements()
-                        if measurements:
-                            daily_data['user_measurements'] = measurements
                     raw_data.append(daily_data)
                 
                 current_date += timedelta(days=1)
+
+            # Add user profile and measurements to the first data point if available
+            if raw_data and (user_profile or user_measurements):
+                if user_measurements:
+                    raw_data[0]['user_measurements'] = user_measurements
+                if user_profile:
+                    raw_data[0]['user_profile'] = user_profile
 
             if not raw_data:
                 logger.warning(f"No WHOOP data found for date range {start_date} to {end_date}")

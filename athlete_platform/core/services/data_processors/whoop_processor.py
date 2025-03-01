@@ -58,6 +58,7 @@ class WhoopProcessor(BaseDataProcessor):
             # Initialize processed data structure
             processed_data = {
                 'date': daily_stats.get('date'),
+                'source': 'whoop',  # Add the required source field
                 'sleep_score': self._safe_get(sleep_data, 'score', 0),
                 'sleep_efficiency': self._safe_get(sleep_data, 'efficiency', 0),
                 'sleep_consistency': self._safe_get(sleep_data, 'sleep_consistency', 0),
@@ -83,6 +84,22 @@ class WhoopProcessor(BaseDataProcessor):
             if workout_data:
                 # Add workout metrics to processed data
                 processed_data['workout_count'] = len(workout_data) if isinstance(workout_data, list) else 0
+            
+            # Add metrics dictionary as required by validate_data
+            processed_data['metrics'] = {
+                'sleep_score': processed_data['sleep_score'],
+                'sleep_efficiency': processed_data['sleep_efficiency'],
+                'sleep_consistency': processed_data['sleep_consistency'],
+                'recovery_score': processed_data['recovery_score'],
+                'resting_heart_rate': processed_data['resting_heart_rate'],
+                'hrv_ms': processed_data['hrv_ms'],
+                'day_strain': processed_data['day_strain'],
+                'calories_burned': processed_data['calories_burned'],
+                'deep_sleep_seconds': processed_data['deep_sleep_seconds'],
+                'rem_sleep_seconds': processed_data['rem_sleep_seconds'],
+                'light_sleep_seconds': processed_data['light_sleep_seconds'],
+                'respiratory_rate': processed_data['respiratory_rate']
+            }
             
             logger.info(f"Successfully processed raw WHOOP data for {processed_data.get('date')}")
             return processed_data
@@ -160,16 +177,17 @@ class WhoopProcessor(BaseDataProcessor):
                 'light_sleep_seconds': processed_data.get('light_sleep_seconds', 0),
                 'awake_seconds': processed_data.get('awake_seconds', 0),
                 'sleep_resting_heart_rate': processed_data.get('sleep_resting_heart_rate', 0),
+                'source': 'whoop'  # Set the source field to match processed_data['source']
             }
             
             # Log the fields for debugging
             logger.debug(f"Field values for storage: {fields_map}")
             
-            # Store the data
+            # Store the data - notice we use 'source' here to match the model field
+            # instead of 'data_source' which doesn't exist in the model
             bio_data, created = CoreBiometricData.objects.update_or_create(
                 athlete=self.athlete,
                 date=date,
-                data_source='whoop',
                 defaults=fields_map
             )
             
@@ -186,7 +204,7 @@ class WhoopProcessor(BaseDataProcessor):
             data = CoreBiometricData.objects.filter(
                 athlete=self.athlete,
                 date__in=date_range,
-                source='whoop'
+                source='whoop'  # Use source field, not data_source
             ).order_by('date')
             
             return [{
@@ -250,8 +268,31 @@ class WhoopProcessor(BaseDataProcessor):
             # Use the transformer to standardize the data
             standardized_data = self.transformer.transform_to_standard_format(raw_data)
             
-            # Convert standardized data to flat structure for storage
-            return self.process_raw_data(raw_data)
+            # Create a flat structure for database storage from standardized format
+            processed_data = {
+                'date': raw_data.get('date'),
+                'source': 'whoop',
+                'metrics': standardized_data.metrics,
+                'sleep_score': standardized_data.metrics.get('sleep_score', 0),
+                'sleep_efficiency': standardized_data.sleep.get('sleep_efficiency', 0),
+                'sleep_consistency': standardized_data.sleep.get('sleep_consistency', 0),
+                'sleep_disturbances': standardized_data.sleep.get('disturbance_count', 0),
+                'recovery_score': standardized_data.recovery.get('recovery_score', 0),
+                'resting_heart_rate': standardized_data.recovery.get('resting_heart_rate', 0),
+                'sleep_resting_heart_rate': standardized_data.recovery.get('resting_heart_rate', 0),
+                'hrv_ms': standardized_data.recovery.get('hrv_rmssd', 0),
+                'day_strain': standardized_data.stress.get('total_strain', 0),
+                'calories_burned': standardized_data.heart_rate.get('cycle_kilojoules', 0) / 4.184,
+                'spo2_percentage': standardized_data.recovery.get('spo2_percentage', 0),
+                'respiratory_rate': standardized_data.sleep.get('respiratory_rate', 0),
+                'skin_temp_celsius': standardized_data.recovery.get('skin_temp_celsius', 0),
+                'deep_sleep_seconds': standardized_data.sleep.get('deep_sleep_seconds', 0),
+                'rem_sleep_seconds': standardized_data.sleep.get('rem_sleep_seconds', 0),
+                'light_sleep_seconds': standardized_data.sleep.get('light_sleep_seconds', 0),
+                'awake_seconds': standardized_data.sleep.get('awake_sleep_seconds', 0),
+            }
+            
+            return processed_data
             
         except Exception as e:
             logger.error(f"Error processing Whoop data: {e}", exc_info=True)

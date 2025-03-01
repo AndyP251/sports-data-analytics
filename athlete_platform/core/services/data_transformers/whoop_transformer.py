@@ -51,7 +51,7 @@ class WhoopTransformer(BaseDataTransformer):
             # Extract cycle metrics
             cycle_score = cycle_data.get('score', {})
             
-            return StandardizedBiometricData(
+            standardized_data = StandardizedBiometricData(
                 date=datetime.strptime(raw_data['date'], '%Y-%m-%d'),
                 sleep={
                     'sleep_time_seconds': sleep_time_seconds,
@@ -130,8 +130,21 @@ class WhoopTransformer(BaseDataTransformer):
                     'max_heart_rate': user_measurements.get('max_heart_rate', 0)
                 },
                 
-                source='whoop'
+                # Always set source to 'whoop' for consistency
+                source='whoop',
+
+                # Add metrics field to pass validation
+                metrics={
+                    'sleep_score': self._get_value_or_default(sleep_score, 'sleep_performance_percentage', 0),
+                    'recovery_score': recovery_score,
+                    'resting_heart_rate': resting_heart_rate,
+                    'deep_sleep_seconds': deep_sleep_seconds,
+                    'light_sleep_seconds': light_sleep_seconds,
+                    'rem_sleep_seconds': rem_sleep_seconds
+                }
             )
+            
+            return standardized_data
         except Exception as e:
             logger.error(f"Error transforming Whoop data: {e}", exc_info=True)
             raise

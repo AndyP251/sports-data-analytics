@@ -126,7 +126,7 @@ class WhoopProcessor(BaseDataProcessor):
             
             # Add metrics dictionary as required by validate_data
             processed_data['metrics'] = {
-                'sleep_score': processed_data['sleep_score'],
+                'sleep_score': processed_data['sleep_performance'],
                 'sleep_efficiency': processed_data['sleep_efficiency'],
                 'sleep_consistency': processed_data['sleep_consistency'],
                 'recovery_score': processed_data['recovery_score'],
@@ -201,11 +201,11 @@ class WhoopProcessor(BaseDataProcessor):
                 'sleep_disturbances', 'sleep_cycle_count', 'deep_sleep_seconds', 'rem_sleep_seconds',
                 'light_sleep_seconds', 'no_data_seconds', 'awake_seconds', 'total_in_bed_seconds',
                 'baseline_sleep_seconds', 'need_from_sleep_debt_seconds', 'need_from_recent_strain_seconds',
-                'need_from_recent_nap_seconds', 'user_calibrating', 'recovery_score', 'resting_heart_rate',
+                'need_from_recent_nap_seconds', 'recovery_score', 'resting_heart_rate',
                 'sleep_resting_heart_rate', 'hrv_ms', 'spo2_percentage', 'skin_temp_celsius', 'start_time',
                 'strain', 'kilojoules', 'average_heart_rate', 'max_heart_rate', 'user_id', 'email',
                 'first_name', 'last_name', 'gender', 'birthdate', 'height_cm', 'weight_kg', 'body_fat_percentage'
-            ]
+            ] # , 'user_calibrating'
 
             # Option 1: Using dictionary comprehension
             fields_map = {field: self._safe_get(processed_data, field) for field in fields_to_extract}

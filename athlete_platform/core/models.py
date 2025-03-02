@@ -258,7 +258,7 @@ class CoreBiometricData(models.Model):
     high_stress_percentage = models.FloatField(default=0)
     
     # Whoop-specific metrics
-    user_calibrating = models.BooleanField(default=False)
+    # user_calibrating = models.BooleanField(default=False)
     start_time = models.DateTimeField(default=timezone.now)
     recovery_score = models.FloatField(default=0)
     hrv_ms = models.FloatField(default=0)

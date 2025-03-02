@@ -86,7 +86,7 @@ class WhoopProcessor(BaseDataProcessor):
                 'need_from_recent_strain_seconds': self._safe_get(sleep_needed, 'need_from_recent_strain_milli', 0),
                 'need_from_recent_nap_seconds': self._safe_get(sleep_needed, 'need_from_recent_nap_milli', 0), #neg #
                 # Recovery Data
-                'user_calibrating': self._safe_get(recovery_data, 'user_calibrating', False),
+                # 'user_calibrating': self._safe_get(recovery_data, 'user_calibrating', False),
                 'recovery_score': self._safe_get(recovery_data, 'recovery_score', 0),
                 'resting_heart_rate': self._safe_get(recovery_data, 'resting_heart_rate', 0),
                 'sleep_resting_heart_rate': self._safe_get(sleep_data, 'resting_heart_rate', 0),
@@ -100,7 +100,7 @@ class WhoopProcessor(BaseDataProcessor):
                 'average_heart_rate': self._safe_get(cycle_data, 'average_heart_rate', 0),
                 'max_heart_rate': self._safe_get(cycle_data, 'max_heart_rate', 0),
                 # Cycle / Recovery
-                'user_calibrating': self._safe_get(cycle_recovery, 'user_calibrating', False),
+                # 'user_calibrating': self._safe_get(cycle_recovery, 'user_calibrating', False),
                 'recovery_score': self._safe_get(cycle_recovery, 'recovery_score', 0),
                 'resting_heart_rate': self._safe_get(cycle_recovery, 'resting_heart_rate', 0),
                 'hrv_ms': self._safe_get(cycle_recovery, 'hrv_rmssd_milli', 0),
@@ -295,40 +295,11 @@ class WhoopProcessor(BaseDataProcessor):
             return None
 
     def process_data(self, raw_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-        """Process raw data into standardized format"""
-        try:
-            # Use the transformer to standardize the data
-            standardized_data = self.transformer.transform_to_standard_format(raw_data)
-            
-            # Create a flat structure for database storage from standardized format
-            processed_data = {
-                'date': raw_data.get('date'),
-                'source': 'whoop',
-                'metrics': standardized_data.metrics,
-                'sleep_score': standardized_data.metrics.get('sleep_score', 0),
-                'sleep_efficiency': standardized_data.sleep.get('sleep_efficiency', 0),
-                'sleep_consistency': standardized_data.sleep.get('sleep_consistency', 0),
-                'sleep_disturbances': standardized_data.sleep.get('disturbance_count', 0),
-                'recovery_score': standardized_data.recovery.get('recovery_score', 0),
-                'resting_heart_rate': standardized_data.recovery.get('resting_heart_rate', 0),
-                'sleep_resting_heart_rate': standardized_data.recovery.get('resting_heart_rate', 0),
-                'hrv_ms': standardized_data.recovery.get('hrv_rmssd', 0),
-                'day_strain': standardized_data.stress.get('total_strain', 0),
-                'calories_burned': standardized_data.heart_rate.get('cycle_kilojoules', 0) / 4.184,
-                'spo2_percentage': standardized_data.recovery.get('spo2_percentage', 0),
-                'respiratory_rate': standardized_data.sleep.get('respiratory_rate', 0),
-                'skin_temp_celsius': standardized_data.recovery.get('skin_temp_celsius', 0),
-                'deep_sleep_seconds': standardized_data.sleep.get('deep_sleep_seconds', 0),
-                'rem_sleep_seconds': standardized_data.sleep.get('rem_sleep_seconds', 0),
-                'light_sleep_seconds': standardized_data.sleep.get('light_sleep_seconds', 0),
-                'awake_seconds': standardized_data.sleep.get('awake_sleep_seconds', 0),
-            }
-            
-            return processed_data
-            
-        except Exception as e:
-            logger.error(f"Error processing Whoop data: {e}", exc_info=True)
-            return None
+        """Process raw data into standardized format
+        Deprecated: Using transformer instead
+        """
+        pass
+
 
     def sync_data(self, start_date: Optional[date] = None, end_date: Optional[date] = None) -> bool:
         """Simple WHOOP data sync that fetches from API and stores in S3"""
@@ -371,6 +342,7 @@ class WhoopProcessor(BaseDataProcessor):
                     # Process and store in database
                     processed_data = self.process_raw_data(daily_data)
                     if processed_data and self.validate_data(processed_data):
+                        logger.info(f"Processed data: {processed_data}")
                         if not self.store_processed_data(processed_data, current_date):
                             logger.error(f"Failed to store processed data for {current_date}")
                             success = False

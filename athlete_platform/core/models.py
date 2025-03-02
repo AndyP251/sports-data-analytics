@@ -228,7 +228,7 @@ class CoreBiometricData(models.Model):
     highest_respiration = models.FloatField(default=0)
     body_battery_change = models.IntegerField(default=0)
     sleep_resting_heart_rate = models.IntegerField(default=0)
-    
+  
     # Heart Rate Data
     resting_heart_rate = models.IntegerField(default=0)
     max_heart_rate = models.IntegerField(default=0)
@@ -238,6 +238,7 @@ class CoreBiometricData(models.Model):
     # User Summary Data
     total_calories = models.IntegerField(default=0)
     active_calories = models.IntegerField(default=0)
+    calories_burned = models.FloatField(default=0)
     bmr_calories = models.IntegerField(default=0)
     net_calorie_goal = models.IntegerField(default=0)
     total_distance_meters = models.FloatField(default=0)
@@ -257,17 +258,38 @@ class CoreBiometricData(models.Model):
     high_stress_percentage = models.FloatField(default=0)
     
     # Whoop-specific metrics
-    sleep_score = models.FloatField(default=0)
-    sleep_efficiency = models.FloatField(default=0) 
-    sleep_consistency = models.FloatField(default=0)
-    sleep_disturbances = models.IntegerField(default=0)
+    user_calibrating = models.BooleanField(default=False)
+    start_time = models.DateTimeField(default=timezone.now)
     recovery_score = models.FloatField(default=0)
     hrv_ms = models.FloatField(default=0)
-    day_strain = models.FloatField(default=0)
-    calories_burned = models.FloatField(default=0)
+    strain = models.FloatField(default=0)
+    kilojoules = models.FloatField(default=0)
     spo2_percentage = models.FloatField(default=0)
     skin_temp_celsius = models.FloatField(default=0)
     respiratory_rate = models.FloatField(default=0)
+
+    sleep_efficiency = models.FloatField(default=0)
+    sleep_consistency = models.FloatField(default=0)
+    sleep_performance = models.FloatField(default=0)
+    sleep_disturbances = models.IntegerField(default=0)
+    sleep_cycle_count = models.IntegerField(default=0)
+    no_data_seconds = models.IntegerField(default=0)
+    total_in_bed_seconds = models.IntegerField(default=0)
+    baseline_sleep_seconds = models.IntegerField(default=0)
+    need_from_sleep_debt_seconds = models.IntegerField(default=0)
+    need_from_recent_strain_seconds = models.IntegerField(default=0)
+    need_from_recent_nap_seconds = models.IntegerField(default=0)
+
+    user_id = models.IntegerField(default=0)
+    email = models.EmailField(default='')
+    first_name = models.CharField(max_length=127, default='')
+    last_name = models.CharField(max_length=127, default='')
+    gender = models.CharField(max_length=127, default='')
+    birthdate = models.DateField(default=timezone.now)
+    height_cm = models.IntegerField(default=0)
+    weight_kg = models.IntegerField(default=0)
+    body_fat_percentage = models.FloatField(default=0)
+    
 
     source = models.CharField(max_length=20, default='garmin')
     created_at = models.DateTimeField(default=timezone.now)

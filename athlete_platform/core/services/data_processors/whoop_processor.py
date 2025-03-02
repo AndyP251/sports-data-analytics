@@ -49,35 +49,74 @@ class WhoopProcessor(BaseDataProcessor):
             sleep_data = daily_stats.get('sleep_data', {}) or {}  
             recovery_data = daily_stats.get('recovery_data', {}) or {}
             cycle_data = daily_stats.get('cycle_data', {}) or {}
-            workout_data = daily_stats.get('workout_data', {}) or {}
+            workout_data = daily_stats.get('workout_data', []) or []
+            user_profile = daily_stats.get('user_profile', {}) or {}
             
             # If no recovery data in main structure, try to get from cycle data
             if not recovery_data and cycle_data:
                 recovery_data = cycle_data.get('recovery', {}) or {}
             
+            sleep_score = self._safe_get(sleep_data, 'score', {})
+            sleep_summary = self._safe_get(sleep_score, 'stage_summary', {})
+            sleep_needed = self._safe_get(sleep_data, 'sleep_needed', {})
+            cycle_score = self._safe_get(cycle_data, 'score', {})
+            cycle_recovery = self._safe_get(cycle_data, 'recovery', {})
+
             # Initialize processed data structure
             processed_data = {
                 'date': daily_stats.get('date'),
                 'source': 'whoop',  # Add the required source field
-                'sleep_score': self._safe_get(sleep_data, 'score', 0),
-                'sleep_efficiency': self._safe_get(sleep_data, 'efficiency', 0),
-                'sleep_consistency': self._safe_get(sleep_data, 'sleep_consistency', 0),
-                'sleep_disturbances': self._safe_get(sleep_data, 'disturbances', 0),
+                # Score Sleep Metrics
+                'sleep_efficiency': self._safe_get(sleep_score, 'sleep_efficiency_percentage', 0),
+                'sleep_consistency': self._safe_get(sleep_score, 'sleep_consistency_percentage', 0),
+                'sleep_performance': self._safe_get(sleep_score, 'sleep_performance_percentage', 0),
+                'respiratory_rate': self._safe_get(sleep_score, 'respiratory_rate', 0),
+                # Score / Summary Sleep Metrics
+                'sleep_disturbances': self._safe_get(sleep_summary, 'disturbance_count', 0),
+                'sleep_cycle_count': self._safe_get(sleep_summary, 'sleep_cycle_count', 0),
+                'deep_sleep_seconds': self._safe_get(sleep_needed, 'total_slow_wave_sleep_time_milli', 0),
+                'rem_sleep_seconds': self._safe_get(sleep_needed, 'total_rem_sleep_time_milli', 0),
+                'light_sleep_seconds': self._safe_get(sleep_needed, 'total_light_sleep_time_milli', 0),
+                'no_data_seconds': self._safe_get(sleep_needed, 'total_no_data_time_milli', 0),
+                'awake_seconds': self._safe_get(sleep_needed, 'total_awake_time_milli', 0),
+                'total_in_bed_seconds': self._safe_get(sleep_needed, 'total_in_bed_time_milli', 0),
+                # Score / Sleep Needed
+                'baseline_sleep_seconds': self._safe_get(sleep_needed, 'baseline_milli', 0),
+                'need_from_sleep_debt_seconds': self._safe_get(sleep_needed, 'need_from_sleep_debt_milli', 0),
+                'need_from_recent_strain_seconds': self._safe_get(sleep_needed, 'need_from_recent_strain_milli', 0),
+                'need_from_recent_nap_seconds': self._safe_get(sleep_needed, 'need_from_recent_nap_milli', 0), #neg #
+                # Recovery Data
+                'user_calibrating': self._safe_get(recovery_data, 'user_calibrating', False),
                 'recovery_score': self._safe_get(recovery_data, 'recovery_score', 0),
                 'resting_heart_rate': self._safe_get(recovery_data, 'resting_heart_rate', 0),
                 'sleep_resting_heart_rate': self._safe_get(sleep_data, 'resting_heart_rate', 0),
                 'hrv_ms': self._safe_get(recovery_data, 'hrv_rmssd_milli', 0),
-                'day_strain': self._safe_get(cycle_data.get('score', {}), 'strain', 0),
-                'calories_burned': self._safe_get(cycle_data.get('score', {}), 'kilojoule', 0) / 4.184,  # Convert kJ to calories
-                'spo2_percentage': self._safe_get(sleep_data, 'spo2_percentage', 0),
-                'respiratory_rate': self._safe_get(sleep_data, 'respiratory_rate', 0),
-                'skin_temp_celsius': self._safe_get(sleep_data, 'skin_temp_celsius', 0),
-                'sleep_needed_seconds': self._safe_get(sleep_data, 'sleep_needed_seconds', 0),
-                'sleep_debt_seconds': self._safe_get(sleep_data, 'sleep_debt_seconds', 0),
-                'deep_sleep_seconds': self._safe_get(sleep_data, 'deep_sleep_seconds', 0),
-                'rem_sleep_seconds': self._safe_get(sleep_data, 'rem_sleep_seconds', 0),
-                'light_sleep_seconds': self._safe_get(sleep_data, 'light_sleep_seconds', 0),
-                'awake_seconds': self._safe_get(sleep_data, 'awake_seconds', 0),  # Changed from awake_sleep_seconds
+                'spo2_percentage': self._safe_get(recovery_data, 'spo2_percentage', 0),
+                'skin_temp_celsius': self._safe_get(recovery_data, 'skin_temp_celsius', 0),
+                # Cycle Data
+                'start_time': self._safe_get(cycle_data, 'start', 0),
+                'strain': self._safe_get(cycle_score, 'strain', 0),
+                'kilojoules': self._safe_get(cycle_data, 'kilojoule', 0),
+                'average_heart_rate': self._safe_get(cycle_data, 'average_heart_rate', 0),
+                'max_heart_rate': self._safe_get(cycle_data, 'max_heart_rate', 0),
+                # Cycle / Recovery
+                'user_calibrating': self._safe_get(cycle_recovery, 'user_calibrating', False),
+                'recovery_score': self._safe_get(cycle_recovery, 'recovery_score', 0),
+                'resting_heart_rate': self._safe_get(cycle_recovery, 'resting_heart_rate', 0),
+                'hrv_ms': self._safe_get(cycle_recovery, 'hrv_rmssd_milli', 0),
+                'spo2_percentage': self._safe_get(cycle_recovery, 'spo2_percentage', 0),
+                'skin_temp_celsius': self._safe_get(cycle_recovery, 'skin_temp_celsius', 0),
+                # user profile data
+                'user_id': self._safe_get(user_profile, 'user_id', 0),
+                'email': self._safe_get(user_profile, 'email', ''),
+                'first_name': self._safe_get(user_profile, 'first_name', ''),
+                'last_name': self._safe_get(user_profile, 'last_name', ''),
+                'gender': self._safe_get(user_profile, 'gender', ''),
+                'birthdate': self._safe_get(user_profile, 'birthdate', ''),
+                'height_cm': self._safe_get(user_profile, 'height_cm', 0),
+                'weight_kg': self._safe_get(user_profile, 'weight_kg', 0),
+                'body_fat_percentage': self._safe_get(user_profile, 'body_fat_percentage', 0),
+                
             }
             
             # Process workout data if available
@@ -93,8 +132,8 @@ class WhoopProcessor(BaseDataProcessor):
                 'recovery_score': processed_data['recovery_score'],
                 'resting_heart_rate': processed_data['resting_heart_rate'],
                 'hrv_ms': processed_data['hrv_ms'],
-                'day_strain': processed_data['day_strain'],
-                'calories_burned': processed_data['calories_burned'],
+                'day_strain': processed_data['strain'],
+                'calories_burned': processed_data['kilojoules'] / 4.184,
                 'deep_sleep_seconds': processed_data['deep_sleep_seconds'],
                 'rem_sleep_seconds': processed_data['rem_sleep_seconds'],
                 'light_sleep_seconds': processed_data['light_sleep_seconds'],
@@ -156,29 +195,22 @@ class WhoopProcessor(BaseDataProcessor):
             
             logger.info(f"Storing processed WHOOP data for {self.athlete.user.username} on {date}")
             
-            # Extract values from processed data with sensible defaults
-            fields_map = {
-                'sleep_score': processed_data.get('sleep_score', 0),
-                'sleep_efficiency': processed_data.get('sleep_efficiency', 0),
-                'sleep_consistency': processed_data.get('sleep_consistency', 0),
-                'sleep_disturbances': processed_data.get('sleep_disturbances', 0),
-                'recovery_score': processed_data.get('recovery_score', 0),
-                'resting_heart_rate': processed_data.get('resting_heart_rate', 0),
-                'hrv_ms': processed_data.get('hrv_ms', 0),
-                'day_strain': processed_data.get('day_strain', 0),
-                'calories_burned': processed_data.get('calories_burned', 0),
-                'spo2_percentage': processed_data.get('spo2_percentage', 0),
-                'respiratory_rate': processed_data.get('respiratory_rate', 0),
-                'skin_temp_celsius': processed_data.get('skin_temp_celsius', 0),
-                'sleep_needed_seconds': processed_data.get('sleep_needed_seconds', 0),
-                'sleep_debt_seconds': processed_data.get('sleep_debt_seconds', 0),
-                'deep_sleep_seconds': processed_data.get('deep_sleep_seconds', 0),
-                'rem_sleep_seconds': processed_data.get('rem_sleep_seconds', 0),
-                'light_sleep_seconds': processed_data.get('light_sleep_seconds', 0),
-                'awake_seconds': processed_data.get('awake_seconds', 0),
-                'sleep_resting_heart_rate': processed_data.get('sleep_resting_heart_rate', 0),
-                'source': 'whoop'  # Set the source field to match processed_data['source']
-            }
+            # Extract values from processed data with sensible defaults, ref 'process_raw_data'
+            fields_to_extract = [
+                'sleep_efficiency', 'sleep_consistency', 'sleep_performance', 'respiratory_rate',
+                'sleep_disturbances', 'sleep_cycle_count', 'deep_sleep_seconds', 'rem_sleep_seconds',
+                'light_sleep_seconds', 'no_data_seconds', 'awake_seconds', 'total_in_bed_seconds',
+                'baseline_sleep_seconds', 'need_from_sleep_debt_seconds', 'need_from_recent_strain_seconds',
+                'need_from_recent_nap_seconds', 'user_calibrating', 'recovery_score', 'resting_heart_rate',
+                'sleep_resting_heart_rate', 'hrv_ms', 'spo2_percentage', 'skin_temp_celsius', 'start_time',
+                'strain', 'kilojoules', 'average_heart_rate', 'max_heart_rate', 'user_id', 'email',
+                'first_name', 'last_name', 'gender', 'birthdate', 'height_cm', 'weight_kg', 'body_fat_percentage'
+            ]
+
+            # Option 1: Using dictionary comprehension
+            fields_map = {field: self._safe_get(processed_data, field) for field in fields_to_extract}
+            # Add the static field
+            fields_map['source'] = 'whoop'
             
             # Log the fields for debugging
             logger.debug(f"Field values for storage: {fields_map}")

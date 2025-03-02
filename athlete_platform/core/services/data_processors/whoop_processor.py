@@ -86,7 +86,7 @@ class WhoopProcessor(BaseDataProcessor):
                 'need_from_recent_strain_seconds': self._safe_get(sleep_needed, 'need_from_recent_strain_milli', 0),
                 'need_from_recent_nap_seconds': self._safe_get(sleep_needed, 'need_from_recent_nap_milli', 0), #neg #
                 # Recovery Data
-                # 'user_calibrating': self._safe_get(recovery_data, 'user_calibrating', False),
+                'user_calibrating_recovery': self._safe_get(recovery_data, 'user_calibrating', False),
                 'recovery_score': self._safe_get(recovery_data, 'recovery_score', 0),
                 'resting_heart_rate': self._safe_get(recovery_data, 'resting_heart_rate', 0),
                 'sleep_resting_heart_rate': self._safe_get(sleep_data, 'resting_heart_rate', 0),
@@ -94,13 +94,13 @@ class WhoopProcessor(BaseDataProcessor):
                 'spo2_percentage': self._safe_get(recovery_data, 'spo2_percentage', 0),
                 'skin_temp_celsius': self._safe_get(recovery_data, 'skin_temp_celsius', 0),
                 # Cycle Data
-                'start_time': self._safe_get(cycle_data, 'start', 0),
+                'start_time': self._safe_get(cycle_data, 'start', datetime.now()),
                 'strain': self._safe_get(cycle_score, 'strain', 0),
                 'kilojoules': self._safe_get(cycle_data, 'kilojoule', 0),
                 'average_heart_rate': self._safe_get(cycle_data, 'average_heart_rate', 0),
                 'max_heart_rate': self._safe_get(cycle_data, 'max_heart_rate', 0),
                 # Cycle / Recovery
-                # 'user_calibrating': self._safe_get(cycle_recovery, 'user_calibrating', False),
+                'user_calibrating_cycle': self._safe_get(cycle_recovery, 'user_calibrating', False),
                 'recovery_score': self._safe_get(cycle_recovery, 'recovery_score', 0),
                 'resting_heart_rate': self._safe_get(cycle_recovery, 'resting_heart_rate', 0),
                 'hrv_ms': self._safe_get(cycle_recovery, 'hrv_rmssd_milli', 0),
@@ -196,21 +196,51 @@ class WhoopProcessor(BaseDataProcessor):
             logger.info(f"Storing processed WHOOP data for {self.athlete.user.username} on {date}")
             
             # Extract values from processed data with sensible defaults, ref 'process_raw_data'
-            fields_to_extract = [
-                'sleep_efficiency', 'sleep_consistency', 'sleep_performance', 'respiratory_rate',
-                'sleep_disturbances', 'sleep_cycle_count', 'deep_sleep_seconds', 'rem_sleep_seconds',
-                'light_sleep_seconds', 'no_data_seconds', 'awake_seconds', 'total_in_bed_seconds',
-                'baseline_sleep_seconds', 'need_from_sleep_debt_seconds', 'need_from_recent_strain_seconds',
-                'need_from_recent_nap_seconds', 'recovery_score', 'resting_heart_rate',
-                'sleep_resting_heart_rate', 'hrv_ms', 'spo2_percentage', 'skin_temp_celsius', 'start_time',
-                'strain', 'kilojoules', 'average_heart_rate', 'max_heart_rate', 'user_id', 'email',
-                'first_name', 'last_name', 'gender', 'birthdate', 'height_cm', 'weight_kg', 'body_fat_percentage'
-            ] # , 'user_calibrating'
-
-            # Option 1: Using dictionary comprehension
-            fields_map = {field: self._safe_get(processed_data, field) for field in fields_to_extract}
-            # Add the static field
-            fields_map['source'] = 'whoop'
+            
+            fields_map = {
+                'date': self._safe_get(processed_data, 'date', 0),
+                'sleep_efficiency': self._safe_get(processed_data, 'sleep_efficiency', 0),
+                'sleep_consistency': self._safe_get(processed_data, 'sleep_consistency', 0),
+                'sleep_performance': self._safe_get(processed_data, 'sleep_performance', 0),
+                'respiratory_rate': self._safe_get(processed_data, 'respiratory_rate', 0),
+                'sleep_disturbances': self._safe_get(processed_data, 'sleep_disturbances', 0),
+                'sleep_cycle_count': self._safe_get(processed_data, 'sleep_cycle_count', 0),
+                'deep_sleep_seconds': self._safe_get(processed_data, 'deep_sleep_seconds', 0),
+                'rem_sleep_seconds': self._safe_get(processed_data, 'rem_sleep_seconds', 0),
+                'light_sleep_seconds': self._safe_get(processed_data, 'light_sleep_seconds', 0),
+                'no_data_seconds': self._safe_get(processed_data, 'no_data_seconds', 0),
+                'awake_seconds': self._safe_get(processed_data, 'awake_seconds', 0),
+                'total_in_bed_seconds': self._safe_get(processed_data, 'total_in_bed_seconds', 0),
+                'baseline_sleep_seconds': self._safe_get(processed_data, 'baseline_sleep_seconds', 0),
+                'need_from_sleep_debt_seconds': self._safe_get(processed_data, 'need_from_sleep_debt_seconds', 0),
+                'need_from_recent_strain_seconds': self._safe_get(processed_data, 'need_from_recent_strain_seconds', 0),
+                'need_from_recent_nap_seconds': self._safe_get(processed_data, 'need_from_recent_nap_seconds', 0),
+                'recovery_score': self._safe_get(processed_data, 'recovery_score', 0),
+                'resting_heart_rate': self._safe_get(processed_data, 'resting_heart_rate', 0),
+                'sleep_resting_heart_rate': self._safe_get(processed_data, 'sleep_resting_heart_rate', 0),
+                'hrv_ms': self._safe_get(processed_data, 'hrv_ms', 0),
+                'spo2_percentage': self._safe_get(processed_data, 'spo2_percentage', 0),
+                'skin_temp_celsius': self._safe_get(processed_data, 'skin_temp_celsius', 0),
+                'strain': self._safe_get(processed_data, 'strain', 0),
+                'kilojoules': self._safe_get(processed_data, 'kilojoules', 0),
+                'average_heart_rate': self._safe_get(processed_data, 'average_heart_rate', 0),
+                'max_heart_rate': self._safe_get(processed_data, 'max_heart_rate', 0),
+                'recovery_score': self._safe_get(processed_data, 'recovery_score', 0),
+                'resting_heart_rate': self._safe_get(processed_data, 'resting_heart_rate', 0),
+                'hrv_ms': self._safe_get(processed_data, 'hrv_ms', 0),
+                'spo2_percentage': self._safe_get(processed_data, 'spo2_percentage', 0),
+                'skin_temp_celsius': self._safe_get(processed_data, 'skin_temp_celsius', 0),
+                'user_id': self._safe_get(processed_data, 'user_id', 0),
+                'email': self._safe_get(processed_data, 'email', 0),
+                'first_name': self._safe_get(processed_data, 'first_name', 0),
+                'last_name': self._safe_get(processed_data, 'last_name', 0),
+                'gender': self._safe_get(processed_data, 'gender', 0),
+                'birthdate': self._safe_get(processed_data, 'birthdate', 0),
+                'height_cm': self._safe_get(processed_data, 'height_cm', 0),
+                'weight_kg': self._safe_get(processed_data, 'weight_kg', 0),
+                'body_fat_percentage': self._safe_get(processed_data, 'body_fat_percentage', 0),
+                'source': self._safe_get(processed_data, 'source', 'whoop'),
+            }
             
             # Log the fields for debugging
             logger.debug(f"Field values for storage: {fields_map}")
@@ -281,18 +311,10 @@ class WhoopProcessor(BaseDataProcessor):
             return None
     
     def _get_from_api(self, date_range: List[date]) -> Optional[List[Dict[str, Any]]]:
-        """Whoop-specific API data fetch"""
-        try:
-            raw_data = self.collector.collect_data(min(date_range), max(date_range))
-            
-            if not raw_data:
-                return None
-                
-            return [self.process_raw_data(data) for data in raw_data]
-            
-        except Exception as e:
-            logger.error(f"Error getting Whoop API data: {e}")
-            return None
+        """Whoop-specific API data fetch
+        Deprecated: Not needed for Whoop
+        """
+        pass
 
     def process_data(self, raw_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """Process raw data into standardized format

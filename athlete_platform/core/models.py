@@ -258,8 +258,6 @@ class CoreBiometricData(models.Model):
     high_stress_percentage = models.FloatField(default=0)
     
     # Whoop-specific metrics
-    # user_calibrating = models.BooleanField(default=False)
-    start_time = models.DateTimeField(default=timezone.now)
     recovery_score = models.FloatField(default=0)
     hrv_ms = models.FloatField(default=0)
     strain = models.FloatField(default=0)
@@ -289,7 +287,6 @@ class CoreBiometricData(models.Model):
     height_cm = models.IntegerField(default=0)
     weight_kg = models.IntegerField(default=0)
     body_fat_percentage = models.FloatField(default=0)
-    
 
     source = models.CharField(max_length=20, default='garmin')
     created_at = models.DateTimeField(default=timezone.now)

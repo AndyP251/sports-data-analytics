@@ -10,10 +10,10 @@ class WhoopTransformer(BaseDataTransformer):
     def transform_to_standard_format(self, raw_data: Dict[str, Any]) -> StandardizedBiometricData:
         try:
             daily_stats = raw_data.get('daily_stats', {})
-            sleep_data = daily_stats.get('sleep', {})
-            recovery_data = daily_stats.get('recovery', {})
-            cycle_data = daily_stats.get('cycle', {})
-            workout_data = daily_stats.get('workouts', [])
+            sleep_data = daily_stats.get('sleep_data', {})
+            recovery_data = daily_stats.get('recovery_data', {})
+            cycle_data = daily_stats.get('cycle_data', {})
+            workout_data = daily_stats.get('workout_data', [])
             
             # Additional recovery data might be nested within cycle data after our collector enhancement
             cycle_recovery_data = cycle_data.get('recovery', {})

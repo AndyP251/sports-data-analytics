@@ -221,6 +221,8 @@ class CoreBiometricData(models.Model):
     light_sleep_seconds = models.IntegerField(default=0)
     rem_sleep_seconds = models.IntegerField(default=0)
     awake_seconds = models.IntegerField(default=0)
+    sleep_needed_seconds = models.IntegerField(default=0)
+    sleep_debt_seconds = models.IntegerField(default=0)
     average_respiration = models.FloatField(default=0)
     lowest_respiration = models.FloatField(default=0)
     highest_respiration = models.FloatField(default=0)

@@ -63,12 +63,12 @@ class WhoopProcessor(BaseDataProcessor):
                 'sleep_efficiency': self._safe_get(sleep_data, 'efficiency', 0),
                 'sleep_consistency': self._safe_get(sleep_data, 'sleep_consistency', 0),
                 'sleep_disturbances': self._safe_get(sleep_data, 'disturbances', 0),
-                'recovery_score': self._safe_get(recovery_data, 'score', 0),
+                'recovery_score': self._safe_get(recovery_data, 'recovery_score', 0),
                 'resting_heart_rate': self._safe_get(recovery_data, 'resting_heart_rate', 0),
                 'sleep_resting_heart_rate': self._safe_get(sleep_data, 'resting_heart_rate', 0),
-                'hrv_ms': self._safe_get(recovery_data, 'heart_rate_variability', 0),
-                'day_strain': self._safe_get(cycle_data, 'strain', 0),
-                'calories_burned': self._safe_get(cycle_data, 'kilojoules', 0) / 4.184,  # Convert kJ to calories
+                'hrv_ms': self._safe_get(recovery_data, 'hrv_rmssd_milli', 0),
+                'day_strain': self._safe_get(cycle_data.get('score', {}), 'strain', 0),
+                'calories_burned': self._safe_get(cycle_data.get('score', {}), 'kilojoule', 0) / 4.184,  # Convert kJ to calories
                 'spo2_percentage': self._safe_get(sleep_data, 'spo2_percentage', 0),
                 'respiratory_rate': self._safe_get(sleep_data, 'respiratory_rate', 0),
                 'skin_temp_celsius': self._safe_get(sleep_data, 'skin_temp_celsius', 0),

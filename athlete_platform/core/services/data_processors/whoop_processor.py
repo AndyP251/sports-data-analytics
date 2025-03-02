@@ -195,29 +195,22 @@ class WhoopProcessor(BaseDataProcessor):
             
             logger.info(f"Storing processed WHOOP data for {self.athlete.user.username} on {date}")
             
-            # Extract values from processed data with sensible defaults
-            fields_map = {
-                'sleep_score': processed_data.get('sleep_score', 0),
-                'sleep_efficiency': processed_data.get('sleep_efficiency', 0),
-                'sleep_consistency': processed_data.get('sleep_consistency', 0),
-                'sleep_disturbances': processed_data.get('sleep_disturbances', 0),
-                'recovery_score': processed_data.get('recovery_score', 0),
-                'resting_heart_rate': processed_data.get('resting_heart_rate', 0),
-                'hrv_ms': processed_data.get('hrv_ms', 0),
-                'day_strain': processed_data.get('day_strain', 0),
-                'calories_burned': processed_data.get('calories_burned', 0),
-                'spo2_percentage': processed_data.get('spo2_percentage', 0),
-                'respiratory_rate': processed_data.get('respiratory_rate', 0),
-                'skin_temp_celsius': processed_data.get('skin_temp_celsius', 0),
-                'sleep_needed_seconds': processed_data.get('sleep_needed_seconds', 0),
-                'sleep_debt_seconds': processed_data.get('sleep_debt_seconds', 0),
-                'deep_sleep_seconds': processed_data.get('deep_sleep_seconds', 0),
-                'rem_sleep_seconds': processed_data.get('rem_sleep_seconds', 0),
-                'light_sleep_seconds': processed_data.get('light_sleep_seconds', 0),
-                'awake_seconds': processed_data.get('awake_seconds', 0),
-                'sleep_resting_heart_rate': processed_data.get('sleep_resting_heart_rate', 0),
-                'source': 'whoop'  # Set the source field to match processed_data['source']
-            }
+            # Extract values from processed data with sensible defaults, ref 'process_raw_data'
+            fields_to_extract = [
+                'sleep_efficiency', 'sleep_consistency', 'sleep_performance', 'respiratory_rate',
+                'sleep_disturbances', 'sleep_cycle_count', 'deep_sleep_seconds', 'rem_sleep_seconds',
+                'light_sleep_seconds', 'no_data_seconds', 'awake_seconds', 'total_in_bed_seconds',
+                'baseline_sleep_seconds', 'need_from_sleep_debt_seconds', 'need_from_recent_strain_seconds',
+                'need_from_recent_nap_seconds', 'user_calibrating', 'recovery_score', 'resting_heart_rate',
+                'sleep_resting_heart_rate', 'hrv_ms', 'spo2_percentage', 'skin_temp_celsius', 'start_time',
+                'strain', 'kilojoules', 'average_heart_rate', 'max_heart_rate', 'user_id', 'email',
+                'first_name', 'last_name', 'gender', 'birthdate', 'height_cm', 'weight_kg', 'body_fat_percentage'
+            ]
+
+            # Option 1: Using dictionary comprehension
+            fields_map = {field: self._safe_get(processed_data, field) for field in fields_to_extract}
+            # Add the static field
+            fields_map['source'] = 'whoop'
             
             # Log the fields for debugging
             logger.debug(f"Field values for storage: {fields_map}")

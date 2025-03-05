@@ -199,20 +199,20 @@ class WhoopProcessor(BaseDataProcessor):
             
         return True
     
-    def store_processed_data(self, processed_data, date):
+    def store_processed_data(self, processed_data, date_value):
         """Store processed data in CoreBiometricData model"""
         try:
             if not processed_data:
-                logger.warning(f"No processed data to store for date {date}")
+                logger.warning(f"No processed data to store for date {date_value}")
                 return None
             
-            logger.info(f"Storing processed WHOOP data for {self.athlete.user.username} on {date}")
+            logger.info(f"Storing processed WHOOP data for {self.athlete.user.username} on {date_value}")
             
             # Convert date to string if it's a datetime or date object
-            if isinstance(date, (datetime, date)):
-                date_str = date.isoformat().split('T')[0]  # Get just the date part
+            if isinstance(date_value, (datetime, date)):
+                date_str = date_value.isoformat().split('T')[0]  # Get just the date part
             else:
-                date_str = str(date)
+                date_str = str(date_value)
             
             # Extract values from processed data with sensible defaults
             fields_map = {

@@ -208,10 +208,15 @@ class WhoopProcessor(BaseDataProcessor):
             
             logger.info(f"Storing processed WHOOP data for {self.athlete.user.username} on {date}")
             
-            # Extract values from processed data with sensible defaults, ref 'process_raw_data'
+            # Convert date to string if it's a datetime or date object
+            if isinstance(date, (datetime, date)):
+                date_str = date.isoformat().split('T')[0]  # Get just the date part
+            else:
+                date_str = str(date)
             
+            # Extract values from processed data with sensible defaults
             fields_map = {
-                'date': self._safe_get(processed_data, 'date', 0),
+                'date': date_str,  # Use the converted date string
                 'sleep_efficiency': self._safe_get(processed_data, 'sleep_efficiency', 0),
                 'sleep_consistency': self._safe_get(processed_data, 'sleep_consistency', 0),
                 'sleep_performance': self._safe_get(processed_data, 'sleep_performance', 0),
@@ -238,17 +243,12 @@ class WhoopProcessor(BaseDataProcessor):
                 'kilojoules': self._safe_get(processed_data, 'kilojoules', 0),
                 'average_heart_rate': self._safe_get(processed_data, 'average_heart_rate', 0),
                 'max_heart_rate': self._safe_get(processed_data, 'max_heart_rate', 0),
-                'recovery_score': self._safe_get(processed_data, 'recovery_score', 0),
-                'resting_heart_rate': self._safe_get(processed_data, 'resting_heart_rate', 0),
-                'hrv_ms': self._safe_get(processed_data, 'hrv_ms', 0),
-                'spo2_percentage': self._safe_get(processed_data, 'spo2_percentage', 0),
-                'skin_temp_celsius': self._safe_get(processed_data, 'skin_temp_celsius', 0),
                 'user_id': self._safe_get(processed_data, 'user_id', 0),
-                'email': self._safe_get(processed_data, 'email', 0),
-                'first_name': self._safe_get(processed_data, 'first_name', 0),
-                'last_name': self._safe_get(processed_data, 'last_name', 0),
-                'gender': self._safe_get(processed_data, 'gender', 0),
-                'birthdate': self._safe_get(processed_data, 'birthdate', 0),
+                'email': self._safe_get(processed_data, 'email', ''),
+                'first_name': self._safe_get(processed_data, 'first_name', ''),
+                'last_name': self._safe_get(processed_data, 'last_name', ''),
+                'gender': self._safe_get(processed_data, 'gender', ''),
+                'birthdate': self._safe_get(processed_data, 'birthdate', ''),
                 'height_cm': self._safe_get(processed_data, 'height_cm', 0),
                 'weight_kg': self._safe_get(processed_data, 'weight_kg', 0),
                 'body_fat_percentage': self._safe_get(processed_data, 'body_fat_percentage', 0),
@@ -258,15 +258,14 @@ class WhoopProcessor(BaseDataProcessor):
             # Log the fields for debugging
             logger.debug(f"Field values for storage: {fields_map}")
             
-            # Store the data - notice we use 'source' here to match the model field
-            # instead of 'data_source' which doesn't exist in the model
+            # Store the data
             bio_data, created = CoreBiometricData.objects.update_or_create(
                 athlete=self.athlete,
-                date=date,
+                date=date_str,  # Use the converted date string
                 defaults=fields_map
             )
             
-            logger.info(f"Successfully stored WHOOP data for {date}, record {'created' if created else 'updated'}")
+            logger.info(f"Successfully stored WHOOP data for {date_str}, record {'created' if created else 'updated'}")
             return bio_data
             
         except Exception as e:

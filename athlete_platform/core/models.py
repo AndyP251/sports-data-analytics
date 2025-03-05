@@ -290,7 +290,7 @@ class CoreBiometricData(models.Model):
     body_fat_percentage = models.FloatField(default=0)
 
     source = models.CharField(max_length=20, default='garmin')
-    created_at = models.DateTimeField(default=str(timezone.now))
+    created_at = models.DateTimeField(default=str(timezone.now()))
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:

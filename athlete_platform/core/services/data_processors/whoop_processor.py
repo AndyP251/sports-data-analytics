@@ -112,7 +112,7 @@ class WhoopProcessor(BaseDataProcessor):
                 'first_name': self._safe_get(user_profile, 'first_name', ''),
                 'last_name': self._safe_get(user_profile, 'last_name', ''),
                 'gender': self._safe_get(user_profile, 'gender', ''),
-                'birthdate': self._safe_get(user_profile, 'birthdate', ''),
+                'birthdate': self._safe_get(user_profile, 'birthdate', None),
                 'height_cm': self._safe_get(user_profile, 'height_cm', 0),
                 'weight_kg': self._safe_get(user_profile, 'weight_kg', 0),
                 'body_fat_percentage': self._safe_get(user_profile, 'body_fat_percentage', 0),
@@ -207,9 +207,13 @@ class WhoopProcessor(BaseDataProcessor):
                 return None
             
             logger.info(f"Storing processed WHOOP data for {self.athlete.user.username} on {date_value}")
-            
+            if date_value is None:
+                logger.warning(f"No date value provided for {self.athlete.user.username}, defaulting to current date")
+                date_value = str(datetime.now())
+
             # Convert date to string if it's a datetime or date object
             if isinstance(date_value, (datetime, date)):
+                logger.info(f"Converting date to string: {date_value} in store_processed_data of whoop_processor.py")
                 date_str = date_value.isoformat().split('T')[0]  # Get just the date part
             else:
                 date_str = str(date_value)
@@ -248,7 +252,7 @@ class WhoopProcessor(BaseDataProcessor):
                 'first_name': self._safe_get(processed_data, 'first_name', ''),
                 'last_name': self._safe_get(processed_data, 'last_name', ''),
                 'gender': self._safe_get(processed_data, 'gender', ''),
-                'birthdate': self._safe_get(processed_data, 'birthdate', ''),
+                'birthdate': self._safe_get(processed_data, 'birthdate', None),
                 'height_cm': self._safe_get(processed_data, 'height_cm', 0),
                 'weight_kg': self._safe_get(processed_data, 'weight_kg', 0),
                 'body_fat_percentage': self._safe_get(processed_data, 'body_fat_percentage', 0),
@@ -292,11 +296,11 @@ class WhoopProcessor(BaseDataProcessor):
                     'resting_heart_rate': item.resting_heart_rate,
                     'max_heart_rate': item.max_heart_rate,
                     'recovery_score': item.recovery_score,
-                    'day_strain': item.day_strain,
-                    'calories_burned': item.calories_burned,
+                    'day_strain': item.strain,
+                    'calories_burned': item.kilojoules / 4.184,
                     'hrv_ms': item.hrv_ms,
                     'respiratory_rate': item.respiratory_rate,
-                    'sleep_score': item.sleep_score,
+                    'sleep_score': item.sleep_performance,
                     'sleep_efficiency': item.sleep_efficiency,
                     'sleep_consistency': item.sleep_consistency
                 }

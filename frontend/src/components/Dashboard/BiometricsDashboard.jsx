@@ -9,7 +9,7 @@ import {
   Card, Grid, Typography, Box, Button, 
   CircularProgress, Alert, useTheme,
   AppBar, Toolbar, IconButton, Menu, MenuItem, Dialog, DialogTitle, DialogContent,
-  Tabs, Tab, styled
+  Tabs, Tab, styled, Select, FormControl
 } from '@mui/material';
 import { format } from 'date-fns';
 import SyncIcon from '@mui/icons-material/Sync';
@@ -129,6 +129,8 @@ const BiometricsDashboard = ({ username }) => {
   const [activeSource, setActiveSource] = useState(null);
   const [showWhoopConnect, setShowWhoopConnect] = useState(false);
   const [activeSources, setActiveSources] = useState([]);
+  const [selectedDataSource, setSelectedDataSource] = useState('all');
+  const [filteredData, setFilteredData] = useState([]);
   
   const sources = [
     { id: 'garmin', name: 'Garmin' },
@@ -493,6 +495,17 @@ const BiometricsDashboard = ({ username }) => {
     fetchActiveSources();
   }, []);
 
+  useEffect(() => {
+    if (biometricData.length > 0) {
+      // Filter data based on selected source
+      if (selectedDataSource === 'all') {
+        setFilteredData(biometricData);
+      } else {
+        setFilteredData(biometricData.filter(item => item.source === selectedDataSource));
+      }
+    }
+  }, [biometricData, selectedDataSource]);
+
   const handleChangeTab = (event, newValue) => {
     setTabValue(newValue);
   };
@@ -725,9 +738,46 @@ const BiometricsDashboard = ({ username }) => {
             boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)'
           }}
         >
-          <Typography variant="h6" sx={{ mb: 2, fontWeight: 600 }}>
-            Active Integrations
-          </Typography>
+          <Box sx={{ 
+            display: 'flex', 
+            justifyContent: 'space-between', 
+            alignItems: 'center',
+            mb: 2 
+          }}>
+            <Typography variant="h6" sx={{ fontWeight: 600 }}>
+              Active Integrations
+            </Typography>
+            {activeSources.length > 0 && (
+              <FormControl sx={{ minWidth: 200 }}>
+                <Select
+                  value={selectedDataSource}
+                  onChange={(e) => setSelectedDataSource(e.target.value)}
+                  sx={{
+                    color: 'white',
+                    '.MuiOutlinedInput-notchedOutline': {
+                      borderColor: 'rgba(255, 255, 255, 0.3)',
+                    },
+                    '&:hover .MuiOutlinedInput-notchedOutline': {
+                      borderColor: 'rgba(255, 255, 255, 0.5)',
+                    },
+                    '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+                      borderColor: 'white',
+                    },
+                    '.MuiSvgIcon-root': {
+                      color: 'white',
+                    },
+                  }}
+                >
+                  <MenuItem value="all">All Data</MenuItem>
+                  {activeSources.map((source) => (
+                    <MenuItem key={source.id} value={source.id}>
+                      {source.name}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            )}
+          </Box>
           <Box sx={{ 
             display: 'flex',
             gap: 2,
@@ -791,7 +841,7 @@ const BiometricsDashboard = ({ username }) => {
                 <Card sx={{ p: 2, height: '100%' }}>
                   <Typography variant="h6" gutterBottom>Heart Rate Trends</Typography>
                   <ResponsiveContainer width="100%" height={300}>
-                    <LineChart data={biometricData}>
+                    <LineChart data={filteredData}>
                       <CartesianGrid strokeDasharray="3 3" />
                       <XAxis dataKey="date" />
                       <YAxis />
@@ -810,7 +860,7 @@ const BiometricsDashboard = ({ username }) => {
                 <Card sx={{ p: 2, height: '100%' }}>
                   <Typography variant="h6" gutterBottom>Sleep Duration</Typography>
                   <ResponsiveContainer width="100%" height={300}>
-                    <BarChart data={biometricData}>
+                    <BarChart data={filteredData}>
                       <CartesianGrid strokeDasharray="3 3" />
                       <XAxis dataKey="date" />
                       <YAxis />
@@ -827,7 +877,7 @@ const BiometricsDashboard = ({ username }) => {
                 <Card sx={{ p: 2, height: '100%' }}>
                   <Typography variant="h6" gutterBottom>Daily Activity</Typography>
                   <ResponsiveContainer width="100%" height={300}>
-                    <ComposedChart data={biometricData}>
+                    <ComposedChart data={filteredData}>
                       <CartesianGrid strokeDasharray="3 3" />
                       <XAxis dataKey="date" />
                       <YAxis yAxisId="left" />
@@ -846,7 +896,7 @@ const BiometricsDashboard = ({ username }) => {
                 <Card sx={{ p: 2, height: '100%' }}>
                   <Typography variant="h6" gutterBottom>Respiration Range</Typography>
                   <ResponsiveContainer width="100%" height={300}>
-                    <AreaChart data={biometricData}>
+                    <AreaChart data={filteredData}>
                       <CartesianGrid strokeDasharray="3 3" />
                       <XAxis dataKey="date" />
                       <YAxis />
@@ -886,7 +936,7 @@ const BiometricsDashboard = ({ username }) => {
                 <Card sx={{ p: 2 }}>
                   <Typography variant="h6" gutterBottom>Daily Calorie Breakdown</Typography>
                   <ResponsiveContainer width="100%" height={300}>
-                    <BarChart data={biometricData}>
+                    <BarChart data={filteredData}>
                       <CartesianGrid strokeDasharray="3 3" />
                       <XAxis dataKey="date" />
                       <YAxis />
@@ -935,7 +985,7 @@ const BiometricsDashboard = ({ username }) => {
                     </tr>
                   </thead>
                   <tbody>
-                    {biometricData.map((item, idx) => (
+                    {filteredData.map((item, idx) => (
                       <tr key={idx} style={{ borderBottom: '1px solid #ccc' }}>
                         <td style={tdStyle}>{item.date || 'N/A'}</td>
                         <td style={tdStyle}>{item.resting_heart_rate || '0'}</td>
@@ -966,9 +1016,9 @@ const BiometricsDashboard = ({ username }) => {
         )}
 
         <HeartRateMetrics 
-          resting={biometricData.length > 0 ? biometricData[biometricData.length - 1].resting_heart_rate || 0 : 0}
-          average={biometricData.length > 0 ? biometricData[biometricData.length - 1].last_seven_days_avg_resting_heart_rate || 0 : 0}
-          max={biometricData.length > 0 ? biometricData[biometricData.length - 1].max_heart_rate || 0 : 0}
+          resting={filteredData.length > 0 ? filteredData[filteredData.length - 1].resting_heart_rate || 0 : 0}
+          average={filteredData.length > 0 ? filteredData[filteredData.length - 1].last_seven_days_avg_resting_heart_rate || 0 : 0}
+          max={filteredData.length > 0 ? filteredData[filteredData.length - 1].max_heart_rate || 0 : 0}
         />
       </Box>
     </Box>

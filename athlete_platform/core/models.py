@@ -284,7 +284,7 @@ class CoreBiometricData(models.Model):
     first_name = models.CharField(max_length=127, default='')
     last_name = models.CharField(max_length=127, default='')
     gender = models.CharField(max_length=127, default='')
-    birthdate = models.DateField(default=str(timezone.now))
+    birthdate = models.DateField(null=True, blank=True)
     height_cm = models.IntegerField(default=0)
     weight_kg = models.IntegerField(default=0)
     body_fat_percentage = models.FloatField(default=0)

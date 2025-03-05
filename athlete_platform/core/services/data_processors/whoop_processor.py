@@ -154,7 +154,7 @@ class WhoopProcessor(BaseDataProcessor):
             
         value = data.get(key)
         
-        if value is None:
+        if value is None or value == "":
             return default
             
         # Handle all date/datetime fields
@@ -165,8 +165,10 @@ class WhoopProcessor(BaseDataProcessor):
             elif isinstance(value, date):
                 return value.isoformat()
             elif isinstance(value, str):
+                if value.strip() == "":  # Handle empty strings
+                    return None
                 return value
-            return default
+            return None  # Return None for invalid date values
             
         # Handle numeric values
         if isinstance(default, (int, float)):

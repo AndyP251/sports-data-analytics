@@ -9,7 +9,7 @@ import {
   Card, Grid, Typography, Box, Button, 
   CircularProgress, Alert, useTheme,
   AppBar, Toolbar, IconButton, Menu, MenuItem, Dialog, DialogTitle, DialogContent,
-  Tabs, Tab, styled
+  Tabs, Tab, styled, Select, FormControl, Switch
 } from '@mui/material';
 import { format } from 'date-fns';
 import SyncIcon from '@mui/icons-material/Sync';
@@ -18,6 +18,7 @@ import LogoutIcon from '@mui/icons-material/Logout';
 import BarChartIcon from '@mui/icons-material/BarChart';
 import BugReportIcon from '@mui/icons-material/BugReport';
 import TableChartIcon from '@mui/icons-material/TableChart';
+import DeveloperModeIcon from '@mui/icons-material/DeveloperMode';
 import HeartRateMetrics from '../HeartRateMetrics';
 import axios from 'axios';
 import WhoopConnect from '../WhoopConnect';
@@ -35,6 +36,22 @@ const colors = {
   warning: '#F39C12',   // Orange
   error: '#E74C3C',     // Red
 };
+
+// Add this constant for developer-only fields
+const DEVELOPER_FIELDS = [
+  'id',
+  'athlete_id',
+  'athlete',
+  'user_id',
+  'created_at',
+  'updated_at',
+  'source',
+  'email',
+  'first_name',
+  'last_name',
+  'gender',
+  'birthdate',
+];
 
 // Styled components for better animations and aesthetics
 const StyledMenu = styled((props) => (
@@ -108,6 +125,58 @@ function a11yProps(index) {
   };
 }
 
+// Add this helper function to filter out empty fields
+const hasValue = (value) => {
+  if (value === null || value === undefined) return false;
+  if (typeof value === 'number' && (value === 0 || value === 0.0)) return false;
+  if (typeof value === 'string' && value.trim() === '') return false;
+  return true;
+};
+
+// Update the getDataColumns function
+const getDataColumns = (data, showDevFields = false) => {
+  if (!data || data.length === 0) return [];
+  
+  // Get all possible fields from the first data point
+  const allFields = Object.keys(data[0]);
+  
+  // Filter out developer fields if not in developer mode
+  const availableFields = showDevFields 
+    ? allFields 
+    : allFields.filter(field => !DEVELOPER_FIELDS.includes(field));
+  
+  // Check which fields have non-zero/non-null values in any record
+  const validFields = availableFields.filter(field => {
+    return data.some(record => hasValue(record[field]));
+  });
+  
+  // Format the field names for display
+  return validFields.map(field => ({
+    id: field,
+    label: field
+      .split('_')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(' ')
+  }));
+};
+
+// Add this function to format cell values
+const formatCellValue = (value, fieldName) => {
+  if (!hasValue(value)) return '-';
+  
+  // Handle different types of values
+  if (typeof value === 'number') {
+    // Format seconds to hours for time fields
+    if (fieldName.includes('seconds')) {
+      return (value / 3600).toFixed(2) + ' hrs';
+    }
+    // Format other numeric values
+    return Number.isInteger(value) ? value : value.toFixed(2);
+  }
+  
+  return value;
+};
+
 const BiometricsDashboard = ({ username }) => {
   const navigate = useNavigate();
   const theme = useTheme();
@@ -129,6 +198,9 @@ const BiometricsDashboard = ({ username }) => {
   const [activeSource, setActiveSource] = useState(null);
   const [showWhoopConnect, setShowWhoopConnect] = useState(false);
   const [activeSources, setActiveSources] = useState([]);
+  const [selectedDataSource, setSelectedDataSource] = useState('all');
+  const [filteredData, setFilteredData] = useState([]);
+  const [devMode, setDevMode] = useState(false);
   
   const sources = [
     { id: 'garmin', name: 'Garmin' },
@@ -493,6 +565,17 @@ const BiometricsDashboard = ({ username }) => {
     fetchActiveSources();
   }, []);
 
+  useEffect(() => {
+    if (biometricData.length > 0) {
+      // Filter data based on selected source
+      if (selectedDataSource === 'all') {
+        setFilteredData(biometricData);
+      } else {
+        setFilteredData(biometricData.filter(item => item.source === selectedDataSource));
+      }
+    }
+  }, [biometricData, selectedDataSource]);
+
   const handleChangeTab = (event, newValue) => {
     setTabValue(newValue);
   };
@@ -525,15 +608,66 @@ const BiometricsDashboard = ({ username }) => {
 
   return (
     <Box sx={{ width: '100%' }}>
-      <StyledAppBar position="static">
-        <Toolbar>
-          <StyledTitle sx={{ flexGrow: 1 }}>
-            {username}'s Biometric Insights
-          </StyledTitle>
+      <Box sx={{
+        background: 'linear-gradient(135deg, #2C3E50 0%, #3498DB 100%)',
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        height: '200px',
+        zIndex: -1
+      }} />
+      <Box sx={{ 
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        p: 2,
+        color: 'white'
+      }}>
+        <Typography variant="h4" sx={{ 
+          fontWeight: 600,
+          fontFamily: '"Poppins", sans-serif',
+        }}>
+          {username.charAt(0).toUpperCase() + username.slice(1)}'s Pulse Insights
+        </Typography>
+        <Box sx={{ 
+          display: 'flex', 
+          alignItems: 'center',
+          gap: 2
+        }}>
+          <Box sx={{ 
+            display: 'flex', 
+            alignItems: 'center',
+            backgroundColor: 'rgba(255, 255, 255, 0.1)',
+            padding: '4px 12px',
+            borderRadius: '4px',
+          }}>
+            <DeveloperModeIcon sx={{ mr: 1 }} />
+            <Switch
+              checked={devMode}
+              onChange={(e) => setDevMode(e.target.checked)}
+              sx={{
+                '& .MuiSwitch-switchBase': {
+                  color: 'white',
+                  '&.Mui-checked': {
+                    color: 'white',
+                    '& + .MuiSwitch-track': {
+                      backgroundColor: 'rgba(255, 255, 255, 0.5)',
+                    },
+                  },
+                },
+                '& .MuiSwitch-track': {
+                  backgroundColor: 'rgba(255, 255, 255, 0.3)',
+                  opacity: 1,
+                },
+                '& .MuiSwitch-thumb': {
+                  backgroundColor: 'white',
+                },
+              }}
+            />
+          </Box>
           <IconButton
-            edge="end"
             color="inherit"
-            aria-label="menu"
             onClick={openMenu}
             sx={{
               transition: 'transform 0.2s',
@@ -544,7 +678,6 @@ const BiometricsDashboard = ({ username }) => {
           >
             <MenuIcon />
           </IconButton>
-          
           <StyledMenu
             anchorEl={anchorEl}
             open={Boolean(anchorEl)}
@@ -586,107 +719,102 @@ const BiometricsDashboard = ({ username }) => {
               <Typography>Logout</Typography>
             </StyledMenuItem>
           </StyledMenu>
-        </Toolbar>
-      </StyledAppBar>
+        </Box>
+      </Box>
+      <Box sx={{ px: 3 }}>
+        {/* Dialog for showing raw data or error logs */}
+        <Dialog open={showDialog} onClose={closeDialog} maxWidth="md" fullWidth>
+          <DialogTitle>{dialogTitle}</DialogTitle>
+          <DialogContent>
+            <pre style={{ whiteSpace: 'pre-wrap' }}>
+              {dialogContent}
+            </pre>
+          </DialogContent>
+        </Dialog>
 
-      {/* Dialog for showing raw data or error logs */}
-      <Dialog open={showDialog} onClose={closeDialog} maxWidth="md" fullWidth>
-        <DialogTitle>{dialogTitle}</DialogTitle>
-        <DialogContent>
-          <pre style={{ whiteSpace: 'pre-wrap' }}>
-            {dialogContent}
-          </pre>
-        </DialogContent>
-      </Dialog>
+        {/* Source Selection Dialog */}
+        <Dialog 
+          open={showSourceMenu} 
+          onClose={() => setShowSourceMenu(false)}
+          PaperProps={{
+            sx: {
+              width: '300px',
+              backgroundColor: '#2C3E50',
+              color: 'white'
+            }
+          }}
+        >
+          <DialogTitle>Select Data Source</DialogTitle>
+          <DialogContent>
+            {sources.map(source => (
+              <StyledMenuItem
+                key={source.id}
+                onClick={() => {
+                  if (source.id === 'whoop') {
+                    setShowSourceMenu(false);
+                    setShowWhoopConnect(true);
+                  } else {
+                    setSelectedSource(source.id);
+                    setShowSourceMenu(false);
+                    setShowCredentialsMenu(true);
+                  }
+                }}
+              >
+                <Typography>{source.name}</Typography>
+              </StyledMenuItem>
+            ))}
+          </DialogContent>
+        </Dialog>
 
-      {/* Source Selection Dialog */}
-      <Dialog 
-        open={showSourceMenu} 
-        onClose={() => setShowSourceMenu(false)}
-        PaperProps={{
-          sx: {
-            width: '300px',
-            backgroundColor: '#2C3E50',
-            color: 'white'
-          }
-        }}
-      >
-        <DialogTitle>Select Data Source</DialogTitle>
-        <DialogContent>
-          {sources.map(source => (
-            <StyledMenuItem
-              key={source.id}
-              onClick={() => {
-                if (source.id === 'whoop') {
-                  setShowSourceMenu(false);
-                  setShowWhoopConnect(true);
-                } else {
-                  setSelectedSource(source.id);
-                  setShowSourceMenu(false);
-                  setShowCredentialsMenu(true);
-                }
-              }}
-            >
-              <Typography>{source.name}</Typography>
-            </StyledMenuItem>
-          ))}
-        </DialogContent>
-      </Dialog>
+        {/* Credentials Selection Dialog */}
+        <Dialog 
+          open={showCredentialsMenu} 
+          onClose={() => setShowCredentialsMenu(false)}
+          PaperProps={{
+            sx: {
+              width: '300px',
+              backgroundColor: '#2C3E50',
+              color: 'white'
+            }
+          }}
+        >
+          <DialogTitle>Select Credentials</DialogTitle>
+          <DialogContent>
+            {garminProfiles.map(profile => (
+              <StyledMenuItem
+                key={profile.id}
+                onClick={() => {
+                  handleSourceActivation(selectedSource, profile.id);
+                  setShowCredentialsMenu(false);
+                }}
+              >
+                <Typography>{profile.name}</Typography>
+              </StyledMenuItem>
+            ))}
+          </DialogContent>
+        </Dialog>
 
-      {/* Credentials Selection Dialog */}
-      <Dialog 
-        open={showCredentialsMenu} 
-        onClose={() => setShowCredentialsMenu(false)}
-        PaperProps={{
-          sx: {
-            width: '300px',
-            backgroundColor: '#2C3E50',
-            color: 'white'
-          }
-        }}
-      >
-        <DialogTitle>Select Credentials</DialogTitle>
-        <DialogContent>
-          {garminProfiles.map(profile => (
-            <StyledMenuItem
-              key={profile.id}
-              onClick={() => {
-                handleSourceActivation(selectedSource, profile.id);
-                setShowCredentialsMenu(false);
-              }}
-            >
-              <Typography>{profile.name}</Typography>
-            </StyledMenuItem>
-          ))}
-        </DialogContent>
-      </Dialog>
+        {/* WHOOP Connect Dialog */}
+        <Dialog 
+          open={showWhoopConnect} 
+          onClose={() => setShowWhoopConnect(false)}
+          PaperProps={{
+            sx: {
+              width: '300px',
+              backgroundColor: '#2C3E50',
+              color: 'white'
+            }
+          }}
+        >
+          <DialogTitle>Connect WHOOP Account</DialogTitle>
+          <DialogContent>
+            <Typography sx={{ mb: 2 }}>
+              Connect your WHOOP account to sync your biometric data.
+            </Typography>
+            <WhoopConnect />
+          </DialogContent>
+        </Dialog>
 
-      {/* WHOOP Connect Dialog */}
-      <Dialog 
-        open={showWhoopConnect} 
-        onClose={() => setShowWhoopConnect(false)}
-        PaperProps={{
-          sx: {
-            width: '300px',
-            backgroundColor: '#2C3E50',
-            color: 'white'
-          }
-        }}
-      >
-        <DialogTitle>Connect WHOOP Account</DialogTitle>
-        <DialogContent>
-          <Typography sx={{ mb: 2 }}>
-            Connect your WHOOP account to sync your biometric data.
-          </Typography>
-          <WhoopConnect />
-        </DialogContent>
-      </Dialog>
-
-      <Box sx={{ 
-        p: 4, 
-        backgroundColor: colors.background,
-        minHeight: '100vh'
-      }}>
         {loading ? (
           <Alert severity="info">Loading...</Alert>
         ) : error ? (
@@ -725,9 +853,46 @@ const BiometricsDashboard = ({ username }) => {
             boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)'
           }}
         >
-          <Typography variant="h6" sx={{ mb: 2, fontWeight: 600 }}>
-            Active Integrations
-          </Typography>
+          <Box sx={{ 
+            display: 'flex', 
+            justifyContent: 'space-between', 
+            alignItems: 'center',
+            mb: 2 
+          }}>
+            <Typography variant="h6" sx={{ fontWeight: 600 }}>
+              Active Integrations
+            </Typography>
+            {activeSources.length > 0 && (
+              <FormControl sx={{ minWidth: 200 }}>
+                <Select
+                  value={selectedDataSource}
+                  onChange={(e) => setSelectedDataSource(e.target.value)}
+                  sx={{
+                    color: 'white',
+                    '.MuiOutlinedInput-notchedOutline': {
+                      borderColor: 'rgba(255, 255, 255, 0.3)',
+                    },
+                    '&:hover .MuiOutlinedInput-notchedOutline': {
+                      borderColor: 'rgba(255, 255, 255, 0.5)',
+                    },
+                    '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+                      borderColor: 'white',
+                    },
+                    '.MuiSvgIcon-root': {
+                      color: 'white',
+                    },
+                  }}
+                >
+                  <MenuItem value="all">All Data</MenuItem>
+                  {activeSources.map((source) => (
+                    <MenuItem key={source.id} value={source.id}>
+                      {source.name}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            )}
+          </Box>
           <Box sx={{ 
             display: 'flex',
             gap: 2,
@@ -791,7 +956,7 @@ const BiometricsDashboard = ({ username }) => {
                 <Card sx={{ p: 2, height: '100%' }}>
                   <Typography variant="h6" gutterBottom>Heart Rate Trends</Typography>
                   <ResponsiveContainer width="100%" height={300}>
-                    <LineChart data={biometricData}>
+                    <LineChart data={filteredData}>
                       <CartesianGrid strokeDasharray="3 3" />
                       <XAxis dataKey="date" />
                       <YAxis />
@@ -810,7 +975,7 @@ const BiometricsDashboard = ({ username }) => {
                 <Card sx={{ p: 2, height: '100%' }}>
                   <Typography variant="h6" gutterBottom>Sleep Duration</Typography>
                   <ResponsiveContainer width="100%" height={300}>
-                    <BarChart data={biometricData}>
+                    <BarChart data={filteredData}>
                       <CartesianGrid strokeDasharray="3 3" />
                       <XAxis dataKey="date" />
                       <YAxis />
@@ -827,7 +992,7 @@ const BiometricsDashboard = ({ username }) => {
                 <Card sx={{ p: 2, height: '100%' }}>
                   <Typography variant="h6" gutterBottom>Daily Activity</Typography>
                   <ResponsiveContainer width="100%" height={300}>
-                    <ComposedChart data={biometricData}>
+                    <ComposedChart data={filteredData}>
                       <CartesianGrid strokeDasharray="3 3" />
                       <XAxis dataKey="date" />
                       <YAxis yAxisId="left" />
@@ -846,7 +1011,7 @@ const BiometricsDashboard = ({ username }) => {
                 <Card sx={{ p: 2, height: '100%' }}>
                   <Typography variant="h6" gutterBottom>Respiration Range</Typography>
                   <ResponsiveContainer width="100%" height={300}>
-                    <AreaChart data={biometricData}>
+                    <AreaChart data={filteredData}>
                       <CartesianGrid strokeDasharray="3 3" />
                       <XAxis dataKey="date" />
                       <YAxis />
@@ -886,7 +1051,7 @@ const BiometricsDashboard = ({ username }) => {
                 <Card sx={{ p: 2 }}>
                   <Typography variant="h6" gutterBottom>Daily Calorie Breakdown</Typography>
                   <ResponsiveContainer width="100%" height={300}>
-                    <BarChart data={biometricData}>
+                    <BarChart data={filteredData}>
                       <CartesianGrid strokeDasharray="3 3" />
                       <XAxis dataKey="date" />
                       <YAxis />
@@ -913,79 +1078,71 @@ const BiometricsDashboard = ({ username }) => {
                 <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                   <thead style={{ backgroundColor: '#eee' }}>
                     <tr>
-                      <th style={thStyle}>Date</th>
-                      <th style={thStyle}>RHR</th>
-                      <th style={thStyle}>Max HR</th>
-                      <th style={thStyle}>Min HR</th>
-                      <th style={thStyle}>Sleep RHR</th>
-                      <th style={thStyle}>Sleep (hrs)</th>
-                      <th style={thStyle}>Deep Sleep (hrs)</th>
-                      <th style={thStyle}>Light Sleep (hrs)</th>
-                      <th style={thStyle}>REM Sleep (hrs)</th>
-                      <th style={thStyle}>Awake (hrs)</th>
-                      <th style={thStyle}>Steps</th>
-                      <th style={thStyle}>Distance (km)</th>
-                      <th style={thStyle}>Active Cals</th>
-                      <th style={thStyle}>Total Cals</th>
-                      <th style={thStyle}>Avg Stress</th>
-                      <th style={thStyle}>Max Stress</th>
-                      <th style={thStyle}>Avg Resp</th>
-                      <th style={thStyle}>Min Resp</th>
-                      <th style={thStyle}>Max Resp</th>
+                      {getDataColumns(biometricData, devMode).map(column => (
+                        <th key={column.id} style={thStyle}>
+                          {column.label}
+                        </th>
+                      ))}
                     </tr>
                   </thead>
                   <tbody>
                     {biometricData.map((item, idx) => (
                       <tr key={idx} style={{ borderBottom: '1px solid #ccc' }}>
-                        <td style={tdStyle}>{item.date || 'N/A'}</td>
-                        <td style={tdStyle}>{item.resting_heart_rate || '0'}</td>
-                        <td style={tdStyle}>{item.max_heart_rate || '0'}</td>
-                        <td style={tdStyle}>{item.min_heart_rate || '0'}</td>
-                        <td style={tdStyle}>{item.sleep_resting_heart_rate || '0'}</td>
-                        <td style={tdStyle}>{(item.sleep_hours || 0).toFixed(2)}</td>
-                        <td style={tdStyle}>{(item.deep_sleep || 0).toFixed(2)}</td>
-                        <td style={tdStyle}>{(item.light_sleep || 0).toFixed(2)}</td>
-                        <td style={tdStyle}>{(item.rem_sleep || 0).toFixed(2)}</td>
-                        <td style={tdStyle}>{(item.awake_hours || 0).toFixed(2)}</td>
-                        <td style={tdStyle}>{item.total_steps || '0'}</td>
-                        <td style={tdStyle}>{(item.distance || 0).toFixed(2)}</td>
-                        <td style={tdStyle}>{item.active_calories || '0'}</td>
-                        <td style={tdStyle}>{item.total_calories || '0'}</td>
-                        <td style={tdStyle}>{item.stress_level || '0'}</td>
-                        <td style={tdStyle}>{item.max_stress_level || '0'}</td>
-                        <td style={tdStyle}>{(item.average_respiration || 0).toFixed(1)}</td>
-                        <td style={tdStyle}>{(item.lowest_respiration || 0).toFixed(1)}</td>
-                        <td style={tdStyle}>{(item.highest_respiration || 0).toFixed(1)}</td>
+                        {getDataColumns(biometricData, devMode).map(column => (
+                          <td key={column.id} style={tdStyle}>
+                            {formatCellValue(item[column.id], column.id)}
+                          </td>
+                        ))}
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </Box>
             )}
+            {devMode && (
+              <Typography 
+                variant="caption" 
+                sx={{ 
+                  display: 'block', 
+                  mt: 2, 
+                  color: 'text.secondary',
+                  fontStyle: 'italic'
+                }}
+              >
+                Developer mode is active - showing all fields including system fields
+              </Typography>
+            )}
           </Box>
         )}
 
         <HeartRateMetrics 
-          resting={biometricData.length > 0 ? biometricData[biometricData.length - 1].resting_heart_rate || 0 : 0}
-          average={biometricData.length > 0 ? biometricData[biometricData.length - 1].last_seven_days_avg_resting_heart_rate || 0 : 0}
-          max={biometricData.length > 0 ? biometricData[biometricData.length - 1].max_heart_rate || 0 : 0}
+          resting={filteredData.length > 0 ? filteredData[filteredData.length - 1].resting_heart_rate || 0 : 0}
+          average={filteredData.length > 0 ? filteredData[filteredData.length - 1].last_seven_days_avg_resting_heart_rate || 0 : 0}
+          max={filteredData.length > 0 ? filteredData[filteredData.length - 1].max_heart_rate || 0 : 0}
         />
       </Box>
     </Box>
   );
 };
 
-// Basic table styles
+// Update the table styles
 const thStyle = {
   textAlign: 'left',
-  padding: '8px',
+  padding: '12px 8px',
   border: '1px solid #ccc',
-  fontWeight: 'bold'
+  fontWeight: 'bold',
+  backgroundColor: '#2C3E50',
+  color: 'white',
+  position: 'sticky',
+  top: 0,
+  zIndex: 1
 };
+
 const tdStyle = {
   textAlign: 'left',
   padding: '8px',
-  border: '1px solid #ccc'
+  border: '1px solid #ccc',
+  whiteSpace: 'nowrap'
 };
 
 export default BiometricsDashboard; 

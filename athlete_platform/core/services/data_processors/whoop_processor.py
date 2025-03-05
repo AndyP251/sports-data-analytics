@@ -1,5 +1,5 @@
 from typing import Dict, Any, Optional, List
-from datetime import date, timedelta, datetime
+from datetime import date, timedelta, datetime, timezone
 from .base_processor import BaseDataProcessor
 from ..exceptions import ValidationError
 from core.models import Athlete, CoreBiometricData

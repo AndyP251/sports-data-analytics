@@ -9,7 +9,7 @@ import {
   Card, Grid, Typography, Box, Button, 
   CircularProgress, Alert, useTheme,
   AppBar, Toolbar, IconButton, Menu, MenuItem, Dialog, DialogTitle, DialogContent,
-  Tabs, Tab, styled, Select, FormControl
+  Tabs, Tab, styled, Select, FormControl, Switch
 } from '@mui/material';
 import { format } from 'date-fns';
 import SyncIcon from '@mui/icons-material/Sync';
@@ -18,6 +18,7 @@ import LogoutIcon from '@mui/icons-material/Logout';
 import BarChartIcon from '@mui/icons-material/BarChart';
 import BugReportIcon from '@mui/icons-material/BugReport';
 import TableChartIcon from '@mui/icons-material/TableChart';
+import DeveloperModeIcon from '@mui/icons-material/DeveloperMode';
 import HeartRateMetrics from '../HeartRateMetrics';
 import axios from 'axios';
 import WhoopConnect from '../WhoopConnect';
@@ -35,6 +36,21 @@ const colors = {
   warning: '#F39C12',   // Orange
   error: '#E74C3C',     // Red
 };
+
+// Add this constant for developer-only fields
+const DEVELOPER_FIELDS = [
+  'id',
+  'athlete',
+  'user_id',
+  'created_at',
+  'updated_at',
+  'source',
+  'email',
+  'first_name',
+  'last_name',
+  'gender',
+  'birthdate',
+];
 
 // Styled components for better animations and aesthetics
 const StyledMenu = styled((props) => (
@@ -116,15 +132,20 @@ const hasValue = (value) => {
   return true;
 };
 
-// Add this function to get column headers from data
-const getDataColumns = (data) => {
+// Update the getDataColumns function
+const getDataColumns = (data, showDevFields = false) => {
   if (!data || data.length === 0) return [];
   
   // Get all possible fields from the first data point
   const allFields = Object.keys(data[0]);
   
+  // Filter out developer fields if not in developer mode
+  const availableFields = showDevFields 
+    ? allFields 
+    : allFields.filter(field => !DEVELOPER_FIELDS.includes(field));
+  
   // Check which fields have non-zero/non-null values in any record
-  const validFields = allFields.filter(field => {
+  const validFields = availableFields.filter(field => {
     return data.some(record => hasValue(record[field]));
   });
   
@@ -178,6 +199,7 @@ const BiometricsDashboard = ({ username }) => {
   const [activeSources, setActiveSources] = useState([]);
   const [selectedDataSource, setSelectedDataSource] = useState('all');
   const [filteredData, setFilteredData] = useState([]);
+  const [devMode, setDevMode] = useState(false);
   
   const sources = [
     { id: 'garmin', name: 'Garmin' },
@@ -584,12 +606,53 @@ const BiometricsDashboard = ({ username }) => {
   }, []);
 
   return (
-    <Box sx={{ width: '100%' }}>
-      <StyledAppBar position="static">
+    <Box sx={{ 
+      width: '100%',
+      margin: 0,
+      padding: 0,
+      '& > *': { margin: 0 }
+    }}>
+      <StyledAppBar position="static" sx={{ borderRadius: 0 }}>
         <Toolbar>
           <StyledTitle sx={{ flexGrow: 1 }}>
             {username}'s Biometric Insights
           </StyledTitle>
+          <Box sx={{ 
+            display: 'flex', 
+            alignItems: 'center',
+            color: 'white',
+            backgroundColor: 'rgba(255, 255, 255, 0.1)',
+            padding: '4px 12px',
+            borderRadius: '4px',
+            mr: 2
+          }}>
+            <DeveloperModeIcon sx={{ 
+              mr: 1,
+              color: 'white'
+            }} />
+            <Switch
+              checked={devMode}
+              onChange={(e) => setDevMode(e.target.checked)}
+              sx={{
+                '& .MuiSwitch-switchBase': {
+                  color: 'white',
+                  '&.Mui-checked': {
+                    color: 'white',
+                    '& + .MuiSwitch-track': {
+                      backgroundColor: 'rgba(255, 255, 255, 0.5)',
+                    },
+                  },
+                },
+                '& .MuiSwitch-track': {
+                  backgroundColor: 'rgba(255, 255, 255, 0.3)',
+                  opacity: 1,
+                },
+                '& .MuiSwitch-thumb': {
+                  backgroundColor: 'white',
+                },
+              }}
+            />
+          </Box>
           <IconButton
             edge="end"
             color="inherit"
@@ -604,7 +667,6 @@ const BiometricsDashboard = ({ username }) => {
           >
             <MenuIcon />
           </IconButton>
-          
           <StyledMenu
             anchorEl={anchorEl}
             open={Boolean(anchorEl)}
@@ -1010,7 +1072,7 @@ const BiometricsDashboard = ({ username }) => {
                 <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                   <thead style={{ backgroundColor: '#eee' }}>
                     <tr>
-                      {getDataColumns(biometricData).map(column => (
+                      {getDataColumns(biometricData, devMode).map(column => (
                         <th key={column.id} style={thStyle}>
                           {column.label}
                         </th>
@@ -1020,7 +1082,7 @@ const BiometricsDashboard = ({ username }) => {
                   <tbody>
                     {biometricData.map((item, idx) => (
                       <tr key={idx} style={{ borderBottom: '1px solid #ccc' }}>
-                        {getDataColumns(biometricData).map(column => (
+                        {getDataColumns(biometricData, devMode).map(column => (
                           <td key={column.id} style={tdStyle}>
                             {formatCellValue(item[column.id], column.id)}
                           </td>
@@ -1030,6 +1092,19 @@ const BiometricsDashboard = ({ username }) => {
                   </tbody>
                 </table>
               </Box>
+            )}
+            {devMode && (
+              <Typography 
+                variant="caption" 
+                sx={{ 
+                  display: 'block', 
+                  mt: 2, 
+                  color: 'text.secondary',
+                  fontStyle: 'italic'
+                }}
+              >
+                Developer mode is active - showing all fields including system fields
+              </Typography>
             )}
           </Box>
         )}

@@ -157,6 +157,17 @@ class WhoopProcessor(BaseDataProcessor):
         if value is None:
             return default
             
+        # Handle all date/datetime fields
+        date_fields = ['birthdate', 'date', 'created_at', 'updated_at']
+        if key in date_fields:
+            if isinstance(value, datetime):
+                return value.date().isoformat()
+            elif isinstance(value, date):
+                return value.isoformat()
+            elif isinstance(value, str):
+                return value
+            return default
+            
         # Handle numeric values
         if isinstance(default, (int, float)):
             try:

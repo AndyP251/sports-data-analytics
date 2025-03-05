@@ -108,6 +108,53 @@ function a11yProps(index) {
   };
 }
 
+// Add this helper function to filter out empty fields
+const hasValue = (value) => {
+  if (value === null || value === undefined) return false;
+  if (typeof value === 'number' && (value === 0 || value === 0.0)) return false;
+  if (typeof value === 'string' && value.trim() === '') return false;
+  return true;
+};
+
+// Add this function to get column headers from data
+const getDataColumns = (data) => {
+  if (!data || data.length === 0) return [];
+  
+  // Get all possible fields from the first data point
+  const allFields = Object.keys(data[0]);
+  
+  // Check which fields have non-zero/non-null values in any record
+  const validFields = allFields.filter(field => {
+    return data.some(record => hasValue(record[field]));
+  });
+  
+  // Format the field names for display
+  return validFields.map(field => ({
+    id: field,
+    label: field
+      .split('_')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(' ')
+  }));
+};
+
+// Add this function to format cell values
+const formatCellValue = (value, fieldName) => {
+  if (!hasValue(value)) return '-';
+  
+  // Handle different types of values
+  if (typeof value === 'number') {
+    // Format seconds to hours for time fields
+    if (fieldName.includes('seconds')) {
+      return (value / 3600).toFixed(2) + ' hrs';
+    }
+    // Format other numeric values
+    return Number.isInteger(value) ? value : value.toFixed(2);
+  }
+  
+  return value;
+};
+
 const BiometricsDashboard = ({ username }) => {
   const navigate = useNavigate();
   const theme = useTheme();
@@ -963,49 +1010,21 @@ const BiometricsDashboard = ({ username }) => {
                 <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                   <thead style={{ backgroundColor: '#eee' }}>
                     <tr>
-                      <th style={thStyle}>Date</th>
-                      <th style={thStyle}>RHR</th>
-                      <th style={thStyle}>Max HR</th>
-                      <th style={thStyle}>Min HR</th>
-                      <th style={thStyle}>Sleep RHR</th>
-                      <th style={thStyle}>Sleep (hrs)</th>
-                      <th style={thStyle}>Deep Sleep (hrs)</th>
-                      <th style={thStyle}>Light Sleep (hrs)</th>
-                      <th style={thStyle}>REM Sleep (hrs)</th>
-                      <th style={thStyle}>Awake (hrs)</th>
-                      <th style={thStyle}>Steps</th>
-                      <th style={thStyle}>Distance (km)</th>
-                      <th style={thStyle}>Active Cals</th>
-                      <th style={thStyle}>Total Cals</th>
-                      <th style={thStyle}>Avg Stress</th>
-                      <th style={thStyle}>Max Stress</th>
-                      <th style={thStyle}>Avg Resp</th>
-                      <th style={thStyle}>Min Resp</th>
-                      <th style={thStyle}>Max Resp</th>
+                      {getDataColumns(biometricData).map(column => (
+                        <th key={column.id} style={thStyle}>
+                          {column.label}
+                        </th>
+                      ))}
                     </tr>
                   </thead>
                   <tbody>
-                    {filteredData.map((item, idx) => (
+                    {biometricData.map((item, idx) => (
                       <tr key={idx} style={{ borderBottom: '1px solid #ccc' }}>
-                        <td style={tdStyle}>{item.date || 'N/A'}</td>
-                        <td style={tdStyle}>{item.resting_heart_rate || '0'}</td>
-                        <td style={tdStyle}>{item.max_heart_rate || '0'}</td>
-                        <td style={tdStyle}>{item.min_heart_rate || '0'}</td>
-                        <td style={tdStyle}>{item.sleep_resting_heart_rate || '0'}</td>
-                        <td style={tdStyle}>{(item.sleep_hours || 0).toFixed(2)}</td>
-                        <td style={tdStyle}>{(item.deep_sleep || 0).toFixed(2)}</td>
-                        <td style={tdStyle}>{(item.light_sleep || 0).toFixed(2)}</td>
-                        <td style={tdStyle}>{(item.rem_sleep || 0).toFixed(2)}</td>
-                        <td style={tdStyle}>{(item.awake_hours || 0).toFixed(2)}</td>
-                        <td style={tdStyle}>{item.total_steps || '0'}</td>
-                        <td style={tdStyle}>{(item.distance || 0).toFixed(2)}</td>
-                        <td style={tdStyle}>{item.active_calories || '0'}</td>
-                        <td style={tdStyle}>{item.total_calories || '0'}</td>
-                        <td style={tdStyle}>{item.stress_level || '0'}</td>
-                        <td style={tdStyle}>{item.max_stress_level || '0'}</td>
-                        <td style={tdStyle}>{(item.average_respiration || 0).toFixed(1)}</td>
-                        <td style={tdStyle}>{(item.lowest_respiration || 0).toFixed(1)}</td>
-                        <td style={tdStyle}>{(item.highest_respiration || 0).toFixed(1)}</td>
+                        {getDataColumns(biometricData).map(column => (
+                          <td key={column.id} style={tdStyle}>
+                            {formatCellValue(item[column.id], column.id)}
+                          </td>
+                        ))}
                       </tr>
                     ))}
                   </tbody>
@@ -1025,17 +1044,24 @@ const BiometricsDashboard = ({ username }) => {
   );
 };
 
-// Basic table styles
+// Update the table styles
 const thStyle = {
   textAlign: 'left',
-  padding: '8px',
+  padding: '12px 8px',
   border: '1px solid #ccc',
-  fontWeight: 'bold'
+  fontWeight: 'bold',
+  backgroundColor: '#2C3E50',
+  color: 'white',
+  position: 'sticky',
+  top: 0,
+  zIndex: 1
 };
+
 const tdStyle = {
   textAlign: 'left',
   padding: '8px',
-  border: '1px solid #ccc'
+  border: '1px solid #ccc',
+  whiteSpace: 'nowrap'
 };
 
 export default BiometricsDashboard; 

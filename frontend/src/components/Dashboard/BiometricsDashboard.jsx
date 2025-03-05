@@ -40,6 +40,7 @@ const colors = {
 // Add this constant for developer-only fields
 const DEVELOPER_FIELDS = [
   'id',
+  'athlete_id',
   'athlete',
   'user_id',
   'created_at',
@@ -606,30 +607,42 @@ const BiometricsDashboard = ({ username }) => {
   }, []);
 
   return (
-    <Box sx={{ 
-      width: '100%',
-      margin: 0,
-      padding: 0,
-      '& > *': { margin: 0 }
-    }}>
-      <StyledAppBar position="static" sx={{ borderRadius: 0 }}>
-        <Toolbar>
-          <StyledTitle sx={{ flexGrow: 1 }}>
-            {username}'s Biometric Insights
-          </StyledTitle>
+    <Box sx={{ width: '100%' }}>
+      <Box sx={{
+        background: 'linear-gradient(135deg, #2C3E50 0%, #3498DB 100%)',
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        height: '200px',
+        zIndex: -1
+      }} />
+      <Box sx={{ 
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        p: 2,
+        color: 'white'
+      }}>
+        <Typography variant="h4" sx={{ 
+          fontWeight: 600,
+          fontFamily: '"Poppins", sans-serif',
+        }}>
+          {username.charAt(0).toUpperCase() + username.slice(1)}'s Pulse Insights
+        </Typography>
+        <Box sx={{ 
+          display: 'flex', 
+          alignItems: 'center',
+          gap: 2
+        }}>
           <Box sx={{ 
             display: 'flex', 
             alignItems: 'center',
-            color: 'white',
             backgroundColor: 'rgba(255, 255, 255, 0.1)',
             padding: '4px 12px',
             borderRadius: '4px',
-            mr: 2
           }}>
-            <DeveloperModeIcon sx={{ 
-              mr: 1,
-              color: 'white'
-            }} />
+            <DeveloperModeIcon sx={{ mr: 1 }} />
             <Switch
               checked={devMode}
               onChange={(e) => setDevMode(e.target.checked)}
@@ -654,9 +667,7 @@ const BiometricsDashboard = ({ username }) => {
             />
           </Box>
           <IconButton
-            edge="end"
             color="inherit"
-            aria-label="menu"
             onClick={openMenu}
             sx={{
               transition: 'transform 0.2s',
@@ -708,107 +719,102 @@ const BiometricsDashboard = ({ username }) => {
               <Typography>Logout</Typography>
             </StyledMenuItem>
           </StyledMenu>
-        </Toolbar>
-      </StyledAppBar>
+        </Box>
+      </Box>
+      <Box sx={{ px: 3 }}>
+        {/* Dialog for showing raw data or error logs */}
+        <Dialog open={showDialog} onClose={closeDialog} maxWidth="md" fullWidth>
+          <DialogTitle>{dialogTitle}</DialogTitle>
+          <DialogContent>
+            <pre style={{ whiteSpace: 'pre-wrap' }}>
+              {dialogContent}
+            </pre>
+          </DialogContent>
+        </Dialog>
 
-      {/* Dialog for showing raw data or error logs */}
-      <Dialog open={showDialog} onClose={closeDialog} maxWidth="md" fullWidth>
-        <DialogTitle>{dialogTitle}</DialogTitle>
-        <DialogContent>
-          <pre style={{ whiteSpace: 'pre-wrap' }}>
-            {dialogContent}
-          </pre>
-        </DialogContent>
-      </Dialog>
+        {/* Source Selection Dialog */}
+        <Dialog 
+          open={showSourceMenu} 
+          onClose={() => setShowSourceMenu(false)}
+          PaperProps={{
+            sx: {
+              width: '300px',
+              backgroundColor: '#2C3E50',
+              color: 'white'
+            }
+          }}
+        >
+          <DialogTitle>Select Data Source</DialogTitle>
+          <DialogContent>
+            {sources.map(source => (
+              <StyledMenuItem
+                key={source.id}
+                onClick={() => {
+                  if (source.id === 'whoop') {
+                    setShowSourceMenu(false);
+                    setShowWhoopConnect(true);
+                  } else {
+                    setSelectedSource(source.id);
+                    setShowSourceMenu(false);
+                    setShowCredentialsMenu(true);
+                  }
+                }}
+              >
+                <Typography>{source.name}</Typography>
+              </StyledMenuItem>
+            ))}
+          </DialogContent>
+        </Dialog>
 
-      {/* Source Selection Dialog */}
-      <Dialog 
-        open={showSourceMenu} 
-        onClose={() => setShowSourceMenu(false)}
-        PaperProps={{
-          sx: {
-            width: '300px',
-            backgroundColor: '#2C3E50',
-            color: 'white'
-          }
-        }}
-      >
-        <DialogTitle>Select Data Source</DialogTitle>
-        <DialogContent>
-          {sources.map(source => (
-            <StyledMenuItem
-              key={source.id}
-              onClick={() => {
-                if (source.id === 'whoop') {
-                  setShowSourceMenu(false);
-                  setShowWhoopConnect(true);
-                } else {
-                  setSelectedSource(source.id);
-                  setShowSourceMenu(false);
-                  setShowCredentialsMenu(true);
-                }
-              }}
-            >
-              <Typography>{source.name}</Typography>
-            </StyledMenuItem>
-          ))}
-        </DialogContent>
-      </Dialog>
+        {/* Credentials Selection Dialog */}
+        <Dialog 
+          open={showCredentialsMenu} 
+          onClose={() => setShowCredentialsMenu(false)}
+          PaperProps={{
+            sx: {
+              width: '300px',
+              backgroundColor: '#2C3E50',
+              color: 'white'
+            }
+          }}
+        >
+          <DialogTitle>Select Credentials</DialogTitle>
+          <DialogContent>
+            {garminProfiles.map(profile => (
+              <StyledMenuItem
+                key={profile.id}
+                onClick={() => {
+                  handleSourceActivation(selectedSource, profile.id);
+                  setShowCredentialsMenu(false);
+                }}
+              >
+                <Typography>{profile.name}</Typography>
+              </StyledMenuItem>
+            ))}
+          </DialogContent>
+        </Dialog>
 
-      {/* Credentials Selection Dialog */}
-      <Dialog 
-        open={showCredentialsMenu} 
-        onClose={() => setShowCredentialsMenu(false)}
-        PaperProps={{
-          sx: {
-            width: '300px',
-            backgroundColor: '#2C3E50',
-            color: 'white'
-          }
-        }}
-      >
-        <DialogTitle>Select Credentials</DialogTitle>
-        <DialogContent>
-          {garminProfiles.map(profile => (
-            <StyledMenuItem
-              key={profile.id}
-              onClick={() => {
-                handleSourceActivation(selectedSource, profile.id);
-                setShowCredentialsMenu(false);
-              }}
-            >
-              <Typography>{profile.name}</Typography>
-            </StyledMenuItem>
-          ))}
-        </DialogContent>
-      </Dialog>
+        {/* WHOOP Connect Dialog */}
+        <Dialog 
+          open={showWhoopConnect} 
+          onClose={() => setShowWhoopConnect(false)}
+          PaperProps={{
+            sx: {
+              width: '300px',
+              backgroundColor: '#2C3E50',
+              color: 'white'
+            }
+          }}
+        >
+          <DialogTitle>Connect WHOOP Account</DialogTitle>
+          <DialogContent>
+            <Typography sx={{ mb: 2 }}>
+              Connect your WHOOP account to sync your biometric data.
+            </Typography>
+            <WhoopConnect />
+          </DialogContent>
+        </Dialog>
 
-      {/* WHOOP Connect Dialog */}
-      <Dialog 
-        open={showWhoopConnect} 
-        onClose={() => setShowWhoopConnect(false)}
-        PaperProps={{
-          sx: {
-            width: '300px',
-            backgroundColor: '#2C3E50',
-            color: 'white'
-          }
-        }}
-      >
-        <DialogTitle>Connect WHOOP Account</DialogTitle>
-        <DialogContent>
-          <Typography sx={{ mb: 2 }}>
-            Connect your WHOOP account to sync your biometric data.
-          </Typography>
-          <WhoopConnect />
-        </DialogContent>
-      </Dialog>
-
-      <Box sx={{ 
-        p: 4, 
-        backgroundColor: colors.background,
-        minHeight: '100vh'
-      }}>
         {loading ? (
           <Alert severity="info">Loading...</Alert>
         ) : error ? (

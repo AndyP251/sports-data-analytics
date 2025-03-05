@@ -18,7 +18,7 @@ import json
 from .services.data_sync_service import DataSyncService
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
-from django.views.decorators.csrf import ensure_csrf_cookie, csrf_exempt
+from django.views.decorators.csrf import ensure_csrf_cookie, csrf_exempt, csrf_protect
 from rest_framework.response import Response
 from datetime import timedelta
 from django.contrib.auth import login as auth_login
@@ -30,7 +30,7 @@ from asgiref.sync import sync_to_async
 from functools import wraps
 from rest_framework import status
 from django.core.cache import cache
-from django.middleware.csrf import get_token
+from django.middleware.csrf import get_token, CsrfViewMiddleware
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -42,14 +42,20 @@ logger = logging.getLogger(__name__)
 def home(request):
     return render(request, 'core/home.html')
 
-@ensure_csrf_cookie
+@csrf_protect
 @require_http_methods(["POST", "OPTIONS"])
 def login_view(request):
     if request.method == "OPTIONS":
         response = JsonResponse({})
         response["Access-Control-Allow-Headers"] = "Content-Type, X-CSRFToken"
         return response
-        
+
+    # Manually handle CSRF validation to return JSON errors
+    csrf_middleware = CsrfViewMiddleware(lambda req: None)
+    csrf_response = csrf_middleware.process_view(request, None, (), {})
+    if csrf_response:
+        return JsonResponse({'error': 'CSRF token invalid or missing'}, status=403)
+
     if request.method == 'POST':
         form = CustomUserCreationForm(request.POST)
         if form.is_valid():

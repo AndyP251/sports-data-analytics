@@ -118,9 +118,33 @@ const Login = ({ setIsAuthenticated }) => {
             email: '',
             confirmPassword: '',
           })
+
+          // Fetch a fresh CSRF token after registration
+          const refreshCsrfToken = async () => {
+            try {
+              const response = await fetch('/api/verify-dev-password/', {
+                method: 'GET',
+                credentials: 'include',
+              });
+              const data = await response.json();
+              if (data.csrfToken) {
+                setCsrfToken(data.csrfToken);
+                setCsrfStatus('ready');
+              } else {
+                throw new Error('No CSRF token in response');
+              }
+            } catch (error) {
+              console.error('Error refreshing CSRF token:', error);
+              setError('Failed to refresh security token. Please refresh the page.');
+              setCsrfStatus('error');
+            }
+          };
+
+          refreshCsrfToken();
+
           setTimeout(() => {
-            setIsLoginMode(true)
-          }, 2000)
+            setIsLoginMode(true);
+          }, 2000);
         } else {
           setIsAuthenticated(true)
         }

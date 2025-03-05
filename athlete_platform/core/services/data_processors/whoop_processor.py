@@ -94,7 +94,7 @@ class WhoopProcessor(BaseDataProcessor):
                 'spo2_percentage': self._safe_get(recovery_data, 'spo2_percentage', 0),
                 'skin_temp_celsius': self._safe_get(recovery_data, 'skin_temp_celsius', 0),
                 # Cycle Data
-                'start_time': self._safe_get(cycle_data, 'start', datetime.now()),
+                'start_time': self._safe_get(cycle_data, 'start', str(datetime.now())),
                 'strain': self._safe_get(cycle_score, 'strain', 0),
                 'kilojoules': self._safe_get(cycle_data, 'kilojoule', 0),
                 'average_heart_rate': self._safe_get(cycle_data, 'average_heart_rate', 0),

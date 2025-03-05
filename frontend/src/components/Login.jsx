@@ -30,11 +30,13 @@ const Login = ({ setIsAuthenticated }) => {
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
   const [csrfToken, setCsrfToken] = useState('')
+  const [csrfStatus, setCsrfStatus] = useState('loading')
 
   useEffect(() => {
     // Get CSRF token on component mount
     const getCsrfToken = async () => {
       try {
+        setCsrfStatus('loading')
         const response = await fetch('/api/verify-dev-password/', {
           method: 'GET',
           credentials: 'include',
@@ -47,10 +49,14 @@ const Login = ({ setIsAuthenticated }) => {
         const data = await response.json()
         if (data.csrfToken) {
           setCsrfToken(data.csrfToken)
+          setCsrfStatus('ready')
+        } else {
+          throw new Error('No CSRF token in response')
         }
       } catch (error) {
         console.error('Error fetching CSRF token:', error)
         setError('Failed to initialize security. Please refresh the page.')
+        setCsrfStatus('error')
       }
     }
 
@@ -60,8 +66,8 @@ const Login = ({ setIsAuthenticated }) => {
   const handleSubmit = async (e) => {
     e.preventDefault()
     
-    if (!csrfToken) {
-      setError('Security token not available. Please refresh the page.')
+    if (csrfStatus !== 'ready') {
+      setError('Please wait for security initialization to complete.')
       return
     }
 
@@ -138,6 +144,11 @@ const Login = ({ setIsAuthenticated }) => {
           <div className="brand-title">Pulse Project</div>
           <div className="developer-credit">Developed by Andrew Prince</div>
           <h2 className="auth-title">{isLoginMode ? 'Welcome Back' : 'Create Account'}</h2>
+          <div className={`csrf-status ${csrfStatus}`}>
+            {csrfStatus === 'loading' && 'Initializing security...'}
+            {csrfStatus === 'ready' && 'Security initialized'}
+            {csrfStatus === 'error' && 'Security initialization failed'}
+          </div>
           {error && <div className="error-message">{error}</div>}
           {success && <div className="success-message">{success}</div>}
           <form onSubmit={handleSubmit} className="auth-form">

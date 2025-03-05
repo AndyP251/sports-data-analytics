@@ -262,6 +262,7 @@ class CoreBiometricData(models.Model):
     hrv_ms = models.FloatField(default=0)
     strain = models.FloatField(default=0)
     kilojoules = models.FloatField(default=0)
+    average_heart_rate = models.FloatField(default=0)
     spo2_percentage = models.FloatField(default=0)
     skin_temp_celsius = models.FloatField(default=0)
     respiratory_rate = models.FloatField(default=0)
@@ -283,13 +284,13 @@ class CoreBiometricData(models.Model):
     first_name = models.CharField(max_length=127, default='')
     last_name = models.CharField(max_length=127, default='')
     gender = models.CharField(max_length=127, default='')
-    birthdate = models.DateField(default=timezone.now)
+    birthdate = models.DateField(default=str(timezone.now))
     height_cm = models.IntegerField(default=0)
     weight_kg = models.IntegerField(default=0)
     body_fat_percentage = models.FloatField(default=0)
 
     source = models.CharField(max_length=20, default='garmin')
-    created_at = models.DateTimeField(default=timezone.now)
+    created_at = models.DateTimeField(default=str(timezone.now))
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:

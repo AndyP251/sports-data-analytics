@@ -12,6 +12,7 @@ from django.conf import settings
 from core.utils.garmin_utils import GarminDataCollector
 from ..data_transformers.garmin_transformer import GarminTransformer
 from django.db import transaction
+from django.utils import timezone
 logger = logging.getLogger(__name__)
 
 class GarminProcessor(BaseDataProcessor):
@@ -78,7 +79,7 @@ class GarminProcessor(BaseDataProcessor):
             
             with transaction.atomic():
                 # Add timezone awareness to created_at
-                now = datetime.now()
+                now = timezone.now()
 
                 logger.info(f"Storing processed data for {current_date}, and doing sleep check, this is your sleep data: {metrics.get('total_sleep_seconds',0)}\n\n\n")
                 

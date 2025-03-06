@@ -23,6 +23,11 @@ import Brightness4Icon from '@mui/icons-material/Brightness4';
 import HeartRateMetrics from '../HeartRateMetrics';
 import axios from 'axios';
 import WhoopConnect from '../WhoopConnect';
+import BedtimeIcon from '@mui/icons-material/Bedtime';
+import DirectionsRunIcon from '@mui/icons-material/DirectionsRun';
+import FavoriteIcon from '@mui/icons-material/Favorite';
+import RestoreIcon from '@mui/icons-material/Restore';
+import MonitorHeartIcon from '@mui/icons-material/MonitorHeart';
 import './BiometricsDashboard.css';
 
 // Modern, professional color palette
@@ -1163,6 +1168,7 @@ const BiometricsDashboard = ({ username }) => {
         >
           <Tab label="Analytics" {...a11yProps(0)} />
           <Tab label="Data Table" {...a11yProps(1)} />
+          <Tab label="Insights" {...a11yProps(2)} />
         </Tabs>
 
         {tabValue === 0 && (
@@ -1448,6 +1454,240 @@ const BiometricsDashboard = ({ username }) => {
               >
                 Developer mode is active - showing all fields including system fields
               </Typography>
+            )}
+          </Box>
+        )}
+        
+        {tabValue === 2 && (
+          <Box sx={{ mt: 3 }}>
+            <Typography variant="h5" sx={{ 
+              mb: 3, 
+              color: darkMode ? 'white' : colors.primary,
+              fontWeight: 600 
+            }}>
+              Your Personal Health Insights
+            </Typography>
+            
+            {biometricData.length === 0 && !loading ? (
+              <Typography variant="body1" color="textSecondary">
+                No data available for insights. Please sync your data.
+              </Typography>
+            ) : (
+              <Grid container spacing={3}>
+                {/* Sleep Insight */}
+                <Grid item xs={12} md={6}>
+                  <Card sx={{ 
+                    p: 3, 
+                    borderRadius: '12px',
+                    height: '100%',
+                    transition: 'transform 0.3s ease',
+                    '&:hover': { transform: 'translateY(-5px)' }
+                  }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                      <BedtimeIcon sx={{ 
+                        fontSize: 32, 
+                        color: '#8e44ad', 
+                        mr: 2,
+                        p: 1,
+                        borderRadius: '50%',
+                        backgroundColor: darkMode ? 'rgba(142, 68, 173, 0.2)' : 'rgba(142, 68, 173, 0.1)',
+                      }} />
+                      <Typography variant="h6" sx={{ fontWeight: 600 }}>Sleep Quality</Typography>
+                    </Box>
+                    
+                    <Typography variant="body1" sx={{ mb: 2 }}>
+                      {selectedDataSource === 'whoop' 
+                        ? `Your sleep performance has been ${biometricData[0]?.sleep_performance > 85 ? 'excellent' : biometricData[0]?.sleep_performance > 70 ? 'good' : 'below average'} 
+                          lately. You've been getting an average of ${(biometricData.reduce((acc, item) => acc + (item.sleep_hours || 0), 0) / biometricData.length).toFixed(1)} hours of sleep.`
+                        : `Your sleep patterns show you're averaging ${(biometricData.reduce((acc, item) => acc + (item.sleep_hours || 0), 0) / biometricData.length).toFixed(1)} hours per night, 
+                          with deep sleep accounting for about ${Math.round(biometricData[0]?.deep_sleep / biometricData[0]?.sleep_hours * 100) || 25}% of your total sleep.`
+                      }
+                    </Typography>
+                    
+                    <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1 }}>Recommendation:</Typography>
+                    <Typography variant="body2" sx={{ color: darkMode ? 'rgba(255,255,255,0.7)' : 'rgba(0,0,0,0.7)' }}>
+                      {biometricData[0]?.sleep_hours < 7 
+                        ? "Try to increase your sleep duration to at least 7 hours for better recovery and performance."
+                        : "Maintain your current sleep routine. Consider adding 15 minutes of meditation before bed for even better quality."
+                      }
+                    </Typography>
+                  </Card>
+                </Grid>
+                
+                {/* Activity Insight */}
+                <Grid item xs={12} md={6}>
+                  <Card sx={{ 
+                    p: 3, 
+                    borderRadius: '12px',
+                    height: '100%',
+                    transition: 'transform 0.3s ease',
+                    '&:hover': { transform: 'translateY(-5px)' }
+                  }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                      <DirectionsRunIcon sx={{ 
+                        fontSize: 32, 
+                        color: '#2ecc71', 
+                        mr: 2,
+                        p: 1,
+                        borderRadius: '50%',
+                        backgroundColor: darkMode ? 'rgba(46, 204, 113, 0.2)' : 'rgba(46, 204, 113, 0.1)',
+                      }} />
+                      <Typography variant="h6" sx={{ fontWeight: 600 }}>Activity Level</Typography>
+                    </Box>
+                    
+                    <Typography variant="body1" sx={{ mb: 2 }}>
+                      {selectedDataSource === 'whoop' 
+                        ? `Your recent strain levels have been ${biometricData[0]?.strain > 15 ? 'very high' : biometricData[0]?.strain > 10 ? 'moderate' : 'low'}. 
+                          Your body is handling this load ${biometricData[0]?.recovery_score > 66 ? 'well' : 'with some difficulty'}.`
+                        : `You've averaged ${Math.round(biometricData.reduce((acc, item) => acc + (item.steps || 0), 0) / biometricData.length).toLocaleString()} steps daily, 
+                          burning approximately ${Math.round(biometricData.reduce((acc, item) => acc + (item.active_calories || 0), 0) / biometricData.length)} active calories.`
+                      }
+                    </Typography>
+                    
+                    <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1 }}>Recommendation:</Typography>
+                    <Typography variant="body2" sx={{ color: darkMode ? 'rgba(255,255,255,0.7)' : 'rgba(0,0,0,0.7)' }}>
+                      {biometricData[0]?.steps < 7000 || biometricData[0]?.strain < 8
+                        ? "Consider increasing your daily activity. Even a 20-minute walk can boost your cardiovascular health."
+                        : biometricData[0]?.recovery_score < 33
+                        ? "Your body needs more recovery time. Focus on light activities for the next 1-2 days."
+                        : "Your activity level is well-balanced with your recovery. Keep up the good work!"
+                      }
+                    </Typography>
+                  </Card>
+                </Grid>
+                
+                {/* Heart Rate Insight */}
+                <Grid item xs={12} md={6}>
+                  <Card sx={{ 
+                    p: 3, 
+                    borderRadius: '12px',
+                    height: '100%',
+                    transition: 'transform 0.3s ease',
+                    '&:hover': { transform: 'translateY(-5px)' }
+                  }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                      <FavoriteIcon sx={{ 
+                        fontSize: 32, 
+                        color: '#e74c3c', 
+                        mr: 2,
+                        p: 1,
+                        borderRadius: '50%',
+                        backgroundColor: darkMode ? 'rgba(231, 76, 60, 0.2)' : 'rgba(231, 76, 60, 0.1)',
+                      }} />
+                      <Typography variant="h6" sx={{ fontWeight: 600 }}>Heart Rate Trends</Typography>
+                    </Box>
+                    
+                    <Typography variant="body1" sx={{ mb: 2 }}>
+                      {`Your resting heart rate is ${Math.round(biometricData[0]?.resting_heart_rate || 60)} bpm, which is 
+                        ${biometricData[0]?.resting_heart_rate < 60 ? 'excellent' : biometricData[0]?.resting_heart_rate < 70 ? 'good' : 'average'} for your profile.
+                        ${selectedDataSource === 'whoop' 
+                          ? `Your HRV of ${Math.round(biometricData[0]?.hrv_ms || 50)} ms indicates ${biometricData[0]?.hrv_ms > 70 ? 'strong' : biometricData[0]?.hrv_ms > 50 ? 'good' : 'moderate'} recovery capacity.`
+                          : `Your heart rate reaches ${Math.round(biometricData[0]?.max_heart_rate || 150)} bpm during peak activity.`
+                        }`
+                      }
+                    </Typography>
+                    
+                    <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1 }}>Recommendation:</Typography>
+                    <Typography variant="body2" sx={{ color: darkMode ? 'rgba(255,255,255,0.7)' : 'rgba(0,0,0,0.7)' }}>
+                      {biometricData[0]?.resting_heart_rate > 70
+                        ? "Your resting heart rate is slightly elevated. Consider more aerobic exercise and stress reduction techniques."
+                        : biometricData[0]?.hrv_ms < 50
+                        ? "Your heart rate variability could improve. Focus on quality sleep and recovery."
+                        : "Your cardiovascular indicators look healthy. Continue your current exercise routine."
+                      }
+                    </Typography>
+                  </Card>
+                </Grid>
+                
+                {/* Recovery Insight */}
+                <Grid item xs={12} md={6}>
+                  <Card sx={{ 
+                    p: 3, 
+                    borderRadius: '12px',
+                    height: '100%',
+                    transition: 'transform 0.3s ease',
+                    '&:hover': { transform: 'translateY(-5px)' }
+                  }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                      <RestoreIcon sx={{ 
+                        fontSize: 32, 
+                        color: '#3498db', 
+                        mr: 2,
+                        p: 1,
+                        borderRadius: '50%',
+                        backgroundColor: darkMode ? 'rgba(52, 152, 219, 0.2)' : 'rgba(52, 152, 219, 0.1)',
+                      }} />
+                      <Typography variant="h6" sx={{ fontWeight: 600 }}>Recovery Status</Typography>
+                    </Box>
+                    
+                    <Typography variant="body1" sx={{ mb: 2 }}>
+                      {selectedDataSource === 'whoop' 
+                        ? `Your body is ${biometricData[0]?.recovery_score > 66 ? 'well recovered' : biometricData[0]?.recovery_score > 33 ? 'moderately recovered' : 'under-recovered'}.
+                          This suggests your ${biometricData[0]?.recovery_score > 66 ? 'body is adapting well to recent training loads' : 'system needs more recovery time'}.`
+                        : `Based on your resting heart rate and sleep quality, your recovery level appears 
+                          ${biometricData[0]?.resting_heart_rate < (biometricData[1]?.resting_heart_rate || 60) ? 'good' : 'incomplete'}.`
+                      }
+                    </Typography>
+                    
+                    <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1 }}>Recommendation:</Typography>
+                    <Typography variant="body2" sx={{ color: darkMode ? 'rgba(255,255,255,0.7)' : 'rgba(0,0,0,0.7)' }}>
+                      {(biometricData[0]?.recovery_score < 33) || (biometricData[0]?.resting_heart_rate > (biometricData[1]?.resting_heart_rate || 60) + 5)
+                        ? "Focus on recovery today. Consider light activity, proper hydration, and an extra hour of sleep."
+                        : (biometricData[0]?.recovery_score < 66) || (biometricData[0]?.resting_heart_rate > (biometricData[1]?.resting_heart_rate || 60))
+                        ? "Your body is in a moderate recovery state. Moderate intensity training is appropriate."
+                        : "You're well recovered. This is an optimal day for higher intensity training if desired."
+                      }
+                    </Typography>
+                  </Card>
+                </Grid>
+                
+                {/* Long-term Trends Insight */}
+                <Grid item xs={12}>
+                  <Card sx={{ 
+                    p: 3, 
+                    borderRadius: '12px',
+                    transition: 'transform 0.3s ease',
+                    '&:hover': { transform: 'translateY(-5px)' }
+                  }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                      <MonitorHeartIcon sx={{ 
+                        fontSize: 32, 
+                        color: '#f39c12', 
+                        mr: 2,
+                        p: 1,
+                        borderRadius: '50%',
+                        backgroundColor: darkMode ? 'rgba(243, 156, 18, 0.2)' : 'rgba(243, 156, 18, 0.1)',
+                      }} />
+                      <Typography variant="h6" sx={{ fontWeight: 600 }}>Health Trends</Typography>
+                    </Box>
+                    
+                    <Typography variant="body1" sx={{ mb: 2 }}>
+                      {`Over the past ${biometricData.length} days, your metrics indicate 
+                      ${biometricData[0]?.resting_heart_rate < biometricData[biometricData.length-1]?.resting_heart_rate ? 'improving' : 'stable'} cardiovascular fitness
+                      and ${(biometricData.reduce((a, b, i, arr) => i > 0 ? a + (b.sleep_hours > arr[i-1].sleep_hours ? 1 : 0) : 0, 0) > biometricData.length/2) ? 'improving' : 'consistent'} sleep habits.`}
+                      
+                      {selectedDataSource === 'whoop' 
+                        ? ` Your recovery scores have been trending ${biometricData.slice(0, 3).reduce((acc, item) => acc + (item.recovery_score || 0), 0) / 3 > 
+                            biometricData.slice(biometricData.length-3).reduce((acc, item) => acc + (item.recovery_score || 0), 0) / 3 ? 'upward' : 'consistently'}.`
+                        : ` Your overall activity level has been ${biometricData.slice(0, 3).reduce((acc, item) => acc + (item.steps || 0), 0) / 3 > 
+                            biometricData.slice(biometricData.length-3).reduce((acc, item) => acc + (item.steps || 0), 0) / 3 ? 'increasing' : 'steady'}.`
+                      }
+                    </Typography>
+                    
+                    <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1 }}>Personalized Insight:</Typography>
+                    <Typography variant="body2" sx={{ color: darkMode ? 'rgba(255,255,255,0.7)' : 'rgba(0,0,0,0.7)' }}>
+                      {`Your data suggests that your body responds best to 
+                      ${biometricData.find(d => d.sleep_hours > 8)?.resting_heart_rate < biometricData.find(d => d.sleep_hours < 7)?.resting_heart_rate ? 
+                        'longer sleep durations' : 'consistent sleep patterns'} 
+                      and ${biometricData.find(d => d.steps > 10000) ? 
+                        'regular physical activity' : 'balanced activity levels'}. 
+                      Consider ${biometricData[0]?.resting_heart_rate > 65 ? 
+                        'adding more cardio exercises to your routine' : 'maintaining your current exercise balance'} 
+                      to optimize your health metrics.`}
+                    </Typography>
+                  </Card>
+                </Grid>
+              </Grid>
             )}
           </Box>
         )}

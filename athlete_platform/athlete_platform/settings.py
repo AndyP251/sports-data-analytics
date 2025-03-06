@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 # Debugging environment variables
-print("Environment variables loaded:")
+# print("Environment variables loaded:")
 
 # print(f"Current directory: {os.getcwd()}")
 
@@ -462,4 +462,4 @@ SECURE_CONTENT_TYPE_NOSNIFF = True
 X_FRAME_OPTIONS = 'DENY'  # Prevent clickjacking
 
 
-print(f"ENCRYPTION_KEY exists: {'ENCRYPTION_KEY' in os.environ}")
+# print(f"ENCRYPTION_KEY exists: {'ENCRYPTION_KEY' in os.environ}")

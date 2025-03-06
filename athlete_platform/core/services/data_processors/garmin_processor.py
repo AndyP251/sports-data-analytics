@@ -136,6 +136,7 @@ class GarminProcessor(BaseDataProcessor):
                         # Metadata
                         'created_at': self._safe_get(metrics, 'created_at', now),
                         'updated_at': now,
+                        'source': 'garmin',
                     }
                 )
                 
@@ -186,7 +187,7 @@ class GarminProcessor(BaseDataProcessor):
                 
                 results.append({
                     'date': item.date,
-                    'source': 'garmin',
+                    'source': item.source,
                     'metrics': {
                         # Sleep Metrics
                         'total_sleep_seconds': item.total_sleep_seconds,
@@ -233,6 +234,7 @@ class GarminProcessor(BaseDataProcessor):
                         # Metadata
                         'created_at': item.created_at,
                         'updated_at': item.updated_at,
+                        'source': item.source,
                     }
                 })
             return results
@@ -312,13 +314,7 @@ class GarminProcessor(BaseDataProcessor):
                 if all(value is None for value in user_summary.values()):
                     logger.error(f"[GARMIN] All values in user_summary are None for date {raw_day.get('date')}")
                     continue
-                # TODO: Remove this once we have a transformer
                 final_data.append(raw_day)
-                # transformed = GarminTransformer.transform(raw_day)
-                # if transformed:
-                #     final_data.append(transformed)
-                # else:
-                #     logger.error(f"[GARMIN] Failed to transform data for date {raw_day.get('date')}")
 
             return final_data if final_data else None
 

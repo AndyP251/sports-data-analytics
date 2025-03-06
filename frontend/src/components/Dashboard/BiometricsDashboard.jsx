@@ -598,8 +598,8 @@ const BiometricsDashboard = ({ username }) => {
       if (response.ok) {
         // Clear all auth-related data
         localStorage.clear();  // Or specifically remove items you want to clear
-        // Force reload to clear any remaining state
-        window.location.href = '/login';  // Use window.location for a full page reload
+        // Redirect to the homepage instead of login
+        window.location.href = '/';  // Root URL is the homepage
       } else {
         console.error('Logout failed:', response.status, response.statusText);
         throw new Error('Logout failed');

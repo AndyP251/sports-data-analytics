@@ -89,20 +89,35 @@ class DataSyncService:
     
         return self.sync_specific_sources(self.active_sources, start_date, end_date)
 
-    def sync_specific_sources(self, sources: List[str], start_date: Optional[datetime] = None, end_date: Optional[datetime] = None) -> bool:
+    def sync_specific_sources(self, sources: List[str], start_date: Optional[datetime] = None, end_date: Optional[datetime] = None, force_refresh: bool = False) -> Dict[str, bool]:
         """Sync data from specific sources"""
         logger.info(f"Starting data sync for athlete {self.athlete.id} with sources: {sources}")
         
         if not sources:
             logger.warning("No sources specified for sync")
-            return False
+            return {source: False for source in sources}
 
-        success = True
+        # Set default date range if not provided
+        if not start_date:
+            start_date = timezone.now() - timedelta(days=30)
+        if not end_date:
+            end_date = timezone.now()
+            
+        # Convert to date objects if datetime objects were provided
+        if isinstance(start_date, datetime):
+            start_date = start_date.date()
+        if isinstance(end_date, datetime):
+            end_date = end_date.date()
+            
+        logger.info(f"Sync date range: {start_date} to {end_date} (force_refresh: {force_refresh})")
+
+        results = {}
         
         for source in sources:
             try:
                 if source not in self.SUPPORTED_SOURCES:
                     logger.warning(f"Unsupported source: {source}")
+                    results[source] = False
                     continue
                     
                 # Get the credential attribute name for this source
@@ -111,6 +126,7 @@ class DataSyncService:
                 # Check if athlete has credentials for this source
                 if not hasattr(self.athlete, cred_attr):
                     logger.warning(f"Athlete {self.athlete.id} missing credentials for {source}")
+                    results[source] = False
                     continue
                     
                 # Initialize appropriate processor
@@ -120,31 +136,25 @@ class DataSyncService:
                     processor = WhoopProcessor(self.athlete)
                 elif source == 'garmin':
                     from .data_processors import GarminProcessor
-                    creds = self.athlete.garmin_credentials
-                    profile_type = getattr(creds, 'profile_type', 'default')
+                    # Get profile type from credentials
+                    profile_type = getattr(self.athlete, cred_attr).profile_type
                     processor = GarminProcessor(self.athlete, profile_type)
                 
-                if not processor:
-                    logger.error(f"Failed to initialize processor for {source}")
-                    success = False
-                    continue
-                    
-                # Convert datetime to date if needed
-                sync_start = start_date.date() if start_date else None
-                sync_end = end_date.date() if end_date else None
-                
-                # Perform the sync
-                if not processor.sync_data(sync_start, sync_end):
-                    logger.error(f"Sync failed for {source}")
-                    success = False
+                if processor:
+                    logger.info(f"Syncing {source} data for athlete {self.athlete.id} from {start_date} to {end_date}")
+                    # Pass through force_refresh parameter
+                    success = processor.sync_data(start_date, end_date, force_refresh=force_refresh)
+                    results[source] = success
+                    logger.info(f"Sync {source} result: {success}")
                 else:
-                    logger.info(f"Successfully synced {source} data")
+                    logger.error(f"Failed to initialize processor for {source}")
+                    results[source] = False
                     
             except Exception as e:
-                logger.error(f"Error syncing {source} data: {e}", exc_info=True)
-                success = False
+                logger.error(f"Error syncing {source} data: {str(e)}", exc_info=True)
+                results[source] = False
                 
-        return success
+        return results
 
     def get_biometric_data(self, days: int = 7):
         """Get biometric data for the athlete"""
@@ -156,23 +166,75 @@ class DataSyncService:
             end_date = timezone.now().date()
             start_date = end_date - timedelta(days=days)
             
+            logger.info(f"Fetching biometric data for athlete {self.athlete.id} from {start_date} to {end_date}")
+            
+            # Query database for all biometric data in the date range
             data = CoreBiometricData.objects.filter(
                 athlete=self.athlete,
                 date__range=[start_date, end_date]
-            ).values().order_by('date')
-
-            if not data.exists():
-                logger.info(f"No data found for athlete {self.athlete.id}, syncing data")
-                self.sync_specific_sources(self.active_sources, start_date, end_date)
+            ).values()
+            
+            # Log what we found
+            if data.exists():
+                found_dates = sorted(str(item['date']) for item in data)
+                logger.info(f"Found {data.count()} records for athlete {self.athlete.id}: {found_dates}")
+            else:
+                logger.info(f"No biometric data found for athlete {self.athlete.id}")
+            
+            # If no data found or data is severely incomplete, trigger a sync
+            # Note: We now sync if we have less than 1/3 of the expected days
+            expected_days = (end_date - start_date).days + 1
+            threshold = expected_days // 3
+            
+            if not data.exists() or data.count() < threshold:
+                logger.info(f"Insufficient data found ({data.count()} of {expected_days} days), syncing data")
+                
+                # Try to sync all active sources
+                sync_results = self.sync_specific_sources(self.active_sources, start_date, end_date)
+                logger.info(f"Sync results: {sync_results}")
+                
+                # Fetch data again after sync
                 data = CoreBiometricData.objects.filter(
                     athlete=self.athlete,
                     date__range=[start_date, end_date]
-                ).values().order_by('date')
+                ).values()
+                
+                logger.info(f"After sync: found {data.count()} records")
+                
+                if data.count() < 1:
+                    # If still no data, try a more aggressive sync with force_refresh
+                    logger.info("Still no data after sync, trying force refresh")
+                    for source in self.active_sources:
+                        # Initialize appropriate processor
+                        processor = None
+                        if source == 'whoop' and hasattr(self.athlete, 'whoop_credentials'):
+                            from .data_processors import WhoopProcessor
+                            processor = WhoopProcessor(self.athlete)
+                        elif source == 'garmin' and hasattr(self.athlete, 'garmin_credentials'):
+                            from .data_processors import GarminProcessor
+                            profile_type = self.athlete.garmin_credentials.profile_type
+                            processor = GarminProcessor(self.athlete, profile_type)
+                            
+                        if processor:
+                            logger.info(f"Force syncing {source} data")
+                            processor.sync_data(start_date, end_date, force_refresh=True)
+                    
+                    # Fetch data one more time
+                    data = CoreBiometricData.objects.filter(
+                        athlete=self.athlete,
+                        date__range=[start_date, end_date]
+                    ).values()
+                    
+                    logger.info(f"After force refresh: found {data.count()} records")
 
-            return data
+            # Convert QuerySet to list and sort by date (newest first)
+            data_list = list(data)
+            data_list.sort(key=lambda x: x['date'], reverse=True)
+            
+            return data_list
 
         except Exception as e:
-            logger.error(f"Error getting biometric data: {e}")
+            logger.error(f"Error getting biometric data: {str(e)}", exc_info=True)
             return []
 
     def _check_db_freshness(self, start_date: datetime.date, end_date: datetime.date) -> bool:

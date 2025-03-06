@@ -167,7 +167,7 @@ def sync_biometric_data(request):
 
         return JsonResponse({
             'success': success,
-            'data': [] if not success else 'Data synced successfully'
+            'data': [] if not success else ''
         })
 
     except Exception as e:
@@ -192,8 +192,19 @@ def async_safe(f):
 def get_biometric_data(request):
     try:
         athlete = request.user.athlete
+        
+        # Get days parameter from query string, default to 30 days
+        days = int(request.GET.get('days', 10))
+        
+        # Use DataSyncService to get data
         sync_service = DataSyncService(athlete)
-        data = sync_service.get_biometric_data()
+        data = sync_service.get_biometric_data(days=days)
+        
+        # If no data found, try to sync first
+        if not data:
+            logger.info(f"No data found for athlete {athlete.id}, attempting to sync")
+            sync_service.sync_specific_sources(sync_service.active_sources)
+            data = sync_service.get_biometric_data(days=days)
         
         return Response(data)
     except Exception as e:

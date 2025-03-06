@@ -290,7 +290,7 @@ class CoreBiometricData(models.Model):
     body_fat_percentage = models.FloatField(default=0)
 
     source = models.CharField(max_length=20, default='garmin')
-    created_at = models.DateTimeField(default=str(timezone.now()))
+    created_at = models.DateTimeField(auto_now=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
@@ -334,6 +334,16 @@ def get_athlete_biometrics(athlete, date):
     except CoreBiometricData.DoesNotExist:
         return None
 
+def get_athlete_biometrics_range(athlete, start_date, end_date=None):
+    """Retrieves biometric data for an athlete over a date range"""
+    if end_date is None:
+        end_date = timezone.now().date()
+    
+    return CoreBiometricData.objects.filter(
+        athlete=athlete,
+        date__range=[start_date, end_date]
+    ).order_by('-date')
+
 class GarminCredentials(models.Model):
     id = models.UUIDField(
         primary_key=True,
@@ -353,7 +363,7 @@ class GarminCredentials(models.Model):
     access_token = models.CharField(max_length=255)
     refresh_token = models.CharField(max_length=255)
     expires_at = models.DateTimeField()
-    created_at = models.DateTimeField(default=timezone.now)
+    created_at = models.DateTimeField(auto_now=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
@@ -383,7 +393,7 @@ class WhoopCredentials(models.Model):
     access_token = models.CharField(max_length=255)
     refresh_token = models.CharField(max_length=255)
     expires_at = models.DateTimeField()
-    created_at = models.DateTimeField(default=timezone.now)
+    created_at = models.DateTimeField(auto_now=True)
     updated_at = models.DateTimeField(auto_now=True)
     scope = models.CharField(max_length=255, default='offline read:recovery read:cycles read:sleep read:workout read:profile')
 

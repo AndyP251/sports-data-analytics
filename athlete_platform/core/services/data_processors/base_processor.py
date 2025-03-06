@@ -184,3 +184,35 @@ class BaseDataProcessor(ABC):
         except Exception as e:
             logger.error(f"Error clearing processing lock: {e}")
             return False 
+        
+    def _safe_get(self, data, key, default=0):
+        """Safely get a value from a dictionary with proper type handling"""
+        if not data or key not in data:
+            return default
+            
+        value = data.get(key)
+        
+        if value is None or value == "":
+            return default
+            
+        # Handle all date/datetime fields
+        date_fields = ['birthdate', 'date', 'created_at', 'updated_at']
+        if key in date_fields:
+            if isinstance(value, datetime):
+                return value.date().isoformat()
+            elif isinstance(value, date):
+                return value.isoformat()
+            elif isinstance(value, str):
+                if value.strip() == "":  # Handle empty strings
+                    return None
+                return value
+            return None  # Return None for invalid date values
+            
+        # Handle numeric values
+        if isinstance(default, (int, float)):
+            try:
+                return float(value)
+            except (ValueError, TypeError):
+                return default
+                
+        return value

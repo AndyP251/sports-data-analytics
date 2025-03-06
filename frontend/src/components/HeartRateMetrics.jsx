@@ -1,6 +1,6 @@
 import React from 'react';
 import styled from 'styled-components';
-import { FaHeartbeat, FaRunning, FaBolt } from 'react-icons/fa';
+import { FaHeartbeat, FaRunning, FaBolt, FaChartLine, FaShieldAlt } from 'react-icons/fa';
 
 const MetricsContainer = styled.div`
   display: flex;
@@ -75,25 +75,50 @@ const Unit = styled.span`
   margin-left: 4px;
 `;
 
-const HeartRateMetrics = ({ resting, average, max }) => {
-  const metrics = [
+const HeartRateMetrics = ({ resting, average, max, isWhoop = false }) => {
+  const metrics = isWhoop ? [
     {
       label: 'Resting HR',
       value: resting,
       icon: <FaHeartbeat />,
-      color: '#4CAF50'  // Green for resting
+      color: '#4CAF50',  // Green for resting
+      unit: 'bpm'
+    },
+    {
+      label: 'Recovery Score',
+      value: average,
+      icon: <FaShieldAlt />,
+      color: '#2196F3',  // Blue for recovery
+      unit: ''
+    },
+    {
+      label: 'Strain',
+      value: max,
+      icon: <FaChartLine />,
+      color: '#FF5722',  // Orange for strain
+      unit: ''
+    }
+  ] : [
+    {
+      label: 'Resting HR',
+      value: resting,
+      icon: <FaHeartbeat />,
+      color: '#4CAF50',  // Green for resting
+      unit: 'bpm'
     },
     {
       label: 'Last 7 Days Average HR',
       value: average,
       icon: <FaRunning />,
-      color: '#2196F3'  // Blue for average
+      color: '#2196F3',  // Blue for average
+      unit: 'bpm'
     },
     {
       label: 'Peak HR',
       value: max,
       icon: <FaBolt />,
-      color: '#FF5722'  // Orange for peak
+      color: '#FF5722',  // Orange for peak
+      unit: 'bpm'
     }
   ];
 
@@ -106,7 +131,7 @@ const HeartRateMetrics = ({ resting, average, max }) => {
           </IconWrapper>
           <Value>
             {metric.value}
-            <Unit>bpm</Unit>
+            {metric.unit && <Unit>{metric.unit}</Unit>}
           </Value>
           <Label>{metric.label}</Label>
         </MetricBlock>

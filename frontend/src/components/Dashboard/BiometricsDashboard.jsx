@@ -779,13 +779,23 @@ const BiometricsDashboard = ({ username }) => {
             onClick={openMenu}
             sx={{
               color: 'white',
-              transition: 'transform 0.2s',
+              transition: 'all 0.4s cubic-bezier(0.2, 0.8, 0.2, 1.2)',
+              padding: 0,
               '&:hover': {
-                transform: 'scale(1.1)',
+                transform: 'scale(1.25) rotate(5deg)',
+                backgroundColor: 'transparent',
+                color: '#c3e6ff',
+                filter: 'drop-shadow(0 0 5px rgba(110, 142, 251, 0.7))',
+              },
+              '&:active': {
+                transform: 'scale(0.9) rotate(-5deg)',
+              },
+              '& .MuiTouchRipple-root': {
+                display: 'none',
               },
             }}
           >
-            <MenuIcon />
+            <MenuIcon fontSize="large" />
           </IconButton>
           
           <Typography variant="h4" sx={{ 

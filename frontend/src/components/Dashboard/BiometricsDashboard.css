@@ -280,4 +280,37 @@
 
 .biometrics-dashboard.dark-mode .MuiButton-containedPrimary:hover {
   background-color: #8a86f8;
+}
+
+/* Dramatic menu button styling */
+@keyframes glow {
+  0% {
+    filter: drop-shadow(0 0 3px rgba(110, 142, 251, 0.6));
+  }
+  50% {
+    filter: drop-shadow(0 0 8px rgba(110, 142, 251, 0.9));
+  }
+  100% {
+    filter: drop-shadow(0 0 3px rgba(110, 142, 251, 0.6));
+  }
+}
+
+.biometrics-dashboard .MuiIconButton-root:hover svg {
+  animation: glow 1.5s infinite;
+}
+
+/* Override the Material UI IconButton hover effect */
+.biometrics-dashboard .MuiIconButton-root {
+  border-radius: 0;
+}
+
+.biometrics-dashboard .MuiIconButton-root:hover,
+.biometrics-dashboard .MuiIconButton-root:focus,
+.biometrics-dashboard .MuiIconButton-root:active {
+  background-color: transparent !important;
+}
+
+/* Menu button animations */
+.menu-button-animated {
+  position: relative;
 } 

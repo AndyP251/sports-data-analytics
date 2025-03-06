@@ -184,7 +184,7 @@ const BiometricsDashboard = ({ username }) => {
   const [biometricData, setBiometricData] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [syncMessage, setSyncMessage] = useState(null);
+  const [syncMessage, setSyncMessage] = useState([]);
   const [anchorEl, setAnchorEl] = useState(null);
   const [rawData, setRawData] = useState(null);
   const [showDialog, setShowDialog] = useState(false);
@@ -227,12 +227,17 @@ const BiometricsDashboard = ({ username }) => {
   };
 
   const fetchData = async () => {
-    if (loading || biometricData.length > 0) return;
+    if (loading) return;
     setLoading(true);
+    setError(null);
+    setBiometricData([]);
     
     try {
-      const response = await axios.get('/api/biometrics/');
-      // console.log('Raw biometrics data:', response.data);
+      // Request 10 days of data by default
+      const days = 10;
+      console.log(`Fetching biometric data for ${days} days...`);
+      const response = await axios.get(`/api/biometrics/?days=${days}`);
+      console.log('Raw biometrics data:', response.data);
       
       // Check if we have any data
       if (!response.data || response.data.length === 0) {
@@ -243,7 +248,11 @@ const BiometricsDashboard = ({ username }) => {
       
       // Process the raw data array directly
       const processedData = processData(response.data);
+      console.log(`Processed ${processedData.length} biometric data entries`);
       console.log('Processed biometrics data:', processedData);
+      
+      // Sort by date (newest first)
+      processedData.sort((a, b) => new Date(b.date) - new Date(a.date));
       setBiometricData(processedData);
       
       // If we have data but no selected source yet, set to first source
@@ -252,7 +261,7 @@ const BiometricsDashboard = ({ username }) => {
       }
     } catch (error) {
       console.error('Error fetching biometric data:', error);
-      setError('Failed to fetch biometric data');
+      setError(`Failed to fetch biometric data: ${error.message}`);
     } finally {
       setLoading(false);
     }
@@ -298,7 +307,6 @@ const BiometricsDashboard = ({ username }) => {
 
   const syncData = async () => {
     if (activeSource === null) {
-      // setError('No data source selected');
       return;
     }
     setLoading(true);
@@ -307,10 +315,7 @@ const BiometricsDashboard = ({ username }) => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'X-CSRFToken': document.cookie.split('csrftoken=')[1]?.split(';')[0],
-          'X-CSRF-Token': document.cookie.split('csrftoken=')[1]?.split(';')[0],
-          'X-Csrftoken': document.cookie.split('csrftoken=')[1]?.split(';')[0],
-          'X-CSRF-Token': document.cookie.split('csrftoken=')[1]?.split(';')[0],
+          'X-CSRF-TOKEN': document.cookie.split('csrftoken=')[1]?.split(';')[0],
         },
         credentials: 'include',
       });
@@ -320,12 +325,24 @@ const BiometricsDashboard = ({ username }) => {
       }
 
       const data = await response.json();
-      if (data.success) {
-        setSyncMessage('Data synced successfully!');
-        fetchData();
-      } else {
-        setError(`Sync failed: ${data.message || 'Unknown error'}`);
+      const messages = [];
+      console.log('Sync data:', data);
+      
+      // Log the general success message
+      if (data.data) {
+        messages.push({ text: `General Sync Status: ${data.data}`, type: 'info' });
       }
+      // Iterate over the success object to determine sync status for each source
+      for (const [source, success] of Object.entries(data.success)) {
+        const capitalizedSource = source.charAt(0).toUpperCase() + source.slice(1);
+        if (success) {
+          messages.push({ text: `Successfully Synced: ${capitalizedSource}`, type: 'success' });
+        } else {
+          messages.push({ text: `Failed to Sync: ${capitalizedSource}`, type: 'error' });
+        }
+      }
+      setSyncMessage(messages);
+      fetchData();
     } catch (err) {
       setError(`Error syncing data: ${err.message}`);
     } finally {
@@ -334,66 +351,88 @@ const BiometricsDashboard = ({ username }) => {
   };
 
   const processData = (data) => {
+    if (!Array.isArray(data)) {
+      console.error('processData received non-array data:', data);
+      return [];
+    }
+    
+    console.log(`Processing ${data.length} data entries, dates: ${data.map(item => item.date).join(', ')}`);
+    
+    // Helper function to round numeric values to 2 decimal places
+    const roundToTwo = (value) => {
+      if (typeof value === 'number') {
+        return Number(value.toFixed(2));
+      }
+      return value;
+    };
+    
     return data.map(item => {
-      // Convert seconds to hours and handle null/undefined values
-      const sleepHours = (item.total_sleep_seconds || 0) / 3600;
-      const deepSleepHours = (item.deep_sleep_seconds || 0) / 3600;
-      const lightSleepHours = (item.light_sleep_seconds || 0) / 3600;
-      const remSleepHours = (item.rem_sleep_seconds || 0) / 3600;
-      const awakeHours = (item.awake_seconds || 0) / 3600;
+      try {
+        // Convert seconds to hours and handle null/undefined values
+        const sleepHours = (item.total_sleep_seconds || 0) / 3600;
+        const deepSleepHours = (item.deep_sleep_seconds || 0) / 3600;
+        const lightSleepHours = (item.light_sleep_seconds || 0) / 3600;
+        const remSleepHours = (item.rem_sleep_seconds || 0) / 3600;
+        const awakeHours = (item.awake_seconds || 0) / 3600;
 
-      // Helper function to round numeric values to 2 decimal places
-      const roundToTwo = (value) => {
-        if (typeof value === 'number') {
-          return Number(value.toFixed(2));
+        // Format date as MM/DD for display
+        let formattedDate;
+        try {
+          formattedDate = format(new Date(item.date), 'MM/dd');
+        } catch (error) {
+          console.warn(`Error formatting date ${item.date}:`, error);
+          formattedDate = item.date; // Fallback to original format
         }
-        return value;
-      };
 
-      const processedItem = {
-        ...item,  // Keep all original data
-        date: format(new Date(item.date), 'MM/dd'),
-        
-        // Sleep metrics (in hours)
-        sleep_hours: roundToTwo(sleepHours),
-        deep_sleep: roundToTwo(deepSleepHours),
-        light_sleep: roundToTwo(lightSleepHours),
-        rem_sleep: roundToTwo(remSleepHours),
-        awake_time: roundToTwo(awakeHours),
-        
-        // Heart rate metrics (rounded to 2 decimal places)
-        resting_heart_rate: roundToTwo(item.resting_heart_rate || 0),
-        max_heart_rate: roundToTwo(item.max_heart_rate || 0),
-        min_heart_rate: roundToTwo(item.min_heart_rate || 0),
-        
-        // Activity metrics
-        steps: item.total_steps || 0,
-        distance: roundToTwo((item.total_distance_meters || 0) / 1000), // Convert to km and round
-        total_calories: roundToTwo(item.total_calories || 0),
-        active_calories: roundToTwo(item.active_calories || 0),
-        
-        // Stress metrics
-        stress_level: roundToTwo(item.average_stress_level || 0),
-        max_stress_level: roundToTwo(item.max_stress_level || 0),
-        
-        // For health score calculation
-        hrv: roundToTwo(item.body_battery_change || item.hrv_ms || 0),
-        
-        // Whoop specific fields
-        recovery_score: roundToTwo(item.recovery_score || 0),
-        hrv_ms: roundToTwo(item.hrv_ms || 0),
-        strain: roundToTwo(item.strain || 0),
-        spo2_percentage: roundToTwo(item.spo2_percentage || 0),
-        skin_temp_celsius: roundToTwo(item.skin_temp_celsius || 0),
-        respiratory_rate: roundToTwo(item.respiratory_rate || 0),
-        sleep_efficiency: roundToTwo(item.sleep_efficiency || 0),
-        sleep_consistency: roundToTwo(item.sleep_consistency || 0),
-        sleep_performance: roundToTwo(item.sleep_performance || 0),
-        sleep_disturbances: roundToTwo(item.sleep_disturbances || 0),
-        sleep_cycle_count: roundToTwo(item.sleep_cycle_count || 0),
-      };
+        const processedItem = {
+          ...item,  // Keep all original data
+          originalDate: item.date, // Keep original date for sorting
+          date: formattedDate, // Use formatted date for display
+          
+          // Sleep metrics (in hours)
+          sleep_hours: roundToTwo(sleepHours),
+          deep_sleep: roundToTwo(deepSleepHours),
+          light_sleep: roundToTwo(lightSleepHours),
+          rem_sleep: roundToTwo(remSleepHours),
+          awake_time: roundToTwo(awakeHours),
+          
+          // Heart rate metrics (rounded to 2 decimal places)
+          resting_heart_rate: roundToTwo(item.resting_heart_rate || 0),
+          max_heart_rate: roundToTwo(item.max_heart_rate || 0),
+          min_heart_rate: roundToTwo(item.min_heart_rate || 0),
+          
+          // Activity metrics
+          steps: item.total_steps || 0,
+          distance: roundToTwo((item.total_distance_meters || 0) / 1000), // Convert to km and round
+          total_calories: roundToTwo(item.total_calories || 0),
+          active_calories: roundToTwo(item.active_calories || 0),
+          
+          // Stress metrics
+          stress_level: roundToTwo(item.average_stress_level || 0),
+          max_stress_level: roundToTwo(item.max_stress_level || 0),
+          
+          // For health score calculation
+          hrv: roundToTwo(item.body_battery_change || item.hrv_ms || 0),
+          
+          // Whoop specific fields
+          recovery_score: roundToTwo(item.recovery_score || 0),
+          hrv_ms: roundToTwo(item.hrv_ms || 0),
+          strain: roundToTwo(item.strain || 0),
+          spo2_percentage: roundToTwo(item.spo2_percentage || 0),
+          skin_temp_celsius: roundToTwo(item.skin_temp_celsius || 0),
+          respiratory_rate: roundToTwo(item.respiratory_rate || 0),
+          sleep_efficiency: roundToTwo(item.sleep_efficiency || 0),
+          sleep_consistency: roundToTwo(item.sleep_consistency || 0),
+          sleep_performance: roundToTwo(item.sleep_performance || 0),
+          sleep_disturbances: roundToTwo(item.sleep_disturbances || 0),
+          sleep_cycle_count: roundToTwo(item.sleep_cycle_count || 0),
+        };
 
-      return processedItem;
+        return processedItem;
+      } catch (error) {
+        console.error('Error processing data:', error);
+        return null;
+      }
     });
   };
 
@@ -611,11 +650,24 @@ const BiometricsDashboard = ({ username }) => {
   useEffect(() => {
     if (biometricData.length > 0) {
       // Filter data based on selected source
+      let dataToUse = [];
+      
       if (!selectedDataSource || selectedDataSource === 'all') {
-        setFilteredData(biometricData);
+        dataToUse = biometricData;
       } else {
-        setFilteredData(biometricData.filter(item => item.source === selectedDataSource));
+        dataToUse = biometricData.filter(item => item.source === selectedDataSource);
       }
+      
+      // For charts, we want chronological order (oldest to newest from left to right)
+      // So we need to reverse the sort order since biometricData is sorted newest first
+      const orderedData = [...dataToUse].reverse();
+      
+      console.log('Original data order (newest first):', 
+        dataToUse.slice(0, 3).map(item => item.originalDate || item.date));
+      console.log('Reversed data order for charts (oldest first):', 
+        orderedData.slice(0, 3).map(item => item.originalDate || item.date));
+      
+      setFilteredData(orderedData);
     }
   }, [biometricData, selectedDataSource]);
 
@@ -878,13 +930,11 @@ const BiometricsDashboard = ({ username }) => {
           >
             No active data sources found. Please activate Garmin or another data source to see your biometric data.
           </Alert>
-        ) : syncMessage ? (
-          <Alert severity="success" sx={{ mb: 3 }}>{syncMessage}</Alert>
-        ) : (
-          <Alert severity="success" sx={{ mb: 3 }}>
-            Currently using {activeSource} as your data source
+        ) : syncMessage && syncMessage.map((msg, index) => (
+          <Alert key={index} severity={msg.type} sx={{ mb: 1 }}>
+            {msg.text}
           </Alert>
-        )}
+        ))}
 
         {/* Active Sources Panel */}
         <Card 

@@ -9,7 +9,7 @@ import {
   Card, Grid, Typography, Box, Button, 
   CircularProgress, Alert, useTheme,
   AppBar, Toolbar, IconButton, Menu, MenuItem, Dialog, DialogTitle, DialogContent,
-  Tabs, Tab, styled, Select, FormControl, Switch
+  Tabs, Tab, styled, Select, FormControl, Switch, Tooltip as MuiTooltip
 } from '@mui/material';
 import { format } from 'date-fns';
 import SyncIcon from '@mui/icons-material/Sync';
@@ -19,9 +19,11 @@ import BarChartIcon from '@mui/icons-material/BarChart';
 import BugReportIcon from '@mui/icons-material/BugReport';
 import TableChartIcon from '@mui/icons-material/TableChart';
 import DeveloperModeIcon from '@mui/icons-material/DeveloperMode';
+import Brightness4Icon from '@mui/icons-material/Brightness4';
 import HeartRateMetrics from '../HeartRateMetrics';
 import axios from 'axios';
 import WhoopConnect from '../WhoopConnect';
+import './BiometricsDashboard.css';
 
 // Modern, professional color palette
 const colors = {
@@ -31,7 +33,8 @@ const colors = {
   accent2: '#E74C3C',   // Coral red
   accent3: '#F1C40F',   // Sunflower yellow
   background: '#ECF0F1', // Light gray
-  text: '#2C3E50',      // Deep blue-gray
+  text: 'white',        // Changed back to white
+  headings: 'white',    // Changed back to white
   success: '#2ECC71',   // Green
   warning: '#F39C12',   // Orange
   error: '#E74C3C',     // Red
@@ -201,6 +204,51 @@ const BiometricsDashboard = ({ username }) => {
   const [selectedDataSource, setSelectedDataSource] = useState(null);
   const [filteredData, setFilteredData] = useState([]);
   const [devMode, setDevMode] = useState(false);
+  const [darkMode, setDarkMode] = useState(() => {
+    // Get the saved preference from localStorage or default to false
+    const savedDarkMode = localStorage.getItem('biometricsDarkMode');
+    return savedDarkMode === 'true';
+  });
+  
+  // Update localStorage when dark mode changes
+  useEffect(() => {
+    localStorage.setItem('biometricsDarkMode', darkMode);
+  }, [darkMode]);
+  
+  // Table styles based on dark mode
+  const thStyle = {
+    textAlign: 'left',
+    padding: '12px 8px',
+    border: darkMode ? '1px solid #444' : '1px solid #ccc',
+    fontWeight: 'bold',
+    backgroundColor: darkMode ? '#2C3E50' : '#f5f7fa',
+    color: darkMode ? 'white' : '#000',
+    position: 'sticky',
+    top: 0,
+    zIndex: 1
+  };
+
+  const tdStyle = {
+    textAlign: 'left',
+    padding: '8px',
+    border: darkMode ? '1px solid #444' : '1px solid #ccc',
+    whiteSpace: 'nowrap',
+    color: darkMode ? 'white' : '#000',
+    backgroundColor: darkMode ? 'rgba(44, 62, 80, 0.6)' : 'white'
+  };
+  
+  // Override the default styles for Typography components
+  const typographyStyles = {
+    h6: {
+      color: 'white'
+    },
+    body1: {
+      color: 'white'
+    },
+    body2: {
+      color: 'white'
+    }
+  };
   
   const sources = [
     { id: 'garmin', name: 'Garmin' },
@@ -295,7 +343,6 @@ const BiometricsDashboard = ({ username }) => {
       if (response.data.success) {
         setActiveSource(source);
         setSyncMessage(`${source} source activated successfully!`);
-        setError(null);
         await fetchData();
       }
     } catch (err) {
@@ -702,69 +749,31 @@ const BiometricsDashboard = ({ username }) => {
   }, []);
 
   return (
-    <Box sx={{ width: '100%' }}>
+    <Box sx={{ width: '100%' }} className={`biometrics-dashboard ${darkMode ? 'dark-mode' : ''}`}>
       <Box sx={{
-        background: 'linear-gradient(135deg, #2C3E50 0%, #3498DB 100%)',
         position: 'absolute',
         top: 0,
         left: 0,
         right: 0,
-        height: '200px',
+        height: '250px',
         zIndex: -1
-      }} />
+      }} className="header-gradient" />
       <Box sx={{ 
         display: 'flex',
-        justifyContent: 'space-between',
         alignItems: 'center',
-        p: 2,
-        color: 'white'
-      }}>
-        <Typography variant="h4" sx={{ 
-          fontWeight: 600,
-          fontFamily: '"Poppins", sans-serif',
-        }}>
-          {username.charAt(0).toUpperCase() + username.slice(1)}'s Pulse Insights
-        </Typography>
+        p: 2
+      }} className="header-content">
+        {/* Left section with menu and title */}
         <Box sx={{ 
-          display: 'flex', 
+          display: 'flex',
           alignItems: 'center',
           gap: 2
         }}>
-          <Box sx={{ 
-            display: 'flex', 
-            alignItems: 'center',
-            backgroundColor: 'rgba(255, 255, 255, 0.1)',
-            padding: '4px 12px',
-            borderRadius: '4px',
-          }}>
-            <DeveloperModeIcon sx={{ mr: 1 }} />
-            <Switch
-              checked={devMode}
-              onChange={(e) => setDevMode(e.target.checked)}
-              sx={{
-                '& .MuiSwitch-switchBase': {
-                  color: 'white',
-                  '&.Mui-checked': {
-                    color: 'white',
-                    '& + .MuiSwitch-track': {
-                      backgroundColor: 'rgba(255, 255, 255, 0.5)',
-                    },
-                  },
-                },
-                '& .MuiSwitch-track': {
-                  backgroundColor: 'rgba(255, 255, 255, 0.3)',
-                  opacity: 1,
-                },
-                '& .MuiSwitch-thumb': {
-                  backgroundColor: 'white',
-                },
-              }}
-            />
-          </Box>
           <IconButton
             color="inherit"
             onClick={openMenu}
             sx={{
+              color: 'white',
               transition: 'transform 0.2s',
               '&:hover': {
                 transform: 'scale(1.1)',
@@ -773,6 +782,17 @@ const BiometricsDashboard = ({ username }) => {
           >
             <MenuIcon />
           </IconButton>
+          
+          <Typography variant="h4" sx={{ 
+            fontWeight: 600,
+            fontFamily: '"Poppins", sans-serif',
+            color: 'white',
+            whiteSpace: 'nowrap',
+            minWidth: '400px'
+          }}>
+            {username.charAt(0).toUpperCase() + username.slice(1)}'s Pulse Insights
+          </Typography>
+          
           <StyledMenu
             anchorEl={anchorEl}
             open={Boolean(anchorEl)}
@@ -814,6 +834,88 @@ const BiometricsDashboard = ({ username }) => {
               <Typography>Logout</Typography>
             </StyledMenuItem>
           </StyledMenu>
+        </Box>
+        
+        {/* Spacer to push toggles to right */}
+        <Box sx={{ flexGrow: 1 }} />
+        
+        {/* Right section with toggles */}
+        <Box sx={{ 
+          display: 'flex', 
+          alignItems: 'center',
+          gap: 2
+        }}>
+          {/* Dark Mode Toggle */}
+          <MuiTooltip title={darkMode ? "Switch to Light Mode" : "Switch to Dark Mode"}>
+            <Box sx={{ 
+              display: 'flex', 
+              alignItems: 'center',
+              backgroundColor: 'rgba(255, 255, 255, 0.1)',
+              padding: '4px 12px',
+              borderRadius: '4px',
+              cursor: 'pointer'
+            }}>
+              <Brightness4Icon sx={{ mr: 1, color: 'white' }} />
+              <Switch
+                checked={darkMode}
+                onChange={(e) => setDarkMode(e.target.checked)}
+                sx={{
+                  '& .MuiSwitch-switchBase': {
+                    color: 'white',
+                    '&.Mui-checked': {
+                      color: 'white',
+                      '& + .MuiSwitch-track': {
+                        backgroundColor: 'rgba(255, 255, 255, 0.5)',
+                      },
+                    },
+                  },
+                  '& .MuiSwitch-track': {
+                    backgroundColor: 'rgba(255, 255, 255, 0.3)',
+                    opacity: 1,
+                  },
+                  '& .MuiSwitch-thumb': {
+                    backgroundColor: 'white',
+                  },
+                }}
+              />
+            </Box>
+          </MuiTooltip>
+          
+          {/* Dev Mode Toggle */}
+          <MuiTooltip title={devMode ? "Disable Developer Mode" : "Enable Developer Mode"}>
+            <Box sx={{ 
+              display: 'flex', 
+              alignItems: 'center',
+              backgroundColor: 'rgba(255, 255, 255, 0.1)',
+              padding: '4px 12px',
+              borderRadius: '4px',
+              cursor: 'pointer'
+            }}>
+              <DeveloperModeIcon sx={{ mr: 1, color: 'white' }} />
+              <Switch
+                checked={devMode}
+                onChange={(e) => setDevMode(e.target.checked)}
+                sx={{
+                  '& .MuiSwitch-switchBase': {
+                    color: 'white',
+                    '&.Mui-checked': {
+                      color: 'white',
+                      '& + .MuiSwitch-track': {
+                        backgroundColor: 'rgba(255, 255, 255, 0.5)',
+                      },
+                    },
+                  },
+                  '& .MuiSwitch-track': {
+                    backgroundColor: 'rgba(255, 255, 255, 0.3)',
+                    opacity: 1,
+                  },
+                  '& .MuiSwitch-thumb': {
+                    backgroundColor: 'white',
+                  },
+                }}
+              />
+            </Box>
+          </MuiTooltip>
         </Box>
       </Box>
       <Box sx={{ px: 3 }}>
@@ -941,10 +1043,11 @@ const BiometricsDashboard = ({ username }) => {
           sx={{ 
             mb: 3,
             p: 2,
-            backgroundColor: colors.primary,
-            color: 'white',
+            backgroundColor: darkMode ? colors.primary : 'white',
+            color: darkMode ? 'white' : '#000',
             boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)'
           }}
+          className="active-integrations-card"
         >
           <Box sx={{ 
             display: 'flex', 
@@ -952,7 +1055,10 @@ const BiometricsDashboard = ({ username }) => {
             alignItems: 'center',
             mb: 2 
           }}>
-            <Typography variant="h6" sx={{ fontWeight: 600 }}>
+            <Typography variant="h6" sx={{ 
+              fontWeight: 600, 
+              color: darkMode ? 'white' : '#000' 
+            }}>
               Active Integrations
             </Typography>
             {activeSources.length > 0 && (
@@ -961,18 +1067,18 @@ const BiometricsDashboard = ({ username }) => {
                   value={selectedDataSource || 'all'}
                   onChange={(e) => setSelectedDataSource(e.target.value)}
                   sx={{
-                    color: 'white',
+                    color: darkMode ? 'white' : '#000',
                     '.MuiOutlinedInput-notchedOutline': {
-                      borderColor: 'rgba(255, 255, 255, 0.3)',
+                      borderColor: darkMode ? 'rgba(255, 255, 255, 0.3)' : 'rgba(0, 0, 0, 0.3)',
                     },
                     '&:hover .MuiOutlinedInput-notchedOutline': {
-                      borderColor: 'rgba(255, 255, 255, 0.5)',
+                      borderColor: darkMode ? 'rgba(255, 255, 255, 0.5)' : 'rgba(0, 0, 0, 0.5)',
                     },
                     '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
-                      borderColor: 'white',
+                      borderColor: darkMode ? 'white' : '#000',
                     },
                     '.MuiSvgIcon-root': {
-                      color: 'white',
+                      color: darkMode ? 'white' : '#000',
                     },
                   }}
                 >
@@ -995,7 +1101,7 @@ const BiometricsDashboard = ({ username }) => {
               <Box
                 key={source.id}
                 sx={{
-                  backgroundColor: 'rgba(255, 255, 255, 0.1)',
+                  backgroundColor: darkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.05)',
                   padding: '8px 16px',
                   borderRadius: '4px',
                   display: 'flex',
@@ -1004,15 +1110,16 @@ const BiometricsDashboard = ({ username }) => {
                   transition: 'transform 0.2s ease',
                   '&:hover': {
                     transform: 'translateY(-2px)',
-                    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+                    backgroundColor: darkMode ? 'rgba(255, 255, 255, 0.15)' : 'rgba(0, 0, 0, 0.1)',
                   }
                 }}
               >
-                <SyncIcon sx={{ fontSize: 20 }} />
+                <SyncIcon sx={{ fontSize: 20, color: darkMode ? 'white' : '#000' }} />
                 <Typography sx={{ 
                   fontWeight: 500,
                   letterSpacing: '0.5px',
-                  textTransform: 'uppercase'
+                  textTransform: 'uppercase',
+                  color: darkMode ? 'white' : '#000'
                 }}>
                   {source.name}
                   {source.profile_type && ` - ${source.profile_type}`}
@@ -1036,7 +1143,24 @@ const BiometricsDashboard = ({ username }) => {
           </Box>
         </Box>
 
-        <Tabs value={tabValue} onChange={handleChangeTab} aria-label="dashboard tabs">
+        <Tabs 
+          value={tabValue} 
+          onChange={handleChangeTab} 
+          aria-label="dashboard tabs"
+          sx={{
+            '& .MuiTab-root': {
+              color: darkMode ? 'white' : '#000',
+              fontWeight: 500,
+            },
+            '& .Mui-selected': {
+              color: darkMode ? '#6e8efb' : '#6e8efb',
+              fontWeight: 600,
+            },
+            '& .MuiTabs-indicator': {
+              backgroundColor: '#6e8efb',
+            }
+          }}
+        >
           <Tab label="Analytics" {...a11yProps(0)} />
           <Tab label="Data Table" {...a11yProps(1)} />
         </Tabs>
@@ -1050,7 +1174,7 @@ const BiometricsDashboard = ({ username }) => {
                   {/* Heart Rate and Recovery Score */}
                   <Grid item xs={12} md={6}>
                     <Card sx={{ p: 2, height: '100%' }}>
-                      <Typography variant="h6" gutterBottom>Resting Heart Rate & Recovery Score</Typography>
+                      <Typography variant="h6" gutterBottom sx={{ color: colors.headings }}>Resting Heart Rate & Recovery Score</Typography>
                       <ResponsiveContainer width="100%" height={300}>
                         <ComposedChart data={filteredData}>
                           <CartesianGrid strokeDasharray="3 3" />
@@ -1289,7 +1413,7 @@ const BiometricsDashboard = ({ username }) => {
             ) : (
               <Box sx={{ overflowX: 'auto' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                  <thead style={{ backgroundColor: '#eee' }}>
+                  <thead>
                     <tr>
                       {getDataColumns(biometricData, devMode).map(column => (
                         <th key={column.id} style={thStyle}>
@@ -1315,10 +1439,10 @@ const BiometricsDashboard = ({ username }) => {
             {devMode && (
               <Typography 
                 variant="caption" 
+                className="dev-mode-text"
                 sx={{ 
                   display: 'block', 
-                  mt: 2, 
-                  color: 'text.secondary',
+                  mt: 2,
                   fontStyle: 'italic'
                 }}
               >
@@ -1342,29 +1466,29 @@ const BiometricsDashboard = ({ username }) => {
             : 0}
           isWhoop={selectedDataSource === 'whoop'}
         />
+        
+        {/* Footer */}
+        <Box 
+          className="footer"
+          sx={{ 
+            mt: 4, 
+            pt: 2
+          }}
+        >
+          <Typography 
+            variant="caption" 
+            className="footer-text"
+            sx={{ 
+              display: 'block',
+              mb: 1
+            }}
+          >
+            Developed by Andrew Prince and Pulse Project LLC 2025
+          </Typography>
+        </Box>
       </Box>
     </Box>
   );
-};
-
-// Update the table styles
-const thStyle = {
-  textAlign: 'left',
-  padding: '12px 8px',
-  border: '1px solid #ccc',
-  fontWeight: 'bold',
-  backgroundColor: '#2C3E50',
-  color: 'white',
-  position: 'sticky',
-  top: 0,
-  zIndex: 1
-};
-
-const tdStyle = {
-  textAlign: 'left',
-  padding: '8px',
-  border: '1px solid #ccc',
-  whiteSpace: 'nowrap'
 };
 
 export default BiometricsDashboard; 

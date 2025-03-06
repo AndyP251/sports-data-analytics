@@ -1,0 +1,316 @@
+/* BiometricsDashboard custom styles to override global dark theme */
+.biometrics-dashboard {
+  background-color: white;
+  min-height: 100vh;
+  width: 100%;
+  position: relative;
+  overflow-x: hidden;
+  /* Ensure the white background fills the entire viewport */
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+}
+
+/* Override any global dark theme styles */
+.biometrics-dashboard * {
+  --dark-bg: white;
+  --dark-surface: white;
+}
+
+/* Override any header background */
+.biometrics-dashboard .header-gradient {
+  background: linear-gradient(135deg, #6e8efb, #7873f5);
+}
+
+/* Ensure text is visible on white background */
+.biometrics-dashboard .header-content {
+  color: white;
+}
+
+/* Special styling for the active integrations card */
+.biometrics-dashboard .active-integrations-card {
+  overflow: visible !important;
+}
+
+.biometrics-dashboard .active-integrations-card .MuiMenuItem-root {
+  color: #000;
+}
+
+.biometrics-dashboard.dark-mode .active-integrations-card .MuiMenuItem-root {
+  color: #fff;
+}
+
+/* Tab styles */
+.biometrics-dashboard .MuiTab-root {
+  color: #000;
+}
+
+.biometrics-dashboard.dark-mode .MuiTab-root {
+  color: white;
+}
+
+/* Footer styles */
+.biometrics-dashboard .footer {
+  margin-top: 40px;
+  padding-top: 20px;
+  border-top: 1px solid rgba(0, 0, 0, 0.1);
+  text-align: center;
+}
+
+.biometrics-dashboard.dark-mode .footer {
+  border-top-color: rgba(255, 255, 255, 0.1);
+}
+
+.biometrics-dashboard .footer-text {
+  color: rgba(0, 0, 0, 0.6);
+  font-size: 0.75rem;
+}
+
+.biometrics-dashboard.dark-mode .footer-text {
+  color: rgba(255, 255, 255, 0.6);
+}
+
+/* Card styles with light background */
+.biometrics-dashboard .MuiCard-root {
+  background-color: white;
+  color: #2C3E50;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  border-radius: 10px;
+  overflow: hidden;
+  transition: box-shadow 0.3s ease, transform 0.3s ease;
+}
+
+/* Make sure text is black in light mode for specific elements */
+.biometrics-dashboard .MuiCard-root h6 {
+  color: #000 !important;
+}
+
+/* Style for Active Integrations title and data selection in light mode */
+.biometrics-dashboard .MuiCard-root .MuiFormControl-root .MuiSelect-select,
+.biometrics-dashboard .MuiCard-root .MuiFormControl-root .MuiSvgIcon-root {
+  color: #000 !important;
+}
+
+.biometrics-dashboard .MuiCard-root .MuiOutlinedInput-notchedOutline {
+  border-color: rgba(0, 0, 0, 0.3) !important;
+}
+
+.biometrics-dashboard .MuiCard-root .MuiFormControl-root:hover .MuiOutlinedInput-notchedOutline {
+  border-color: rgba(0, 0, 0, 0.5) !important;
+}
+
+.biometrics-dashboard .MuiCard-root .MuiFormControl-root.Mui-focused .MuiOutlinedInput-notchedOutline {
+  border-color: #000 !important;
+}
+
+.biometrics-dashboard .MuiCard-root:hover {
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.15);
+  transform: translateY(-2px);
+}
+
+/* Chart styling for light mode */
+.biometrics-dashboard .recharts-surface {
+  background-color: rgba(255, 255, 255, 0.6);
+  border-radius: 8px;
+}
+
+.biometrics-dashboard .recharts-cartesian-grid-horizontal line,
+.biometrics-dashboard .recharts-cartesian-grid-vertical line {
+  stroke: rgba(44, 62, 80, 0.2);
+}
+
+.biometrics-dashboard .recharts-tooltip-wrapper .recharts-default-tooltip {
+  background-color: white !important;
+  border-color: #e0e0e0 !important;
+  border-radius: 6px !important;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.15) !important;
+}
+
+.biometrics-dashboard .recharts-text {
+  fill: #2C3E50;
+}
+
+/* Chart line and area customizations */
+.biometrics-dashboard .recharts-line-curve {
+  stroke-width: 3;
+}
+
+.biometrics-dashboard .recharts-area-area {
+  opacity: 0.4;
+}
+
+.biometrics-dashboard .recharts-bar-rectangle {
+  rx: 4;
+  ry: 4;
+}
+
+/* Dark mode styles */
+.biometrics-dashboard.dark-mode {
+  background-color: #121212;
+}
+
+.biometrics-dashboard.dark-mode .MuiCard-root {
+  background-color: #2C3E50;
+  color: white;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+/* Override text colors back to white in dark mode */
+.biometrics-dashboard.dark-mode .MuiCard-root h6 {
+  color: white !important;
+}
+
+.biometrics-dashboard.dark-mode .MuiCard-root .MuiFormControl-root .MuiSelect-select,
+.biometrics-dashboard.dark-mode .MuiCard-root .MuiFormControl-root .MuiSvgIcon-root {
+  color: white !important;
+}
+
+.biometrics-dashboard.dark-mode .MuiCard-root .MuiOutlinedInput-notchedOutline {
+  border-color: rgba(255, 255, 255, 0.3) !important;
+}
+
+.biometrics-dashboard.dark-mode .MuiCard-root .MuiFormControl-root:hover .MuiOutlinedInput-notchedOutline {
+  border-color: rgba(255, 255, 255, 0.5) !important;
+}
+
+.biometrics-dashboard.dark-mode .MuiCard-root .MuiFormControl-root.Mui-focused .MuiOutlinedInput-notchedOutline {
+  border-color: white !important;
+}
+
+.biometrics-dashboard.dark-mode .MuiCard-root:hover {
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4);
+}
+
+.biometrics-dashboard.dark-mode .recharts-surface {
+  background-color: rgba(44, 62, 80, 0.8);
+}
+
+.biometrics-dashboard.dark-mode .recharts-cartesian-grid-horizontal line,
+.biometrics-dashboard.dark-mode .recharts-cartesian-grid-vertical line {
+  stroke: rgba(255, 255, 255, 0.1);
+}
+
+.biometrics-dashboard.dark-mode .recharts-tooltip-wrapper .recharts-default-tooltip {
+  background-color: #2C3E50 !important;
+  border-color: #1a2530 !important;
+  color: white !important;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.4) !important;
+}
+
+.biometrics-dashboard.dark-mode .recharts-text {
+  fill: white;
+}
+
+.biometrics-dashboard.dark-mode .MuiTableCell-root {
+  color: white;
+  border-bottom-color: rgba(255, 255, 255, 0.1);
+}
+
+/* Custom chart colors for dark mode */
+.biometrics-dashboard.dark-mode .recharts-line-curve {
+  filter: drop-shadow(0 0 4px rgba(255, 255, 255, 0.3));
+}
+
+.biometrics-dashboard.dark-mode .recharts-area-area {
+  opacity: 0.6;
+}
+
+/* Ensure alerts have proper contrast */
+.biometrics-dashboard .MuiAlert-root {
+  color: initial;
+  border-radius: 8px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  margin-bottom: 16px;
+}
+
+/* Ensure form controls have proper contrast */
+.biometrics-dashboard .MuiFormControl-root .MuiInputBase-root {
+  color: #2C3E50;
+}
+
+.biometrics-dashboard.dark-mode .MuiFormControl-root .MuiInputBase-root {
+  color: white;
+}
+
+/* Ensure text in data tables has proper contrast */
+.biometrics-dashboard .MuiTableCell-root,
+.biometrics-dashboard table th,
+.biometrics-dashboard table td {
+  color: #000;
+}
+
+.biometrics-dashboard.dark-mode .MuiTableCell-root,
+.biometrics-dashboard.dark-mode table th,
+.biometrics-dashboard.dark-mode table td {
+  color: white;
+}
+
+/* Developer mode text */
+.biometrics-dashboard .dev-mode-text {
+  color: rgba(0, 0, 0, 0.7);
+  font-style: italic;
+}
+
+.biometrics-dashboard.dark-mode .dev-mode-text {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+/* Button styling for light and dark mode */
+.biometrics-dashboard .MuiButton-containedPrimary {
+  background-color: #6e8efb;
+  border-radius: 8px;
+  text-transform: none;
+  font-weight: 600;
+  box-shadow: 0 4px 10px rgba(110, 142, 251, 0.3);
+  transition: transform 0.2s ease;
+}
+
+.biometrics-dashboard .MuiButton-containedPrimary:hover {
+  background-color: #7873f5;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 12px rgba(110, 142, 251, 0.4);
+}
+
+.biometrics-dashboard.dark-mode .MuiButton-containedPrimary {
+  background-color: #7873f5;
+  box-shadow: 0 4px 10px rgba(120, 115, 245, 0.4);
+}
+
+.biometrics-dashboard.dark-mode .MuiButton-containedPrimary:hover {
+  background-color: #8a86f8;
+}
+
+/* Dramatic menu button styling */
+@keyframes glow {
+  0% {
+    filter: drop-shadow(0 0 3px rgba(110, 142, 251, 0.6));
+  }
+  50% {
+    filter: drop-shadow(0 0 8px rgba(110, 142, 251, 0.9));
+  }
+  100% {
+    filter: drop-shadow(0 0 3px rgba(110, 142, 251, 0.6));
+  }
+}
+
+.biometrics-dashboard .MuiIconButton-root:hover svg {
+  animation: glow 1.5s infinite;
+}
+
+/* Override the Material UI IconButton hover effect */
+.biometrics-dashboard .MuiIconButton-root {
+  border-radius: 0;
+}
+
+.biometrics-dashboard .MuiIconButton-root:hover,
+.biometrics-dashboard .MuiIconButton-root:focus,
+.biometrics-dashboard .MuiIconButton-root:active {
+  background-color: transparent !important;
+}
+
+/* Menu button animations */
+.menu-button-animated {
+  position: relative;
+} 

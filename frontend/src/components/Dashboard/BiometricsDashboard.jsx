@@ -9,7 +9,7 @@ import {
   Card, Grid, Typography, Box, Button, 
   CircularProgress, Alert, useTheme,
   AppBar, Toolbar, IconButton, Menu, MenuItem, Dialog, DialogTitle, DialogContent,
-  Tabs, Tab, styled, Select, FormControl, Switch
+  Tabs, Tab, styled, Select, FormControl, Switch, Tooltip as MuiTooltip
 } from '@mui/material';
 import { format } from 'date-fns';
 import SyncIcon from '@mui/icons-material/Sync';
@@ -19,9 +19,16 @@ import BarChartIcon from '@mui/icons-material/BarChart';
 import BugReportIcon from '@mui/icons-material/BugReport';
 import TableChartIcon from '@mui/icons-material/TableChart';
 import DeveloperModeIcon from '@mui/icons-material/DeveloperMode';
+import Brightness4Icon from '@mui/icons-material/Brightness4';
 import HeartRateMetrics from '../HeartRateMetrics';
 import axios from 'axios';
 import WhoopConnect from '../WhoopConnect';
+import BedtimeIcon from '@mui/icons-material/Bedtime';
+import DirectionsRunIcon from '@mui/icons-material/DirectionsRun';
+import FavoriteIcon from '@mui/icons-material/Favorite';
+import RestoreIcon from '@mui/icons-material/Restore';
+import MonitorHeartIcon from '@mui/icons-material/MonitorHeart';
+import './BiometricsDashboard.css';
 
 // Modern, professional color palette
 const colors = {
@@ -31,7 +38,8 @@ const colors = {
   accent2: '#E74C3C',   // Coral red
   accent3: '#F1C40F',   // Sunflower yellow
   background: '#ECF0F1', // Light gray
-  text: '#2C3E50',      // Deep blue-gray
+  text: 'white',        // Changed back to white
+  headings: 'white',    // Changed back to white
   success: '#2ECC71',   // Green
   warning: '#F39C12',   // Orange
   error: '#E74C3C',     // Red
@@ -201,6 +209,51 @@ const BiometricsDashboard = ({ username }) => {
   const [selectedDataSource, setSelectedDataSource] = useState(null);
   const [filteredData, setFilteredData] = useState([]);
   const [devMode, setDevMode] = useState(false);
+  const [darkMode, setDarkMode] = useState(() => {
+    // Get the saved preference from localStorage or default to false
+    const savedDarkMode = localStorage.getItem('biometricsDarkMode');
+    return savedDarkMode === 'true';
+  });
+  
+  // Update localStorage when dark mode changes
+  useEffect(() => {
+    localStorage.setItem('biometricsDarkMode', darkMode);
+  }, [darkMode]);
+  
+  // Table styles based on dark mode
+  const thStyle = {
+    textAlign: 'left',
+    padding: '12px 8px',
+    border: darkMode ? '1px solid #444' : '1px solid #ccc',
+    fontWeight: 'bold',
+    backgroundColor: darkMode ? '#2C3E50' : '#f5f7fa',
+    color: darkMode ? 'white' : '#000',
+    position: 'sticky',
+    top: 0,
+    zIndex: 1
+  };
+
+  const tdStyle = {
+    textAlign: 'left',
+    padding: '8px',
+    border: darkMode ? '1px solid #444' : '1px solid #ccc',
+    whiteSpace: 'nowrap',
+    color: darkMode ? 'white' : '#000',
+    backgroundColor: darkMode ? 'rgba(44, 62, 80, 0.6)' : 'white'
+  };
+  
+  // Override the default styles for Typography components
+  const typographyStyles = {
+    h6: {
+      color: 'white'
+    },
+    body1: {
+      color: 'white'
+    },
+    body2: {
+      color: 'white'
+    }
+  };
   
   const sources = [
     { id: 'garmin', name: 'Garmin' },
@@ -295,7 +348,6 @@ const BiometricsDashboard = ({ username }) => {
       if (response.data.success) {
         setActiveSource(source);
         setSyncMessage(`${source} source activated successfully!`);
-        setError(null);
         await fetchData();
       }
     } catch (err) {
@@ -546,8 +598,8 @@ const BiometricsDashboard = ({ username }) => {
       if (response.ok) {
         // Clear all auth-related data
         localStorage.clear();  // Or specifically remove items you want to clear
-        // Force reload to clear any remaining state
-        window.location.href = '/login';  // Use window.location for a full page reload
+        // Redirect to the homepage instead of login
+        window.location.href = '/';  // Root URL is the homepage
       } else {
         console.error('Logout failed:', response.status, response.statusText);
         throw new Error('Logout failed');
@@ -702,77 +754,60 @@ const BiometricsDashboard = ({ username }) => {
   }, []);
 
   return (
-    <Box sx={{ width: '100%' }}>
+    <Box sx={{ width: '100%' }} className={`biometrics-dashboard ${darkMode ? 'dark-mode' : ''}`}>
       <Box sx={{
-        background: 'linear-gradient(135deg, #2C3E50 0%, #3498DB 100%)',
         position: 'absolute',
         top: 0,
         left: 0,
         right: 0,
-        height: '200px',
+        height: '250px',
         zIndex: -1
-      }} />
+      }} className="header-gradient" />
       <Box sx={{ 
         display: 'flex',
-        justifyContent: 'space-between',
         alignItems: 'center',
-        p: 2,
-        color: 'white'
-      }}>
-        <Typography variant="h4" sx={{ 
-          fontWeight: 600,
-          fontFamily: '"Poppins", sans-serif',
-        }}>
-          {username.charAt(0).toUpperCase() + username.slice(1)}'s Pulse Insights
-        </Typography>
+        p: 2
+      }} className="header-content">
+        {/* Left section with menu and title */}
         <Box sx={{ 
-          display: 'flex', 
+          display: 'flex',
           alignItems: 'center',
           gap: 2
         }}>
-          <Box sx={{ 
-            display: 'flex', 
-            alignItems: 'center',
-            backgroundColor: 'rgba(255, 255, 255, 0.1)',
-            padding: '4px 12px',
-            borderRadius: '4px',
-          }}>
-            <DeveloperModeIcon sx={{ mr: 1 }} />
-            <Switch
-              checked={devMode}
-              onChange={(e) => setDevMode(e.target.checked)}
-              sx={{
-                '& .MuiSwitch-switchBase': {
-                  color: 'white',
-                  '&.Mui-checked': {
-                    color: 'white',
-                    '& + .MuiSwitch-track': {
-                      backgroundColor: 'rgba(255, 255, 255, 0.5)',
-                    },
-                  },
-                },
-                '& .MuiSwitch-track': {
-                  backgroundColor: 'rgba(255, 255, 255, 0.3)',
-                  opacity: 1,
-                },
-                '& .MuiSwitch-thumb': {
-                  backgroundColor: 'white',
-                },
-              }}
-            />
-          </Box>
           <IconButton
             color="inherit"
             onClick={openMenu}
             sx={{
-              transition: 'transform 0.2s',
+              color: 'white',
+              transition: 'all 0.4s cubic-bezier(0.2, 0.8, 0.2, 1.2)',
+              padding: 0,
               '&:hover': {
-                transform: 'scale(1.1)',
+                transform: 'scale(1.25) rotate(5deg)',
+                backgroundColor: 'transparent',
+                color: '#c3e6ff',
+                filter: 'drop-shadow(0 0 5px rgba(110, 142, 251, 0.7))',
+              },
+              '&:active': {
+                transform: 'scale(0.9) rotate(-5deg)',
+              },
+              '& .MuiTouchRipple-root': {
+                display: 'none',
               },
             }}
           >
-            <MenuIcon />
+            <MenuIcon fontSize="large" />
           </IconButton>
+          
+          <Typography variant="h4" sx={{ 
+            fontWeight: 600,
+            fontFamily: '"Poppins", sans-serif',
+            color: 'white',
+            whiteSpace: 'nowrap',
+            minWidth: '400px'
+          }}>
+            {username.charAt(0).toUpperCase() + username.slice(1)}'s Pulse Insights
+          </Typography>
+          
           <StyledMenu
             anchorEl={anchorEl}
             open={Boolean(anchorEl)}
@@ -814,6 +849,88 @@ const BiometricsDashboard = ({ username }) => {
               <Typography>Logout</Typography>
             </StyledMenuItem>
           </StyledMenu>
+        </Box>
+        
+        {/* Spacer to push toggles to right */}
+        <Box sx={{ flexGrow: 1 }} />
+        
+        {/* Right section with toggles */}
+        <Box sx={{ 
+          display: 'flex', 
+          alignItems: 'center',
+          gap: 2
+        }}>
+          {/* Dark Mode Toggle */}
+          <MuiTooltip title={darkMode ? "Switch to Light Mode" : "Switch to Dark Mode"}>
+            <Box sx={{ 
+              display: 'flex', 
+              alignItems: 'center',
+              backgroundColor: 'rgba(255, 255, 255, 0.1)',
+              padding: '4px 12px',
+              borderRadius: '4px',
+              cursor: 'pointer'
+            }}>
+              <Brightness4Icon sx={{ mr: 1, color: 'white' }} />
+              <Switch
+                checked={darkMode}
+                onChange={(e) => setDarkMode(e.target.checked)}
+                sx={{
+                  '& .MuiSwitch-switchBase': {
+                    color: 'white',
+                    '&.Mui-checked': {
+                      color: 'white',
+                      '& + .MuiSwitch-track': {
+                        backgroundColor: 'rgba(255, 255, 255, 0.5)',
+                      },
+                    },
+                  },
+                  '& .MuiSwitch-track': {
+                    backgroundColor: 'rgba(255, 255, 255, 0.3)',
+                    opacity: 1,
+                  },
+                  '& .MuiSwitch-thumb': {
+                    backgroundColor: 'white',
+                  },
+                }}
+              />
+            </Box>
+          </MuiTooltip>
+          
+          {/* Dev Mode Toggle */}
+          <MuiTooltip title={devMode ? "Disable Developer Mode" : "Enable Developer Mode"}>
+            <Box sx={{ 
+              display: 'flex', 
+              alignItems: 'center',
+              backgroundColor: 'rgba(255, 255, 255, 0.1)',
+              padding: '4px 12px',
+              borderRadius: '4px',
+              cursor: 'pointer'
+            }}>
+              <DeveloperModeIcon sx={{ mr: 1, color: 'white' }} />
+              <Switch
+                checked={devMode}
+                onChange={(e) => setDevMode(e.target.checked)}
+                sx={{
+                  '& .MuiSwitch-switchBase': {
+                    color: 'white',
+                    '&.Mui-checked': {
+                      color: 'white',
+                      '& + .MuiSwitch-track': {
+                        backgroundColor: 'rgba(255, 255, 255, 0.5)',
+                      },
+                    },
+                  },
+                  '& .MuiSwitch-track': {
+                    backgroundColor: 'rgba(255, 255, 255, 0.3)',
+                    opacity: 1,
+                  },
+                  '& .MuiSwitch-thumb': {
+                    backgroundColor: 'white',
+                  },
+                }}
+              />
+            </Box>
+          </MuiTooltip>
         </Box>
       </Box>
       <Box sx={{ px: 3 }}>
@@ -941,10 +1058,11 @@ const BiometricsDashboard = ({ username }) => {
           sx={{ 
             mb: 3,
             p: 2,
-            backgroundColor: colors.primary,
-            color: 'white',
+            backgroundColor: darkMode ? colors.primary : 'white',
+            color: darkMode ? 'white' : '#000',
             boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)'
           }}
+          className="active-integrations-card"
         >
           <Box sx={{ 
             display: 'flex', 
@@ -952,7 +1070,10 @@ const BiometricsDashboard = ({ username }) => {
             alignItems: 'center',
             mb: 2 
           }}>
-            <Typography variant="h6" sx={{ fontWeight: 600 }}>
+            <Typography variant="h6" sx={{ 
+              fontWeight: 600, 
+              color: darkMode ? 'white' : '#000' 
+            }}>
               Active Integrations
             </Typography>
             {activeSources.length > 0 && (
@@ -961,18 +1082,18 @@ const BiometricsDashboard = ({ username }) => {
                   value={selectedDataSource || 'all'}
                   onChange={(e) => setSelectedDataSource(e.target.value)}
                   sx={{
-                    color: 'white',
+                    color: darkMode ? 'white' : '#000',
                     '.MuiOutlinedInput-notchedOutline': {
-                      borderColor: 'rgba(255, 255, 255, 0.3)',
+                      borderColor: darkMode ? 'rgba(255, 255, 255, 0.3)' : 'rgba(0, 0, 0, 0.3)',
                     },
                     '&:hover .MuiOutlinedInput-notchedOutline': {
-                      borderColor: 'rgba(255, 255, 255, 0.5)',
+                      borderColor: darkMode ? 'rgba(255, 255, 255, 0.5)' : 'rgba(0, 0, 0, 0.5)',
                     },
                     '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
-                      borderColor: 'white',
+                      borderColor: darkMode ? 'white' : '#000',
                     },
                     '.MuiSvgIcon-root': {
-                      color: 'white',
+                      color: darkMode ? 'white' : '#000',
                     },
                   }}
                 >
@@ -995,7 +1116,7 @@ const BiometricsDashboard = ({ username }) => {
               <Box
                 key={source.id}
                 sx={{
-                  backgroundColor: 'rgba(255, 255, 255, 0.1)',
+                  backgroundColor: darkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.05)',
                   padding: '8px 16px',
                   borderRadius: '4px',
                   display: 'flex',
@@ -1004,15 +1125,16 @@ const BiometricsDashboard = ({ username }) => {
                   transition: 'transform 0.2s ease',
                   '&:hover': {
                     transform: 'translateY(-2px)',
-                    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+                    backgroundColor: darkMode ? 'rgba(255, 255, 255, 0.15)' : 'rgba(0, 0, 0, 0.1)',
                   }
                 }}
               >
-                <SyncIcon sx={{ fontSize: 20 }} />
+                <SyncIcon sx={{ fontSize: 20, color: darkMode ? 'white' : '#000' }} />
                 <Typography sx={{ 
                   fontWeight: 500,
                   letterSpacing: '0.5px',
-                  textTransform: 'uppercase'
+                  textTransform: 'uppercase',
+                  color: darkMode ? 'white' : '#000'
                 }}>
                   {source.name}
                   {source.profile_type && ` - ${source.profile_type}`}
@@ -1036,9 +1158,27 @@ const BiometricsDashboard = ({ username }) => {
           </Box>
         </Box>
 
-        <Tabs value={tabValue} onChange={handleChangeTab} aria-label="dashboard tabs">
+        <Tabs 
+          value={tabValue} 
+          onChange={handleChangeTab} 
+          aria-label="dashboard tabs"
+          sx={{
+            '& .MuiTab-root': {
+              color: darkMode ? 'white' : '#000',
+              fontWeight: 500,
+            },
+            '& .Mui-selected': {
+              color: darkMode ? '#6e8efb' : '#6e8efb',
+              fontWeight: 600,
+            },
+            '& .MuiTabs-indicator': {
+              backgroundColor: '#6e8efb',
+            }
+          }}
+        >
           <Tab label="Analytics" {...a11yProps(0)} />
           <Tab label="Data Table" {...a11yProps(1)} />
+          <Tab label="Insights" {...a11yProps(2)} />
         </Tabs>
 
         {tabValue === 0 && (
@@ -1050,7 +1190,7 @@ const BiometricsDashboard = ({ username }) => {
                   {/* Heart Rate and Recovery Score */}
                   <Grid item xs={12} md={6}>
                     <Card sx={{ p: 2, height: '100%' }}>
-                      <Typography variant="h6" gutterBottom>Resting Heart Rate & Recovery Score</Typography>
+                      <Typography variant="h6" gutterBottom sx={{ color: colors.headings }}>Resting Heart Rate & Recovery Score</Typography>
                       <ResponsiveContainer width="100%" height={300}>
                         <ComposedChart data={filteredData}>
                           <CartesianGrid strokeDasharray="3 3" />
@@ -1289,7 +1429,7 @@ const BiometricsDashboard = ({ username }) => {
             ) : (
               <Box sx={{ overflowX: 'auto' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                  <thead style={{ backgroundColor: '#eee' }}>
+                  <thead>
                     <tr>
                       {getDataColumns(biometricData, devMode).map(column => (
                         <th key={column.id} style={thStyle}>
@@ -1315,15 +1455,249 @@ const BiometricsDashboard = ({ username }) => {
             {devMode && (
               <Typography 
                 variant="caption" 
+                className="dev-mode-text"
                 sx={{ 
                   display: 'block', 
-                  mt: 2, 
-                  color: 'text.secondary',
+                  mt: 2,
                   fontStyle: 'italic'
                 }}
               >
                 Developer mode is active - showing all fields including system fields
               </Typography>
+            )}
+          </Box>
+        )}
+        
+        {tabValue === 2 && (
+          <Box sx={{ mt: 3 }}>
+            <Typography variant="h5" sx={{ 
+              mb: 3, 
+              color: darkMode ? 'white' : colors.primary,
+              fontWeight: 600 
+            }}>
+              Your Personal Health Insights
+            </Typography>
+            
+            {biometricData.length === 0 && !loading ? (
+              <Typography variant="body1" color="textSecondary">
+                No data available for insights. Please sync your data.
+              </Typography>
+            ) : (
+              <Grid container spacing={3}>
+                {/* Sleep Insight */}
+                <Grid item xs={12} md={6}>
+                  <Card sx={{ 
+                    p: 3, 
+                    borderRadius: '12px',
+                    height: '100%',
+                    transition: 'transform 0.3s ease',
+                    '&:hover': { transform: 'translateY(-5px)' }
+                  }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                      <BedtimeIcon sx={{ 
+                        fontSize: 32, 
+                        color: '#8e44ad', 
+                        mr: 2,
+                        p: 1,
+                        borderRadius: '50%',
+                        backgroundColor: darkMode ? 'rgba(142, 68, 173, 0.2)' : 'rgba(142, 68, 173, 0.1)',
+                      }} />
+                      <Typography variant="h6" sx={{ fontWeight: 600 }}>Sleep Quality</Typography>
+                    </Box>
+                    
+                    <Typography variant="body1" sx={{ mb: 2 }}>
+                      {selectedDataSource === 'whoop' 
+                        ? `Your sleep performance has been ${biometricData[0]?.sleep_performance > 85 ? 'excellent' : biometricData[0]?.sleep_performance > 70 ? 'good' : 'below average'} 
+                          lately. You've been getting an average of ${(biometricData.reduce((acc, item) => acc + (item.sleep_hours || 0), 0) / biometricData.length).toFixed(1)} hours of sleep.`
+                        : `Your sleep patterns show you're averaging ${(biometricData.reduce((acc, item) => acc + (item.sleep_hours || 0), 0) / biometricData.length).toFixed(1)} hours per night, 
+                          with deep sleep accounting for about ${Math.round(biometricData[0]?.deep_sleep / biometricData[0]?.sleep_hours * 100) || 25}% of your total sleep.`
+                      }
+                    </Typography>
+                    
+                    <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1 }}>Recommendation:</Typography>
+                    <Typography variant="body2" sx={{ color: darkMode ? 'rgba(255,255,255,0.7)' : 'rgba(0,0,0,0.7)' }}>
+                      {biometricData[0]?.sleep_hours < 7 
+                        ? "Try to increase your sleep duration to at least 7 hours for better recovery and performance."
+                        : "Maintain your current sleep routine. Consider adding 15 minutes of meditation before bed for even better quality."
+                      }
+                    </Typography>
+                  </Card>
+                </Grid>
+                
+                {/* Activity Insight */}
+                <Grid item xs={12} md={6}>
+                  <Card sx={{ 
+                    p: 3, 
+                    borderRadius: '12px',
+                    height: '100%',
+                    transition: 'transform 0.3s ease',
+                    '&:hover': { transform: 'translateY(-5px)' }
+                  }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                      <DirectionsRunIcon sx={{ 
+                        fontSize: 32, 
+                        color: '#2ecc71', 
+                        mr: 2,
+                        p: 1,
+                        borderRadius: '50%',
+                        backgroundColor: darkMode ? 'rgba(46, 204, 113, 0.2)' : 'rgba(46, 204, 113, 0.1)',
+                      }} />
+                      <Typography variant="h6" sx={{ fontWeight: 600 }}>Activity Level</Typography>
+                    </Box>
+                    
+                    <Typography variant="body1" sx={{ mb: 2 }}>
+                      {selectedDataSource === 'whoop' 
+                        ? `Your recent strain levels have been ${biometricData[0]?.strain > 15 ? 'very high' : biometricData[0]?.strain > 10 ? 'moderate' : 'low'}. 
+                          Your body is handling this load ${biometricData[0]?.recovery_score > 66 ? 'well' : 'with some difficulty'}.`
+                        : `You've averaged ${Math.round(biometricData.reduce((acc, item) => acc + (item.steps || 0), 0) / biometricData.length).toLocaleString()} steps daily, 
+                          burning approximately ${Math.round(biometricData.reduce((acc, item) => acc + (item.active_calories || 0), 0) / biometricData.length)} active calories.`
+                      }
+                    </Typography>
+                    
+                    <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1 }}>Recommendation:</Typography>
+                    <Typography variant="body2" sx={{ color: darkMode ? 'rgba(255,255,255,0.7)' : 'rgba(0,0,0,0.7)' }}>
+                      {biometricData[0]?.steps < 7000 || biometricData[0]?.strain < 8
+                        ? "Consider increasing your daily activity. Even a 20-minute walk can boost your cardiovascular health."
+                        : biometricData[0]?.recovery_score < 33
+                        ? "Your body needs more recovery time. Focus on light activities for the next 1-2 days."
+                        : "Your activity level is well-balanced with your recovery. Keep up the good work!"
+                      }
+                    </Typography>
+                  </Card>
+                </Grid>
+                
+                {/* Heart Rate Insight */}
+                <Grid item xs={12} md={6}>
+                  <Card sx={{ 
+                    p: 3, 
+                    borderRadius: '12px',
+                    height: '100%',
+                    transition: 'transform 0.3s ease',
+                    '&:hover': { transform: 'translateY(-5px)' }
+                  }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                      <FavoriteIcon sx={{ 
+                        fontSize: 32, 
+                        color: '#e74c3c', 
+                        mr: 2,
+                        p: 1,
+                        borderRadius: '50%',
+                        backgroundColor: darkMode ? 'rgba(231, 76, 60, 0.2)' : 'rgba(231, 76, 60, 0.1)',
+                      }} />
+                      <Typography variant="h6" sx={{ fontWeight: 600 }}>Heart Rate Trends</Typography>
+                    </Box>
+                    
+                    <Typography variant="body1" sx={{ mb: 2 }}>
+                      {`Your resting heart rate is ${Math.round(biometricData[0]?.resting_heart_rate || 60)} bpm, which is 
+                        ${biometricData[0]?.resting_heart_rate < 60 ? 'excellent' : biometricData[0]?.resting_heart_rate < 70 ? 'good' : 'average'} for your profile.
+                        ${selectedDataSource === 'whoop' 
+                          ? `Your HRV of ${Math.round(biometricData[0]?.hrv_ms || 50)} ms indicates ${biometricData[0]?.hrv_ms > 70 ? 'strong' : biometricData[0]?.hrv_ms > 50 ? 'good' : 'moderate'} recovery capacity.`
+                          : `Your heart rate reaches ${Math.round(biometricData[0]?.max_heart_rate || 150)} bpm during peak activity.`
+                        }`
+                      }
+                    </Typography>
+                    
+                    <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1 }}>Recommendation:</Typography>
+                    <Typography variant="body2" sx={{ color: darkMode ? 'rgba(255,255,255,0.7)' : 'rgba(0,0,0,0.7)' }}>
+                      {biometricData[0]?.resting_heart_rate > 70
+                        ? "Your resting heart rate is slightly elevated. Consider more aerobic exercise and stress reduction techniques."
+                        : biometricData[0]?.hrv_ms < 50
+                        ? "Your heart rate variability could improve. Focus on quality sleep and recovery."
+                        : "Your cardiovascular indicators look healthy. Continue your current exercise routine."
+                      }
+                    </Typography>
+                  </Card>
+                </Grid>
+                
+                {/* Recovery Insight */}
+                <Grid item xs={12} md={6}>
+                  <Card sx={{ 
+                    p: 3, 
+                    borderRadius: '12px',
+                    height: '100%',
+                    transition: 'transform 0.3s ease',
+                    '&:hover': { transform: 'translateY(-5px)' }
+                  }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                      <RestoreIcon sx={{ 
+                        fontSize: 32, 
+                        color: '#3498db', 
+                        mr: 2,
+                        p: 1,
+                        borderRadius: '50%',
+                        backgroundColor: darkMode ? 'rgba(52, 152, 219, 0.2)' : 'rgba(52, 152, 219, 0.1)',
+                      }} />
+                      <Typography variant="h6" sx={{ fontWeight: 600 }}>Recovery Status</Typography>
+                    </Box>
+                    
+                    <Typography variant="body1" sx={{ mb: 2 }}>
+                      {selectedDataSource === 'whoop' 
+                        ? `Your body is ${biometricData[0]?.recovery_score > 66 ? 'well recovered' : biometricData[0]?.recovery_score > 33 ? 'moderately recovered' : 'under-recovered'}.
+                          This suggests your ${biometricData[0]?.recovery_score > 66 ? 'body is adapting well to recent training loads' : 'system needs more recovery time'}.`
+                        : `Based on your resting heart rate and sleep quality, your recovery level appears 
+                          ${biometricData[0]?.resting_heart_rate < (biometricData[1]?.resting_heart_rate || 60) ? 'good' : 'incomplete'}.`
+                      }
+                    </Typography>
+                    
+                    <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1 }}>Recommendation:</Typography>
+                    <Typography variant="body2" sx={{ color: darkMode ? 'rgba(255,255,255,0.7)' : 'rgba(0,0,0,0.7)' }}>
+                      {(biometricData[0]?.recovery_score < 33) || (biometricData[0]?.resting_heart_rate > (biometricData[1]?.resting_heart_rate || 60) + 5)
+                        ? "Focus on recovery today. Consider light activity, proper hydration, and an extra hour of sleep."
+                        : (biometricData[0]?.recovery_score < 66) || (biometricData[0]?.resting_heart_rate > (biometricData[1]?.resting_heart_rate || 60))
+                        ? "Your body is in a moderate recovery state. Moderate intensity training is appropriate."
+                        : "You're well recovered. This is an optimal day for higher intensity training if desired."
+                      }
+                    </Typography>
+                  </Card>
+                </Grid>
+                
+                {/* Long-term Trends Insight */}
+                <Grid item xs={12}>
+                  <Card sx={{ 
+                    p: 3, 
+                    borderRadius: '12px',
+                    transition: 'transform 0.3s ease',
+                    '&:hover': { transform: 'translateY(-5px)' }
+                  }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                      <MonitorHeartIcon sx={{ 
+                        fontSize: 32, 
+                        color: '#f39c12', 
+                        mr: 2,
+                        p: 1,
+                        borderRadius: '50%',
+                        backgroundColor: darkMode ? 'rgba(243, 156, 18, 0.2)' : 'rgba(243, 156, 18, 0.1)',
+                      }} />
+                      <Typography variant="h6" sx={{ fontWeight: 600 }}>Health Trends</Typography>
+                    </Box>
+                    
+                    <Typography variant="body1" sx={{ mb: 2 }}>
+                      {`Over the past ${biometricData.length} days, your metrics indicate 
+                      ${biometricData[0]?.resting_heart_rate < biometricData[biometricData.length-1]?.resting_heart_rate ? 'improving' : 'stable'} cardiovascular fitness
+                      and ${(biometricData.reduce((a, b, i, arr) => i > 0 ? a + (b.sleep_hours > arr[i-1].sleep_hours ? 1 : 0) : 0, 0) > biometricData.length/2) ? 'improving' : 'consistent'} sleep habits.`}
+                      
+                      {selectedDataSource === 'whoop' 
+                        ? ` Your recovery scores have been trending ${biometricData.slice(0, 3).reduce((acc, item) => acc + (item.recovery_score || 0), 0) / 3 > 
+                            biometricData.slice(biometricData.length-3).reduce((acc, item) => acc + (item.recovery_score || 0), 0) / 3 ? 'upward' : 'consistently'}.`
+                        : ` Your overall activity level has been ${biometricData.slice(0, 3).reduce((acc, item) => acc + (item.steps || 0), 0) / 3 > 
+                            biometricData.slice(biometricData.length-3).reduce((acc, item) => acc + (item.steps || 0), 0) / 3 ? 'increasing' : 'steady'}.`
+                      }
+                    </Typography>
+                    
+                    <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1 }}>Personalized Insight:</Typography>
+                    <Typography variant="body2" sx={{ color: darkMode ? 'rgba(255,255,255,0.7)' : 'rgba(0,0,0,0.7)' }}>
+                      {`Your data suggests that your body responds best to 
+                      ${biometricData.find(d => d.sleep_hours > 8)?.resting_heart_rate < biometricData.find(d => d.sleep_hours < 7)?.resting_heart_rate ? 
+                        'longer sleep durations' : 'consistent sleep patterns'} 
+                      and ${biometricData.find(d => d.steps > 10000) ? 
+                        'regular physical activity' : 'balanced activity levels'}. 
+                      Consider ${biometricData[0]?.resting_heart_rate > 65 ? 
+                        'adding more cardio exercises to your routine' : 'maintaining your current exercise balance'} 
+                      to optimize your health metrics.`}
+                    </Typography>
+                  </Card>
+                </Grid>
+              </Grid>
             )}
           </Box>
         )}
@@ -1342,29 +1716,29 @@ const BiometricsDashboard = ({ username }) => {
             : 0}
           isWhoop={selectedDataSource === 'whoop'}
         />
+        
+        {/* Footer */}
+        <Box 
+          className="footer"
+          sx={{ 
+            mt: 4, 
+            pt: 2
+          }}
+        >
+          <Typography 
+            variant="caption" 
+            className="footer-text"
+            sx={{ 
+              display: 'block',
+              mb: 1
+            }}
+          >
+            Developed by Andrew Prince and Pulse Project LLC 2025
+          </Typography>
+        </Box>
       </Box>
     </Box>
   );
-};
-
-// Update the table styles
-const thStyle = {
-  textAlign: 'left',
-  padding: '12px 8px',
-  border: '1px solid #ccc',
-  fontWeight: 'bold',
-  backgroundColor: '#2C3E50',
-  color: 'white',
-  position: 'sticky',
-  top: 0,
-  zIndex: 1
-};
-
-const tdStyle = {
-  textAlign: 'left',
-  padding: '8px',
-  border: '1px solid #ccc',
-  whiteSpace: 'nowrap'
 };
 
 export default BiometricsDashboard; 

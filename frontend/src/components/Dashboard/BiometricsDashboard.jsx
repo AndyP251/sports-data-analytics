@@ -168,10 +168,10 @@ const formatCellValue = (value, fieldName) => {
   if (typeof value === 'number') {
     // Format seconds to hours for time fields
     if (fieldName.includes('seconds')) {
-      return (value / 3600).toFixed(2) + ' hrs';
+      return Number((value / 3600).toFixed(2)) + ' hrs';
     }
-    // Format other numeric values
-    return Number.isInteger(value) ? value : value.toFixed(2);
+    // Format other numeric values to 2 decimal places
+    return Number.isInteger(value) ? value : Number(value.toFixed(2));
   }
   
   return value;
@@ -198,7 +198,7 @@ const BiometricsDashboard = ({ username }) => {
   const [activeSource, setActiveSource] = useState(null);
   const [showWhoopConnect, setShowWhoopConnect] = useState(false);
   const [activeSources, setActiveSources] = useState([]);
-  const [selectedDataSource, setSelectedDataSource] = useState('all');
+  const [selectedDataSource, setSelectedDataSource] = useState(null);
   const [filteredData, setFilteredData] = useState([]);
   const [devMode, setDevMode] = useState(false);
   
@@ -245,6 +245,11 @@ const BiometricsDashboard = ({ username }) => {
       const processedData = processData(response.data);
       console.log('Processed biometrics data:', processedData);
       setBiometricData(processedData);
+      
+      // If we have data but no selected source yet, set to first source
+      if (processedData.length > 0 && !selectedDataSource && activeSources.length > 0) {
+        setSelectedDataSource(activeSources[0].id);
+      }
     } catch (error) {
       console.error('Error fetching biometric data:', error);
       setError('Failed to fetch biometric data');
@@ -259,6 +264,8 @@ const BiometricsDashboard = ({ username }) => {
       if (response.data.success && response.data.sources.length > 0) {
         // Set active source to the first source's ID
         setActiveSource(response.data.sources[0].id);
+        // Set selected data source to the first source's ID
+        setSelectedDataSource(response.data.sources[0].id);
         // Store the full sources data if needed
         setActiveSources(response.data.sources);
       } else {
@@ -335,35 +342,58 @@ const BiometricsDashboard = ({ username }) => {
       const remSleepHours = (item.rem_sleep_seconds || 0) / 3600;
       const awakeHours = (item.awake_seconds || 0) / 3600;
 
-      return {
+      // Helper function to round numeric values to 2 decimal places
+      const roundToTwo = (value) => {
+        if (typeof value === 'number') {
+          return Number(value.toFixed(2));
+        }
+        return value;
+      };
+
+      const processedItem = {
         ...item,  // Keep all original data
         date: format(new Date(item.date), 'MM/dd'),
         
         // Sleep metrics (in hours)
-        sleep_hours: Number(sleepHours.toFixed(2)),
-        deep_sleep: Number(deepSleepHours.toFixed(2)),
-        light_sleep: Number(lightSleepHours.toFixed(2)),
-        rem_sleep: Number(remSleepHours.toFixed(2)),
-        awake_time: Number(awakeHours.toFixed(2)),
+        sleep_hours: roundToTwo(sleepHours),
+        deep_sleep: roundToTwo(deepSleepHours),
+        light_sleep: roundToTwo(lightSleepHours),
+        rem_sleep: roundToTwo(remSleepHours),
+        awake_time: roundToTwo(awakeHours),
         
-        // Heart rate metrics (already in correct format)
-        resting_heart_rate: item.resting_heart_rate || 0,
-        max_heart_rate: item.max_heart_rate || 0,
-        min_heart_rate: item.min_heart_rate || 0,
+        // Heart rate metrics (rounded to 2 decimal places)
+        resting_heart_rate: roundToTwo(item.resting_heart_rate || 0),
+        max_heart_rate: roundToTwo(item.max_heart_rate || 0),
+        min_heart_rate: roundToTwo(item.min_heart_rate || 0),
         
         // Activity metrics
         steps: item.total_steps || 0,
-        distance: (item.total_distance_meters || 0) / 1000, // Convert to km
-        total_calories: item.total_calories || 0,
-        active_calories: item.active_calories || 0,
+        distance: roundToTwo((item.total_distance_meters || 0) / 1000), // Convert to km and round
+        total_calories: roundToTwo(item.total_calories || 0),
+        active_calories: roundToTwo(item.active_calories || 0),
         
         // Stress metrics
-        stress_level: item.average_stress_level || 0,
-        max_stress_level: item.max_stress_level || 0,
+        stress_level: roundToTwo(item.average_stress_level || 0),
+        max_stress_level: roundToTwo(item.max_stress_level || 0),
         
         // For health score calculation
-        hrv: item.body_battery_change || 0,
+        hrv: roundToTwo(item.body_battery_change || item.hrv_ms || 0),
+        
+        // Whoop specific fields
+        recovery_score: roundToTwo(item.recovery_score || 0),
+        hrv_ms: roundToTwo(item.hrv_ms || 0),
+        strain: roundToTwo(item.strain || 0),
+        spo2_percentage: roundToTwo(item.spo2_percentage || 0),
+        skin_temp_celsius: roundToTwo(item.skin_temp_celsius || 0),
+        respiratory_rate: roundToTwo(item.respiratory_rate || 0),
+        sleep_efficiency: roundToTwo(item.sleep_efficiency || 0),
+        sleep_consistency: roundToTwo(item.sleep_consistency || 0),
+        sleep_performance: roundToTwo(item.sleep_performance || 0),
+        sleep_disturbances: roundToTwo(item.sleep_disturbances || 0),
+        sleep_cycle_count: roundToTwo(item.sleep_cycle_count || 0),
       };
+
+      return processedItem;
     });
   };
 
@@ -384,33 +414,70 @@ const BiometricsDashboard = ({ username }) => {
     const latestData = data[data.length - 1];
     const maxScore = 100;
     
-    // Weight factors for different metrics
-    const weights = {
-      sleep: 0.3,
-      activity: 0.3,
-      stress: 0.2,
-      heartRate: 0.2
-    };
-    
-    // Calculate sleep score
-    const sleepScore = (latestData.sleep_hours / 8) * 100 * weights.sleep;
-    
-    // Calculate activity score
-    const activityScore = Math.min((latestData.steps / 10000) * 100, 100) * weights.activity;
-    
-    // Calculate stress score
-    const stressScore = (100 - latestData.stress_level) * weights.stress;
-    
-    // Calculate heart rate score
-    const hrvScore = (latestData.hrv / 100) * 100 * weights.heartRate;
-    
-    // Calculate total score
-    const totalScore = Math.min(
-      Math.round(sleepScore + activityScore + stressScore + hrvScore),
-      maxScore
-    );
-    
-    return totalScore;
+    // Check if it's Whoop data
+    if (latestData.source === 'whoop') {
+      // For Whoop, use their recovery score if available, otherwise calculate
+      if (latestData.recovery_score) {
+        return latestData.recovery_score;
+      }
+      
+      // Weight factors for different Whoop metrics
+      const weights = {
+        sleep: 0.3,
+        hrv: 0.3,
+        respiratory: 0.2,
+        restingHR: 0.2
+      };
+      
+      // Calculate sleep score (based on efficiency and consistency)
+      const sleepScore = ((latestData.sleep_efficiency || 80) / 100 * 100) * weights.sleep;
+      
+      // Calculate HRV score (normalized to 0-100)
+      const hrvScore = Math.min((latestData.hrv_ms / 100) * 100, 100) * weights.hrv;
+      
+      // Calculate respiratory score (15-18 is normal range)
+      const respScore = (1 - Math.abs((latestData.respiratory_rate - 16.5) / 5)) * 100 * weights.respiratory;
+      
+      // Calculate resting heart rate score (lower is better, assuming 40-80 range)
+      const hrScore = (1 - ((latestData.resting_heart_rate - 40) / 40)) * 100 * weights.restingHR;
+      
+      // Calculate total score
+      const totalScore = Math.min(
+        Math.round(sleepScore + hrvScore + respScore + hrScore),
+        maxScore
+      );
+      
+      return totalScore;
+    } else {
+      // Original calculation for Garmin data
+      // Weight factors for different metrics
+      const weights = {
+        sleep: 0.3,
+        activity: 0.3,
+        stress: 0.2,
+        heartRate: 0.2
+      };
+      
+      // Calculate sleep score
+      const sleepScore = (latestData.sleep_hours / 8) * 100 * weights.sleep;
+      
+      // Calculate activity score
+      const activityScore = Math.min((latestData.steps / 10000) * 100, 100) * weights.activity;
+      
+      // Calculate stress score
+      const stressScore = (100 - latestData.stress_level) * weights.stress;
+      
+      // Calculate heart rate score
+      const hrvScore = (latestData.hrv / 100) * 100 * weights.heartRate;
+      
+      // Calculate total score
+      const totalScore = Math.min(
+        Math.round(sleepScore + activityScore + stressScore + hrvScore),
+        maxScore
+      );
+      
+      return totalScore;
+    }
   };
 
   const handleLogout = async () => {
@@ -511,35 +578,6 @@ const BiometricsDashboard = ({ username }) => {
   };
 
   useEffect(() => {
-    let mounted = true;
-    
-    const fetchData = async () => {
-      if (loading || biometricData.length > 0) return;
-      setLoading(true);
-      
-      try {
-        const response = await axios.get('/api/biometrics/');
-        // console.log('Raw biometrics data:', response.data);
-        // Process the raw data array directly
-        const processedData = processData(response.data);
-        // console.log('Processed biometrics data:', processedData);
-        setBiometricData(processedData);
-      } catch (error) {
-        console.error('Error fetching biometric data:', error);
-        setError('Failed to fetch biometric data');
-      } finally {
-        if (mounted) setLoading(false);
-      }
-    };
-
-    fetchData();
-
-    return () => {
-      mounted = false;
-    };
-  }, []);
-
-  useEffect(() => {
     if (biometricData.length === 0 && !loading) {
       setHasActiveSources(false);
     }
@@ -566,9 +604,14 @@ const BiometricsDashboard = ({ username }) => {
   }, []);
 
   useEffect(() => {
+    // Call fetchData on component mount
+    fetchData();
+  }, []);
+
+  useEffect(() => {
     if (biometricData.length > 0) {
       // Filter data based on selected source
-      if (selectedDataSource === 'all') {
+      if (!selectedDataSource || selectedDataSource === 'all') {
         setFilteredData(biometricData);
       } else {
         setFilteredData(biometricData.filter(item => item.source === selectedDataSource));
@@ -865,7 +908,7 @@ const BiometricsDashboard = ({ username }) => {
             {activeSources.length > 0 && (
               <FormControl sx={{ minWidth: 200 }}>
                 <Select
-                  value={selectedDataSource}
+                  value={selectedDataSource || 'all'}
                   onChange={(e) => setSelectedDataSource(e.target.value)}
                   sx={{
                     color: 'white',
@@ -951,118 +994,238 @@ const BiometricsDashboard = ({ username }) => {
         {tabValue === 0 && (
           <Box sx={{ mt: 3 }}>
             <Grid container spacing={3}>
-              {/* Heart Rate Trends */}
-              <Grid item xs={12} md={6}>
-                <Card sx={{ p: 2, height: '100%' }}>
-                  <Typography variant="h6" gutterBottom>Heart Rate Trends</Typography>
-                  <ResponsiveContainer width="100%" height={300}>
-                    <LineChart data={filteredData}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="date" />
-                      <YAxis />
-                      <Tooltip />
-                      <Legend />
-                      <Line type="monotone" dataKey="max_heart_rate" name="Max HR" stroke="#e74c3c" />
-                      <Line type="monotone" dataKey="resting_heart_rate" name="Resting HR" stroke="#2ecc71" />
-                      <Line type="monotone" dataKey="min_heart_rate" name="Min HR" stroke="#3498db" />
-                    </LineChart>
-                  </ResponsiveContainer>
-                </Card>
-              </Grid>
+              {selectedDataSource === 'whoop' ? (
+                // WHOOP-specific visualizations
+                <>
+                  {/* Heart Rate and Recovery Score */}
+                  <Grid item xs={12} md={6}>
+                    <Card sx={{ p: 2, height: '100%' }}>
+                      <Typography variant="h6" gutterBottom>Resting Heart Rate & Recovery Score</Typography>
+                      <ResponsiveContainer width="100%" height={300}>
+                        <ComposedChart data={filteredData}>
+                          <CartesianGrid strokeDasharray="3 3" />
+                          <XAxis dataKey="date" />
+                          <YAxis yAxisId="left" />
+                          <YAxis yAxisId="right" orientation="right" domain={[0, 100]} />
+                          <Tooltip />
+                          <Legend />
+                          <Bar dataKey="recovery_score" name="Recovery Score" fill="#27AE60" yAxisId="right" />
+                          <Line type="monotone" dataKey="resting_heart_rate" name="Resting HR" stroke="#e74c3c" yAxisId="left" strokeWidth={2} />
+                        </ComposedChart>
+                      </ResponsiveContainer>
+                    </Card>
+                  </Grid>
 
-              {/* Sleep Duration */}
-              <Grid item xs={12} md={6}>
-                <Card sx={{ p: 2, height: '100%' }}>
-                  <Typography variant="h6" gutterBottom>Sleep Duration</Typography>
-                  <ResponsiveContainer width="100%" height={300}>
-                    <BarChart data={filteredData}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="date" />
-                      <YAxis />
-                      <Tooltip />
-                      <Legend />
-                      <Bar dataKey="sleep_hours" name="Sleep (hrs)" fill="#8e44ad" />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </Card>
-              </Grid>
+                  {/* HRV and Strain */}
+                  <Grid item xs={12} md={6}>
+                    <Card sx={{ p: 2, height: '100%' }}>
+                      <Typography variant="h6" gutterBottom>HRV & Strain</Typography>
+                      <ResponsiveContainer width="100%" height={300}>
+                        <ComposedChart data={filteredData}>
+                          <CartesianGrid strokeDasharray="3 3" />
+                          <XAxis dataKey="date" />
+                          <YAxis yAxisId="left" />
+                          <YAxis yAxisId="right" orientation="right" />
+                          <Tooltip />
+                          <Legend />
+                          <Bar dataKey="hrv_ms" name="HRV (ms)" fill="#3498DB" yAxisId="left" />
+                          <Line type="monotone" dataKey="strain" name="Strain" stroke="#E74C3C" yAxisId="right" />
+                        </ComposedChart>
+                      </ResponsiveContainer>
+                    </Card>
+                  </Grid>
 
-              {/* Daily Activity */}
-              <Grid item xs={12} md={6}>
-                <Card sx={{ p: 2, height: '100%' }}>
-                  <Typography variant="h6" gutterBottom>Daily Activity</Typography>
-                  <ResponsiveContainer width="100%" height={300}>
-                    <ComposedChart data={filteredData}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="date" />
-                      <YAxis yAxisId="left" />
-                      <YAxis yAxisId="right" orientation="right" />
-                      <Tooltip />
-                      <Legend />
-                      <Bar dataKey="steps" name="Steps" fill="#3498db" yAxisId="left" />
-                      <Line type="monotone" dataKey="active_calories" name="Active Calories" stroke="#e74c3c" yAxisId="right" />
-                    </ComposedChart>
-                  </ResponsiveContainer>
-                </Card>
-              </Grid>
+                  {/* SPO2 and Body Temperature */}
+                  <Grid item xs={12} md={6}>
+                    <Card sx={{ p: 2, height: '100%' }}>
+                      <Typography variant="h6" gutterBottom>SPO2 & Skin Temperature</Typography>
+                      <ResponsiveContainer width="100%" height={300}>
+                        <ComposedChart data={filteredData}>
+                          <CartesianGrid strokeDasharray="3 3" />
+                          <XAxis dataKey="date" />
+                          <YAxis yAxisId="left" domain={[90, 100]} />
+                          <YAxis yAxisId="right" orientation="right" domain={[32, 38]} />
+                          <Tooltip />
+                          <Legend />
+                          <Bar dataKey="spo2_percentage" name="SPO2 %" fill="#3498DB" yAxisId="left" />
+                          <Line type="monotone" dataKey="skin_temp_celsius" name="Skin Temp (°C)" stroke="#F1C40F" yAxisId="right" />
+                        </ComposedChart>
+                      </ResponsiveContainer>
+                    </Card>
+                  </Grid>
 
-              {/* Respiration Metrics */}
-              <Grid item xs={12} md={6}>
-                <Card sx={{ p: 2, height: '100%' }}>
-                  <Typography variant="h6" gutterBottom>Respiration Range</Typography>
-                  <ResponsiveContainer width="100%" height={300}>
-                    <AreaChart data={filteredData}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="date" />
-                      <YAxis />
-                      <Tooltip />
-                      <Legend />
-                      <Area 
-                        type="monotone" 
-                        dataKey="max_respiration" 
-                        name="Max Resp" 
-                        stroke="#e74c3c" 
-                        fill="#e74c3c" 
-                        fillOpacity={0.2} 
-                      />
-                      <Area 
-                        type="monotone" 
-                        dataKey="average_respiration" 
-                        name="Avg Resp" 
-                        stroke="#2ecc71" 
-                        fill="#2ecc71" 
-                        fillOpacity={0.2} 
-                      />
-                      <Area 
-                        type="monotone" 
-                        dataKey="lowest_respiration" 
-                        name="Min Resp" 
-                        stroke="#3498db" 
-                        fill="#3498db" 
-                        fillOpacity={0.2} 
-                      />
-                    </AreaChart>
-                  </ResponsiveContainer>
-                </Card>
-              </Grid>
+                  {/* Respiratory Rate */}
+                  <Grid item xs={12} md={6}>
+                    <Card sx={{ p: 2, height: '100%' }}>
+                      <Typography variant="h6" gutterBottom>Respiratory Rate</Typography>
+                      <ResponsiveContainer width="100%" height={300}>
+                        <LineChart data={filteredData}>
+                          <CartesianGrid strokeDasharray="3 3" />
+                          <XAxis dataKey="date" />
+                          <YAxis domain={['dataMin - 2', 'dataMax + 2']} />
+                          <Tooltip />
+                          <Legend />
+                          <Line type="monotone" dataKey="respiratory_rate" name="Resp. Rate" stroke="#27AE60" strokeWidth={2} />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </Card>
+                  </Grid>
 
-              {/* Calorie Breakdown */}
-              <Grid item xs={12}>
-                <Card sx={{ p: 2 }}>
-                  <Typography variant="h6" gutterBottom>Daily Calorie Breakdown</Typography>
-                  <ResponsiveContainer width="100%" height={300}>
-                    <BarChart data={filteredData}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="date" />
-                      <YAxis />
-                      <Tooltip />
-                      <Legend />
-                      <Bar dataKey="total_calories" name="Total Calories" stackId="calories" fill="#3498db" />
-                      <Bar dataKey="active_calories" name="Active Calories" stackId="calories" fill="#2ecc71" />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </Card>
-              </Grid>
+                  {/* Sleep Metrics */}
+                  <Grid item xs={12} md={6}>
+                    <Card sx={{ p: 2, height: '100%' }}>
+                      <Typography variant="h6" gutterBottom>Sleep Quality Metrics</Typography>
+                      <ResponsiveContainer width="100%" height={300}>
+                        <ComposedChart data={filteredData}>
+                          <CartesianGrid strokeDasharray="3 3" />
+                          <XAxis dataKey="date" />
+                          <YAxis domain={[0, 100]} />
+                          <Tooltip />
+                          <Legend />
+                          <Bar dataKey="sleep_efficiency" name="Sleep Efficiency" fill="#3498DB" />
+                          <Bar dataKey="sleep_consistency" name="Sleep Consistency" fill="#F1C40F" />
+                          <Bar dataKey="sleep_performance" name="Sleep Performance" fill="#27AE60" />
+                        </ComposedChart>
+                      </ResponsiveContainer>
+                    </Card>
+                  </Grid>
+
+                  {/* Sleep Disturbances and Cycles */}
+                  <Grid item xs={12} md={6}>
+                    <Card sx={{ p: 2, height: '100%' }}>
+                      <Typography variant="h6" gutterBottom>Sleep Disturbances & Cycles</Typography>
+                      <ResponsiveContainer width="100%" height={300}>
+                        <ComposedChart data={filteredData}>
+                          <CartesianGrid strokeDasharray="3 3" />
+                          <XAxis dataKey="date" />
+                          <YAxis yAxisId="left" />
+                          <YAxis yAxisId="right" orientation="right" domain={[0, 10]} />
+                          <Tooltip />
+                          <Legend />
+                          <Bar dataKey="sleep_disturbances" name="Disturbances" fill="#E74C3C" yAxisId="left" />
+                          <Line type="monotone" dataKey="sleep_cycle_count" name="Sleep Cycles" stroke="#3498DB" strokeWidth={2} yAxisId="right" />
+                        </ComposedChart>
+                      </ResponsiveContainer>
+                    </Card>
+                  </Grid>
+                </>
+              ) : (
+                // Default Garmin visualizations
+                <>
+                  {/* Heart Rate Trends */}
+                  <Grid item xs={12} md={6}>
+                    <Card sx={{ p: 2, height: '100%' }}>
+                      <Typography variant="h6" gutterBottom>Heart Rate Trends</Typography>
+                      <ResponsiveContainer width="100%" height={300}>
+                        <LineChart data={filteredData}>
+                          <CartesianGrid strokeDasharray="3 3" />
+                          <XAxis dataKey="date" />
+                          <YAxis />
+                          <Tooltip />
+                          <Legend />
+                          <Line type="monotone" dataKey="max_heart_rate" name="Max HR" stroke="#e74c3c" />
+                          <Line type="monotone" dataKey="resting_heart_rate" name="Resting HR" stroke="#2ecc71" />
+                          <Line type="monotone" dataKey="min_heart_rate" name="Min HR" stroke="#3498db" />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </Card>
+                  </Grid>
+
+                  {/* Sleep Duration */}
+                  <Grid item xs={12} md={6}>
+                    <Card sx={{ p: 2, height: '100%' }}>
+                      <Typography variant="h6" gutterBottom>Sleep Duration</Typography>
+                      <ResponsiveContainer width="100%" height={300}>
+                        <BarChart data={filteredData}>
+                          <CartesianGrid strokeDasharray="3 3" />
+                          <XAxis dataKey="date" />
+                          <YAxis />
+                          <Tooltip />
+                          <Legend />
+                          <Bar dataKey="sleep_hours" name="Sleep (hrs)" fill="#8e44ad" />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </Card>
+                  </Grid>
+
+                  {/* Daily Activity */}
+                  <Grid item xs={12} md={6}>
+                    <Card sx={{ p: 2, height: '100%' }}>
+                      <Typography variant="h6" gutterBottom>Daily Activity</Typography>
+                      <ResponsiveContainer width="100%" height={300}>
+                        <ComposedChart data={filteredData}>
+                          <CartesianGrid strokeDasharray="3 3" />
+                          <XAxis dataKey="date" />
+                          <YAxis yAxisId="left" />
+                          <YAxis yAxisId="right" orientation="right" />
+                          <Tooltip />
+                          <Legend />
+                          <Bar dataKey="steps" name="Steps" fill="#3498db" yAxisId="left" />
+                          <Line type="monotone" dataKey="active_calories" name="Active Calories" stroke="#e74c3c" yAxisId="right" />
+                        </ComposedChart>
+                      </ResponsiveContainer>
+                    </Card>
+                  </Grid>
+
+                  {/* Respiration Metrics */}
+                  <Grid item xs={12} md={6}>
+                    <Card sx={{ p: 2, height: '100%' }}>
+                      <Typography variant="h6" gutterBottom>Respiration Range</Typography>
+                      <ResponsiveContainer width="100%" height={300}>
+                        <AreaChart data={filteredData}>
+                          <CartesianGrid strokeDasharray="3 3" />
+                          <XAxis dataKey="date" />
+                          <YAxis />
+                          <Tooltip />
+                          <Legend />
+                          <Area 
+                            type="monotone" 
+                            dataKey="max_respiration" 
+                            name="Max Resp" 
+                            stroke="#e74c3c" 
+                            fill="#e74c3c" 
+                            fillOpacity={0.2} 
+                          />
+                          <Area 
+                            type="monotone" 
+                            dataKey="average_respiration" 
+                            name="Avg Resp" 
+                            stroke="#2ecc71" 
+                            fill="#2ecc71" 
+                            fillOpacity={0.2} 
+                          />
+                          <Area 
+                            type="monotone" 
+                            dataKey="lowest_respiration" 
+                            name="Min Resp" 
+                            stroke="#3498db" 
+                            fill="#3498db" 
+                            fillOpacity={0.2} 
+                          />
+                        </AreaChart>
+                      </ResponsiveContainer>
+                    </Card>
+                  </Grid>
+
+                  {/* Calorie Breakdown */}
+                  <Grid item xs={12}>
+                    <Card sx={{ p: 2 }}>
+                      <Typography variant="h6" gutterBottom>Daily Calorie Breakdown</Typography>
+                      <ResponsiveContainer width="100%" height={300}>
+                        <BarChart data={filteredData}>
+                          <CartesianGrid strokeDasharray="3 3" />
+                          <XAxis dataKey="date" />
+                          <YAxis />
+                          <Tooltip />
+                          <Legend />
+                          <Bar dataKey="total_calories" name="Total Calories" stackId="calories" fill="#3498db" />
+                          <Bar dataKey="active_calories" name="Active Calories" stackId="calories" fill="#2ecc71" />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </Card>
+                  </Grid>
+                </>
+              )}
             </Grid>
           </Box>
         )}
@@ -1117,8 +1280,17 @@ const BiometricsDashboard = ({ username }) => {
 
         <HeartRateMetrics 
           resting={filteredData.length > 0 ? filteredData[filteredData.length - 1].resting_heart_rate || 0 : 0}
-          average={filteredData.length > 0 ? filteredData[filteredData.length - 1].last_seven_days_avg_resting_heart_rate || 0 : 0}
-          max={filteredData.length > 0 ? filteredData[filteredData.length - 1].max_heart_rate || 0 : 0}
+          average={filteredData.length > 0 ? 
+            (selectedDataSource === 'whoop' ? 
+              filteredData[filteredData.length - 1].recovery_score || 0 :
+              filteredData[filteredData.length - 1].last_seven_days_avg_resting_heart_rate || 0) 
+            : 0}
+          max={filteredData.length > 0 ? 
+            (selectedDataSource === 'whoop' ? 
+              filteredData[filteredData.length - 1].strain || 0 :
+              filteredData[filteredData.length - 1].max_heart_rate || 0) 
+            : 0}
+          isWhoop={selectedDataSource === 'whoop'}
         />
       </Box>
     </Box>

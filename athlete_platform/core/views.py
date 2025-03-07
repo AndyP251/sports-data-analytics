@@ -327,47 +327,50 @@ def get_garmin_profiles(request):
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def get_raw_biometric_data(request):
-    """Get raw biometric data from S3"""
+    """Get raw biometric data from S3 for all active data sources"""
     try:
-        active_source = ""
         athlete = request.user.athlete
         logger.info(f"Fetching raw biometric data for athlete {athlete.id}")
         
-        # Get the active source (should only be one)
+        # Get all active sources
         active_sources = request.user.active_data_sources
+        
         if not active_sources:
-            logger.warning(f"No active source found for athlete {athlete.id}")
-            # default to garmin TODO: fix this
-            active_source = 'garmin'
-            # return JsonResponse({
-            #     'success': True,
-            #     'data': []
-            # })
-        if len(active_sources) > 1:
-            active_source = active_sources[0]  # Get the first (and only) source
-        s3_utils = S3Utils()
-        
-        # Get all data from S3 for this athlete's active source
-        base_path = f'accounts/{request.user.id}/biometric-data/{active_source}'
-        logger.info(f"Checking S3 path: {base_path}")
-        
-        try:
-            raw_data = s3_utils.get_all_json_data(base_path)
-            # logger.info(f"S3 data retrieved: {raw_data[:10] if raw_data else 'No data'}")
-        except Exception as s3_error:
-            logger.error(f"S3 operation failed: {s3_error}", exc_info=True)
-            raise
-        
-        if not raw_data:
-            logger.warning(f"No raw data found in S3 for path: {base_path}")
+            logger.warning(f"No active sources found for athlete {athlete.id}")
             return JsonResponse({
                 'success': True,
                 'data': []
             })
         
+        s3_utils = S3Utils()
+        all_raw_data = []
+        
+        # Iterate through all active sources and aggregate data
+        for source in active_sources:
+            # Use the correct base path format
+            base_path = f'accounts/{request.user.id}/biometric-data/{source}'
+            logger.info(f"Checking S3 path for source {source}: {base_path}")
+            
+            try:
+                source_data = s3_utils.get_all_json_data(base_path)
+                if source_data:
+                    # Add source information to each data point
+                    for data_point in source_data:
+                        data_point['source'] = source
+                    all_raw_data.extend(source_data)
+                    logger.info(f"Found {len(source_data)} data points for source {source}")
+                else:
+                    logger.warning(f"No raw data found in S3 for source {source} at path: {base_path}")
+            except Exception as s3_error:
+                logger.error(f"S3 operation failed for source {source}: {s3_error}", exc_info=True)
+                # Continue with other sources even if one fails
+        
+        # Sort all data by date (if available)
+        all_raw_data.sort(key=lambda x: x.get('date', ''), reverse=True)
+        
         return JsonResponse({
             'success': True,
-            'data': raw_data
+            'data': all_raw_data
         })
     except Exception as e:
         logger.error(f"Error fetching raw biometric data: {e}", exc_info=True)

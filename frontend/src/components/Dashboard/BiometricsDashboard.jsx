@@ -286,14 +286,40 @@ const BiometricsDashboard = ({ username }) => {
     setBiometricData([]);
     
     try {
-      // Request 10 days of data by default
-      const days = 10;
+      // Request 30 days of data by default
+      const days = 30;
       console.log(`Fetching biometric data for ${days} days...`);
       const response = await axios.get(`/api/biometrics/?days=${days}`);
       console.log('Raw biometrics data:', response.data);
       
       // Check if we have any data
       if (!response.data || response.data.length === 0) {
+        // If we have active sources but no data, try to sync first before showing error
+        if (activeSources && activeSources.length > 0) {
+          console.log('No data found but sources are active. Attempting to sync data...');
+          await syncData();
+          
+          // Try fetching data again after sync
+          const retryResponse = await axios.get(`/api/biometrics/?days=${days}`);
+          console.log('Raw biometrics data after sync:', retryResponse.data);
+          
+          if (!retryResponse.data || retryResponse.data.length === 0) {
+            setHasActiveSources(false);
+            setError('No data available. Please activate a data source or check your integration credentials.');
+            return;
+          }
+          
+          // Process the raw data after successful sync
+          const processedData = processData(retryResponse.data);
+          console.log(`Processed ${processedData.length} biometric data entries after sync`);
+          console.log('Processed biometrics data:', processedData);
+          
+          // Sort by date (newest first)
+          processedData.sort((a, b) => new Date(b.date) - new Date(a.date));
+          setBiometricData(processedData);
+          return;
+        }
+        
         setHasActiveSources(false);
         setError('No data available. Please activate a data source.');
         return;

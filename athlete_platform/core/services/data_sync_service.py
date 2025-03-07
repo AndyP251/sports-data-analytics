@@ -87,7 +87,15 @@ class DataSyncService:
             logger.info(f"No active sources for athlete {self.athlete.id}, skipping sync")
             return False
     
-        return self.sync_specific_sources(self.active_sources, start_date, end_date)
+        success = self.sync_specific_sources(self.active_sources, start_date, end_date)
+        
+        # Check if we have any data after sync
+        if not any(success.values()):
+            # If sync failed for all sources, try with force_refresh
+            logger.info("Still no data after sync, trying force refresh")
+            return self.sync_specific_sources(self.active_sources, start_date, end_date, force_refresh=True)
+        
+        return any(success.values())
 
     def sync_specific_sources(self, sources: List[str], start_date: Optional[datetime] = None, end_date: Optional[datetime] = None, force_refresh: bool = False) -> Dict[str, bool]:
         """Sync data from specific sources"""
@@ -156,7 +164,7 @@ class DataSyncService:
                 
         return results
 
-    def get_biometric_data(self, days: int = 7):
+    def get_biometric_data(self, days: int = 30):
         """Get biometric data for the athlete"""
         if not self.active_sources:
             logger.info(f"No active sources for athlete {self.athlete.id}")
@@ -167,7 +175,6 @@ class DataSyncService:
             start_date = end_date - timedelta(days=days)
             
             logger.info(f"Fetching biometric data for athlete {self.athlete.id} from {start_date} to {end_date}")
-            
             # Query database for all biometric data in the date range
             data = CoreBiometricData.objects.filter(
                 athlete=self.athlete,

@@ -195,7 +195,7 @@ def get_biometric_data(request):
         athlete = request.user.athlete
         
         # Get days parameter from query string, default to 30 days
-        days = int(request.GET.get('days', 10))
+        days = int(request.GET.get('days', 30))
         
         # Use DataSyncService to get data
         sync_service = DataSyncService(athlete)

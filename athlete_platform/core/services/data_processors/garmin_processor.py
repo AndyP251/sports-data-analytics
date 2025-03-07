@@ -391,7 +391,45 @@ class GarminProcessor(BaseDataProcessor):
                 return success
             else:
                 logger.warning(f"[GARMIN] No S3 data found or processed")
-                return False
+                # Try to get data from API instead of returning False
+                logger.info(f"[GARMIN] Attempting to fetch data directly from Garmin API")
+                try:
+                    api_data = self._get_from_api(start_date, end_date)
+                    if not api_data:
+                        logger.error(f"[GARMIN] Failed to get data from Garmin API")
+                        return False
+                    
+                    logger.info(f"[GARMIN] Successfully retrieved {len(api_data)} records from Garmin API")
+                    
+                    # Process and store API data
+                    success = False
+                    for raw_day in api_data:
+                        try:
+                            # Store raw data in S3 first
+                            current_date = datetime.strptime(raw_day.get('date', ''), '%Y-%m-%d').date() if isinstance(raw_day.get('date'), str) else raw_day.get('date')
+                            if current_date:
+                                self.s3_utils.store_json_data(self.base_path, 
+                                                            f"{current_date.strftime('%Y-%m-%d')}_raw.json",
+                                                            raw_day)
+                          
+                                logger.info(f"[GARMIN] Stored raw data in S3 at {self.base_path} for {current_date}")
+                            
+                            # Transform and store in DB
+                            transformed = GarminTransformer.transform(raw_day)
+                            if transformed:
+                                store_success = self.store_processed_data(transformed)
+                                if store_success:
+                                    success = True
+                                    logger.info(f"[GARMIN] Successfully stored API data for {raw_day.get('date')}")
+                            else:
+                                logger.error(f"[GARMIN] Failed to transform API data for {raw_day.get('date')}")
+                        except Exception as e:
+                            logger.error(f"[GARMIN] Error processing API data for {raw_day.get('date')}: {str(e)}", exc_info=True)
+                    
+                    return success
+                except Exception as e:
+                    logger.error(f"[GARMIN] Error in API fallback: {str(e)}", exc_info=True)
+                    return False
                 
         except Exception as e:
             logger.error(f"[GARMIN] Error in sync_data: {str(e)}", exc_info=True)

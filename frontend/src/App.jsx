@@ -30,27 +30,25 @@ function App() {
           !hasDevAccess ? <DevelopmentGate /> : <Navigate to="/login" />
         } />
 
-        {/* Protected routes that require dev access */}
-        {hasDevAccess && (
-          <>
-            <Route 
-              path="/login" 
-              element={
-                isAuthenticated ? 
-                  <Navigate to="/dashboard" /> : 
-                  <Login setIsAuthenticated={setIsAuthenticated} />
-              } 
-            />
-            <Route 
-              path="/dashboard" 
-              element={
-                isAuthenticated ? 
-                  <Dashboard /> : 
-                  <Navigate to="/login" />
-              } 
-            />
-          </>
-        )}
+        {/* Login route - always available but conditionally redirects */}
+        <Route 
+          path="/login" 
+          element={
+            isAuthenticated ? <Navigate to="/dashboard" /> : 
+            !hasDevAccess ? <Navigate to="/athlete-portal" /> :
+            <Login setIsAuthenticated={setIsAuthenticated} />
+          } 
+        />
+        
+        {/* Dashboard route - always available but conditionally redirects */}
+        <Route 
+          path="/dashboard" 
+          element={
+            !isAuthenticated ? <Navigate to="/login" /> :
+            !hasDevAccess ? <Navigate to="/athlete-portal" /> :
+            <Dashboard />
+          } 
+        />
         
         <Route path="/privacy-policy" element={<PrivacyPolicy />} />
         <Route path="/pricing" element={<PricingPage />} />

@@ -140,7 +140,7 @@ function PricingPage() {
             <div className="hardware-option">
               <div className="hardware-icon">⌚</div>
               <h3>Wearables Package</h3>
-              <p>Complete set of Whoop bands for your entire team with premium membership discount.</p>
+              <p>Complete set of Biostrap bands for your entire team with premium membership discount.</p>
             </div>
             
             <div className="hardware-option">

@@ -19,13 +19,18 @@ const HomePage = () => {
         setScrolled(false);
       }
 
-      // Trigger stats animation when scrolled to that section
-      if (window.scrollY > 300) {
+      // Trigger stats animation when scrolled to that section - reduced threshold
+      if (window.scrollY > 100) {
         setAnimateStats(true);
       }
     };
 
     window.addEventListener('scroll', handleScroll);
+    
+    // Automatically show stats after 2 seconds even without scrolling
+    const statsTimer = setTimeout(() => {
+      setAnimateStats(true);
+    }, 2000);
     
     // Testimonial rotation
     const testimonialInterval = setInterval(() => {
@@ -49,6 +54,7 @@ const HomePage = () => {
     // Cleanup
     return () => {
       window.removeEventListener('scroll', handleScroll);
+      clearTimeout(statsTimer);
       clearInterval(testimonialInterval);
       clearInterval(insightInterval);
       clearInterval(countInterval);
@@ -62,6 +68,7 @@ const HomePage = () => {
   // Stats for counter animation
   const stats = [
     { label: 'Athletes', value: 5000, suffix: '+' },
+    { label: 'Teams', value: 50, suffix: '+' },
     { label: 'Data Points', value: 1000000, suffix: '+' },
     { label: 'Sports', value: 25, suffix: '' }
   ];
@@ -87,6 +94,25 @@ const HomePage = () => {
       name: 'Apple HealthKit', 
       logo: '❤️', 
       description: 'Health metrics integration'
+    }
+  ];
+  
+  // Partner universities
+  const universities = [
+    {
+      name: 'University of Virginia',
+      logo: '🔶',
+      description: 'Full athletic department integration across 25 varsity sports'
+    },
+    {
+      name: 'Stanford University',
+      logo: '🌲',
+      description: 'Performance tracking for Olympic development programs'
+    },
+    {
+      name: 'University of Michigan',
+      logo: '〽️',
+      description: 'Swimming and track & field recovery optimization'
     }
   ];
   
@@ -281,6 +307,19 @@ const HomePage = () => {
                 <div className="integration-logo">{integration.logo}</div>
                 <h3>{integration.name}</h3>
                 <p>{integration.description}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+        
+        <div className="section universities-section">
+          <h2>University Partners</h2>
+          <div className="integrations-container">
+            {universities.map((university, index) => (
+              <div className="integration-card" key={index}>
+                <div className="integration-logo">{university.logo}</div>
+                <h3>{university.name}</h3>
+                <p>{university.description}</p>
               </div>
             ))}
           </div>

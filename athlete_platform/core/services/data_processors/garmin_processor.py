@@ -357,6 +357,11 @@ class GarminProcessor(BaseDataProcessor):
                 db_dates = {item['date'] for item in db_data}
                 missing_dates = [d for d in date_range if d not in db_dates]
                 logger.info(f"[GARMIN] Found {len(db_data)} records in DB. Need to process {len(missing_dates)} missing dates.")
+                
+                # Return success immediately if all dates are already in the database
+                if not missing_dates:
+                    logger.info(f"[GARMIN] All requested data exists in database. No need to fetch from S3 or API.")
+                    return True
             else:
                 # Process all dates if force_refresh or no DB data
                 missing_dates = date_range

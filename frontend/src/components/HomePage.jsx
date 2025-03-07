@@ -113,7 +113,7 @@ const HomePage = () => {
     },
     {
       quote: "The ability to connect all my training devices and see patterns across different metrics helped me identify what was limiting my performance. Now I'm playing at my best.",
-      athlete: "Kate Galacia",
+      athlete: "Kate Galica",
       sport: "Women's Lacrosse, UVA"
     },
     {
@@ -320,6 +320,7 @@ const HomePage = () => {
             <a onClick={navigateToAthletePortal} className="footer-cta">Athlete Portal</a>
           </div>
           <p className="copyright">© 2025 Pulse Project LLC • Developed by Andrew Prince</p>
+          <p className="copyright">Many details on this homepage are not currently true and are used for demonstration purposes only.</p>
         </div>
       </footer>
     </div>

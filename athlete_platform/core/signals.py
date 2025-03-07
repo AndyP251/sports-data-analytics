@@ -1,3 +1,10 @@
+"""
+Developed by Andrew William Prince
+Last Edit: January 26th, 2025
+
+Signal handlers for lifecycle events in the athlete platform, managing user
+creation, data synchronization triggers, and model operations.
+"""
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 from django.conf import settings

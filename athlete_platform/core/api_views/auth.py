@@ -1,3 +1,10 @@
+"""
+Developed by Andrew William Prince
+Last Edit: March 7th, 2025
+
+Authentication API endpoints handling user login, registration, session management,
+and authentication verification for the athlete platform.
+"""
 from django.http import JsonResponse
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.contrib.auth import authenticate, login, logout

@@ -1,3 +1,10 @@
+"""
+Developed by Andrew William Prince
+Last Edit: March 7th, 2025
+
+OAuth token storage model with encryption capabilities for securely managing
+third-party API credentials for athlete data sources.
+"""
 from django.db import models
 from django.conf import settings
 from django.utils.crypto import get_random_string

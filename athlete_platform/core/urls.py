@@ -1,3 +1,10 @@
+"""
+Developed by Andrew William Prince
+Last Edit: March 6th, 2025
+
+URL routing configuration for the core application, defining API endpoints
+and view mappings for the athlete platform.
+"""
 from django.urls import path
 from .api_views.auth import (
     check_auth, login_view, register_view, 

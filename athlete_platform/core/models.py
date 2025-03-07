@@ -1,3 +1,10 @@
+"""
+Developed by Andrew William Prince
+Last Edit: March 6th, 2025
+
+Core data models for the athlete platform, defining database structure for users,
+athletes, teams, workout data, and biometric measurements.
+"""
 from django.contrib.auth.models import AbstractUser
 from django.db import models
 from django.core.validators import MinValueValidator, MaxValueValidator

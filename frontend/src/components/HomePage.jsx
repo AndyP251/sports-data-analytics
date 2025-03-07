@@ -227,7 +227,8 @@ const HomePage = () => {
               <p>
                 Current platforms simply visualize your data. We go further by 
                 <span className="highlight"> contextualizing and interpreting </span> 
-                your performance metrics.
+                your performance metrics. Our <span className="highlight">Coach Portal</span> allows staff to monitor 
+                entire teams from one cohesive interface, enabling data-driven decisions at both individual and team levels.
               </p>
               <ul className="goals-list">
                 <li>
@@ -245,6 +246,14 @@ const HomePage = () => {
                 <li>
                   <span className="icon">⏰</span>
                   <span>Optimize recovery and training schedules</span>
+                </li>
+                <li>
+                  <span className="icon">👥</span>
+                  <span>Enable coaches to track team-wide metrics and individual athlete progress</span>
+                </li>
+                <li>
+                  <span className="icon">🔔</span>
+                  <span>Alert coaching staff to potential injury risks and recovery needs</span>
                 </li>
               </ul>
             </div>

@@ -65,6 +65,10 @@ const HomePage = () => {
     navigate('/athlete-portal');
   };
 
+  const navigateToPrivacyPolicy = () => {
+    navigate('/privacy-policy');
+  };
+
   // Stats for counter animation
   const stats = [
     { label: 'Athletes', value: 5000, suffix: '+' },
@@ -366,6 +370,7 @@ const HomePage = () => {
             <a href="#integrations">Integrations</a>
             <a href="#testimonials">Testimonials</a>
             <a onClick={navigateToAthletePortal} className="footer-cta">Athlete Portal</a>
+            <a onClick={navigateToPrivacyPolicy}>Privacy Policy</a>
           </div>
           <p className="copyright">© 2025 Pulse Project LLC • Developed by Andrew Prince</p>
           <p className="copyright">Many details on this homepage are not currently true and are used for demonstration purposes only.</p>

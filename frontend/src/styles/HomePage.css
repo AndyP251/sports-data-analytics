@@ -88,12 +88,12 @@ html, body {
   align-items: center;
 }
 
-.athlete-portal-button {
+.pricing-button {
   background: transparent;
   color: white;
-  border: 2px solid var(--blue-accent);
+  border: 2px solid white;
   border-radius: 25px;
-  padding: 0.6rem 1.5rem;
+  padding: 0.75rem 1.5rem;
   font-size: 1rem;
   font-weight: 600;
   cursor: pointer;
@@ -103,6 +103,42 @@ html, body {
   display: flex;
   align-items: center;
   gap: 0.5rem;
+  height: 42px;
+  box-sizing: border-box;
+}
+
+.button-arrow-hidden {
+  opacity: 0;
+  width: 12px; /* Approximate width of the arrow character */
+}
+
+.pricing-button:hover {
+  background: rgba(255, 255, 255, 0.1);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(255, 255, 255, 0.15);
+}
+
+.pricing-button:active {
+  transform: translateY(0);
+}
+
+.athlete-portal-button {
+  background: transparent;
+  color: white;
+  border: 2px solid var(--blue-accent);
+  border-radius: 25px;
+  padding: 0.75rem 1.5rem;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  height: 42px;
+  box-sizing: border-box;
 }
 
 .button-arrow {

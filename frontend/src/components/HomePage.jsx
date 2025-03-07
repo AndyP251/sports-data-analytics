@@ -69,6 +69,10 @@ const HomePage = () => {
     navigate('/privacy-policy');
   };
 
+  const navigateToPricing = () => {
+    navigate('/pricing');
+  };
+
   // Stats for counter animation
   const stats = [
     { label: 'Athletes', value: 5000, suffix: '+' },
@@ -158,6 +162,13 @@ const HomePage = () => {
       <div className={`header ${scrolled ? 'scrolled' : ''}`}>
         <div className="logo">Pulse Project</div>
         <div className="nav-buttons">
+          <button 
+            className="pricing-button" 
+            onClick={navigateToPricing}
+          >
+            Pricing
+            <span className="button-arrow-hidden"></span>
+          </button>
           <button 
             className="athlete-portal-button" 
             onClick={navigateToAthletePortal}
@@ -369,6 +380,7 @@ const HomePage = () => {
             <a href="#features">Features</a>
             <a href="#integrations">Integrations</a>
             <a href="#testimonials">Testimonials</a>
+            <a onClick={navigateToPricing}>Pricing</a>
             <a onClick={navigateToAthletePortal} className="footer-cta">Athlete Portal</a>
             <a onClick={navigateToPrivacyPolicy}>Privacy Policy</a>
           </div>

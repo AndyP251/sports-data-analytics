@@ -1,3 +1,10 @@
+"""
+Developed by Andrew William Prince
+Last Edit: March 7th, 2025
+
+OAuth integration for third-party fitness services, implementing authorization flows,
+token management, and API connectivity for Whoop and other data sources.
+"""
 from typing import Any
 from django.views import View
 from django.shortcuts import redirect

@@ -388,6 +388,7 @@ const BiometricsDashboard = ({ username }) => {
       return;
     }
     setLoading(true);
+    clearSyncMessages(); // Clear existing messages before sync
     try {
       const response = await fetch('/api/biometrics/sync/', {
         method: 'POST',
@@ -419,10 +420,12 @@ const BiometricsDashboard = ({ username }) => {
           messages.push({ text: `Failed to Sync: ${capitalizedSource}`, type: 'error' });
         }
       }
+      // It's fine to set messages directly here as they're already in the correct format
       setSyncMessage(messages);
       fetchData();
     } catch (err) {
       setError(`Error syncing data: ${err.message}`);
+      addSyncMessage(`Error syncing data: ${err.message}`, 'error'); // Also show as a message
     } finally {
       setLoading(false);
     }
@@ -600,16 +603,13 @@ const BiometricsDashboard = ({ username }) => {
   const handleLogout = async () => {
     try {
       // Get CSRF token from cookie
-      const csrfToken = document.cookie
-        .split('; ')
-        .find(row => row.startsWith('csrftoken='))
-        ?.split('=')[1];
-
+      const csrfToken = getCookie('csrftoken');
+      
       if (!csrfToken) {
         console.error('No CSRF token found');
         throw new Error('No CSRF token available');
       }
-
+      
       const response = await fetch('/api/logout/', {
         method: 'POST',
         credentials: 'include',
@@ -628,11 +628,16 @@ const BiometricsDashboard = ({ username }) => {
         window.location.href = '/';  // Root URL is the homepage
       } else {
         console.error('Logout failed:', response.status, response.statusText);
-        throw new Error('Logout failed');
+        const errorMsg = 'Logout failed';
+        setError(errorMsg);
+        addSyncMessage(errorMsg, 'error');
+        throw new Error(errorMsg);
       }
     } catch (error) {
       console.error('Logout error:', error);
-      setError(`Failed to logout: ${error.message}`);
+      const errorMsg = `Failed to logout: ${error.message}`;
+      setError(errorMsg);
+      addSyncMessage(errorMsg, 'error');
     }
     closeMenu();
   };
@@ -640,7 +645,7 @@ const BiometricsDashboard = ({ username }) => {
   const handleSourceActivation = async (source, profile = null) => {
     setLoading(true);
     setError(null);
-    setSyncMessage(null);
+    clearSyncMessages();
     
     try {
       const response = await fetch('/api/biometrics/activate-source/', {
@@ -662,28 +667,20 @@ const BiometricsDashboard = ({ username }) => {
       
       if (data.success) {
         setActiveSource(source);
-        setSyncMessage(`${source} source activated successfully!`);
+        addSyncMessage(`${source} source activated successfully!`);
         await fetchActiveSources();
         await syncData();
-
-          // Fetch raw data after successful activation
-        const rawResponse = await fetch('/api/biometrics/raw/', {
-          credentials: 'include'
-        });
-        const rawData = await rawResponse.json();
         
-        if (rawData.success) {
-          setRawData(rawData.data);
-          console.log('Raw data fetched successfully');
-        } else {
-          console.error('Failed to fetch raw data:', rawData.error);
-        }
-      
+        // Note: Raw data fetching is now handled by a separate button
       } else {
-        setError(`Source activation failed: ${data.message || 'Unknown error'}`);
+        const errorMsg = `Source activation failed: ${data.message || 'Unknown error'}`;
+        setError(errorMsg);
+        addSyncMessage(errorMsg, 'error');
       }
     } catch (err) {
-      setError(`Error activating source: ${err.message}`);
+      const errorMsg = `Error activating source: ${err.message}`;
+      setError(errorMsg);
+      addSyncMessage(errorMsg, 'error');
       console.log('Source activation error:', err);
     } finally {
       setLoading(false);
@@ -691,6 +688,89 @@ const BiometricsDashboard = ({ username }) => {
       setShowCredentialsMenu(false);
       setSelectedSource(null);
       closeMenu();
+    }
+  };
+
+  const addSyncMessage = (message, type = 'success') => {
+    // Create a message object with type and text
+    const messageObj = { type, text: message };
+    
+    // If syncMessage is null or empty, create a new array with the new message
+    if (!syncMessage || syncMessage.length === 0) {
+      setSyncMessage([messageObj]);
+    } else if (Array.isArray(syncMessage)) {
+      // If it's already an array, add the new message
+      setSyncMessage([...syncMessage, messageObj]);
+    } else {
+      // If it's not an array (probably a string from old code), convert to array
+      setSyncMessage([messageObj]);
+    }
+  };
+
+  const clearSyncMessages = () => {
+    setSyncMessage([]);
+  };
+
+  const fetchRawData = async () => {
+    setLoading(true);
+    clearSyncMessages();
+    addSyncMessage('Fetching raw data...', 'info');
+    
+    try {
+      const response = await fetch('/api/biometrics/raw/', {
+        credentials: 'include'
+      });
+      
+      const data = await response.json();
+      
+      if (data.success) {
+        // Store the raw data in state (just for reference)
+        setRawData(data.data);
+        addSyncMessage(`Successfully fetched ${data.data.length} raw data items`);
+        console.log('Raw data fetched successfully');
+        
+        // Create a download with the full raw data
+        downloadRawData(data.data);
+      } else {
+        addSyncMessage(`Failed to fetch raw data: ${data.error || 'Unknown error'}`, 'error');
+      }
+    } catch (error) {
+      console.error('Error fetching raw data:', error);
+      addSyncMessage(`Error fetching raw data: ${error.message}`, 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const downloadRawData = (data) => {
+    try {
+      // Create a Blob with the data
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      
+      // Create a download link
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      
+      // Set filename with timestamp
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+      const filename = `raw-biometric-data-${timestamp}.json`;
+      
+      // Configure and trigger download
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      
+      // Clean up
+      setTimeout(() => {
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+      }, 100);
+      
+      addSyncMessage(`Downloaded raw data as ${filename}`);
+    } catch (error) {
+      console.error('Error creating download:', error);
+      addSyncMessage(`Error creating download: ${error.message}`, 'error');
     }
   };
 
@@ -779,6 +859,96 @@ const BiometricsDashboard = ({ username }) => {
     return () => window.removeEventListener('error', handleError);
   }, []);
 
+  // Footer section with download button
+  const renderFooter = () => {
+    // Define the download handler function directly within renderFooter
+    const handleRawDataDownload = () => {
+      if (typeof fetchRawData === 'function') {
+        fetchRawData();
+      } else {
+        console.error('fetchRawData function is not available');
+        // Fallback implementation
+        setLoading(true);
+        clearSyncMessages();
+        addSyncMessage('Fetching raw data...', 'info');
+        
+        fetch('/api/biometrics/raw/', {
+          credentials: 'include'
+        })
+        .then(response => response.json())
+        .then(data => {
+          if (data.success) {
+            setRawData(data.data);
+            addSyncMessage(`Successfully fetched ${data.data.length} raw data items`);
+            
+            // Create a download with the data
+            const blob = new Blob([JSON.stringify(data.data, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+            const filename = `raw-biometric-data-${timestamp}.json`;
+            
+            link.href = url;
+            link.download = filename;
+            document.body.appendChild(link);
+            link.click();
+            
+            setTimeout(() => {
+              document.body.removeChild(link);
+              URL.revokeObjectURL(url);
+            }, 100);
+            
+            addSyncMessage(`Downloaded raw data as ${filename}`);
+          } else {
+            addSyncMessage(`Failed to fetch raw data: ${data.error || 'Unknown error'}`, 'error');
+          }
+        })
+        .catch(error => {
+          console.error('Error fetching raw data:', error);
+          addSyncMessage(`Error fetching raw data: ${error.message}`, 'error');
+        })
+        .finally(() => {
+          setLoading(false);
+        });
+      }
+    };
+    
+    return (
+      <Box 
+        className="footer"
+        sx={{ 
+          mt: 4, 
+          pt: 2,
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center'
+        }}
+      >
+        <Button 
+          variant="outlined" 
+          color="primary"
+          size="small"
+          onClick={handleRawDataDownload}
+          sx={{ mb: 2 }}
+          disabled={loading || !activeSources || activeSources.length === 0}
+          startIcon={<BarChartIcon />}
+        >
+          Download Raw Data
+        </Button>
+        <Typography 
+          variant="caption" 
+          className="footer-text"
+          sx={{ 
+            display: 'block',
+            mb: 1
+          }}
+        >
+          Developed by Andrew Prince and Pulse Project LLC 2025
+        </Typography>
+      </Box>
+    );
+  };
+
   return (
     <Box sx={{ width: '100%' }} className={`biometrics-dashboard ${darkMode ? 'dark-mode' : ''}`}>
       <Box sx={{
@@ -854,10 +1024,22 @@ const BiometricsDashboard = ({ username }) => {
             
             <StyledMenuItem onClick={() => {
               closeMenu();
-              openDialog('Raw Data', JSON.stringify(rawData, null, 2));
+              // Use the same approach as in renderFooter
+              if (typeof fetchRawData === 'function') {
+                fetchRawData();
+              } else {
+                console.error('fetchRawData function is not available');
+                // Simplified fallback - will just trigger the download button which has its own fallback
+                const downloadButton = document.querySelector('.footer button');
+                if (downloadButton) {
+                  downloadButton.click();
+                } else {
+                  addSyncMessage('Could not initiate download. Please try the Download Raw Data button at the bottom of the page.', 'error');
+                }
+              }
             }}>
               <BarChartIcon />
-              <Typography>View Raw Data</Typography>
+              <Typography>Download Raw Data</Typography>
             </StyledMenuItem>
             
             <StyledMenuItem onClick={() => {
@@ -1743,25 +1925,8 @@ const BiometricsDashboard = ({ username }) => {
           isWhoop={selectedDataSource === 'whoop'}
         />
         
-        {/* Footer */}
-        <Box 
-          className="footer"
-          sx={{ 
-            mt: 4, 
-            pt: 2
-          }}
-        >
-          <Typography 
-            variant="caption" 
-            className="footer-text"
-            sx={{ 
-              display: 'block',
-              mb: 1
-            }}
-          >
-            Developed by Andrew Prince and Pulse Project LLC 2025
-          </Typography>
-        </Box>
+        {/* Render the footer using the function */}
+        {renderFooter()}
       </Box>
     </Box>
   );

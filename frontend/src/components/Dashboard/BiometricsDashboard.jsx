@@ -411,21 +411,49 @@ const BiometricsDashboard = ({ username }) => {
       if (data.data) {
         messages.push({ text: `General Sync Status: ${data.data}`, type: 'info' });
       }
+      
+      // Check if there's an error message in the response
+      if (data.error) {
+        messages.push({ text: `Sync Error: ${data.error}`, type: 'error' });
+      }
+      
       // Iterate over the success object to determine sync status for each source
-      for (const [source, success] of Object.entries(data.success)) {
-        const capitalizedSource = source.charAt(0).toUpperCase() + source.slice(1);
-        if (success) {
-          messages.push({ text: `Successfully Synced: ${capitalizedSource}`, type: 'success' });
-        } else {
-          messages.push({ text: `Failed to Sync: ${capitalizedSource}`, type: 'error' });
+      if (data.success) {
+        for (const [source, success] of Object.entries(data.success)) {
+          const capitalizedSource = source.charAt(0).toUpperCase() + source.slice(1);
+          if (success) {
+            messages.push({ text: `Successfully Synced: ${capitalizedSource}`, type: 'success' });
+          } else {
+            // Check if we have source-specific error information
+            const errorMsg = data.errors && data.errors[source] 
+              ? data.errors[source] 
+              : `Failed to Sync: ${capitalizedSource}`;
+              
+            // Customize message for rate limit errors
+            const isRateLimit = errorMsg.includes('Rate limit') || errorMsg.includes('429');
+            const messageType = isRateLimit ? 'warning' : 'error';
+            const displayMsg = isRateLimit 
+              ? `${capitalizedSource}: ${errorMsg}. Data in database is still available.` 
+              : `Failed to Sync: ${capitalizedSource}`;
+              
+            messages.push({ text: displayMsg, type: messageType });
+          }
         }
       }
+      
       // It's fine to set messages directly here as they're already in the correct format
       setSyncMessage(messages);
       fetchData();
     } catch (err) {
-      setError(`Error syncing data: ${err.message}`);
-      addSyncMessage(`Error syncing data: ${err.message}`, 'error'); // Also show as a message
+      const errorMsg = err.message;
+      const isRateLimit = errorMsg.includes('Rate limit') || errorMsg.includes('429');
+      const messageType = isRateLimit ? 'warning' : 'error';
+      const displayMsg = isRateLimit 
+        ? `Sync limited: ${errorMsg}. Existing data is still available.` 
+        : `Error syncing data: ${errorMsg}`;
+        
+      setError(displayMsg);
+      addSyncMessage(displayMsg, messageType);
     } finally {
       setLoading(false);
     }

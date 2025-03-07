@@ -165,18 +165,38 @@ def sync_biometric_data(request):
         # Initialize sync service and sync data
         sync_service = DataSyncService(athlete)
         success = sync_service.sync_specific_sources(active_sources)
+        
+        # Include source-specific error messages if available
+        source_errors = {}
+        for source, result in success.items():
+            if not result:
+                # Check if there's a specific error in the logger for this source
+                # This is a simplification - in reality you might want to capture errors during sync
+                if 'garmin' in source.lower() and hasattr(sync_service, 'last_garmin_error'):
+                    source_errors[source] = sync_service.last_garmin_error
+                elif 'whoop' in source.lower() and hasattr(sync_service, 'last_whoop_error'):
+                    source_errors[source] = sync_service.last_whoop_error
 
         return JsonResponse({
             'success': success,
-            'data': [] if not success else ''
+            'data': [] if not any(success.values()) else '',
+            'errors': source_errors
         })
 
     except Exception as e:
+        error_message = str(e)
+        status_code = 500
+        
+        # Customize the error message based on known error types
+        if "Rate limit exceeded" in error_message:
+            status_code = 429
+            error_message = "Rate limit exceeded. Garmin API is temporarily unavailable. Existing data is still accessible."
+            
         logger.error(f"Error in sync_biometric_data: {e}", exc_info=True)
         return JsonResponse({
             'success': False,
-            'error': str(e)
-        }, status=500)
+            'error': error_message
+        }, status=status_code)
 
 def async_safe(f):
     @wraps(f)

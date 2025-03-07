@@ -88,12 +88,12 @@ html, body {
   align-items: center;
 }
 
-.athlete-portal-button {
+.pricing-button {
   background: transparent;
   color: white;
-  border: 2px solid var(--blue-accent);
+  border: 2px solid white;
   border-radius: 25px;
-  padding: 0.6rem 1.5rem;
+  padding: 0.75rem 1.5rem;
   font-size: 1rem;
   font-weight: 600;
   cursor: pointer;
@@ -103,6 +103,42 @@ html, body {
   display: flex;
   align-items: center;
   gap: 0.5rem;
+  height: 42px;
+  box-sizing: border-box;
+}
+
+.button-arrow-hidden {
+  opacity: 0;
+  width: 12px; /* Approximate width of the arrow character */
+}
+
+.pricing-button:hover {
+  background: rgba(255, 255, 255, 0.1);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(255, 255, 255, 0.15);
+}
+
+.pricing-button:active {
+  transform: translateY(0);
+}
+
+.athlete-portal-button {
+  background: transparent;
+  color: white;
+  border: 2px solid var(--blue-accent);
+  border-radius: 25px;
+  padding: 0.75rem 1.5rem;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  height: 42px;
+  box-sizing: border-box;
 }
 
 .button-arrow {
@@ -802,6 +838,15 @@ footer {
     padding: 1rem;
   }
   
+  .nav-buttons {
+    gap: 0.75rem;
+  }
+  
+  .pricing-button, .athlete-portal-button {
+    font-size: 0.9rem;
+    padding: 0.6rem 1.2rem;
+  }
+  
   .content h1 {
     font-size: 2.2rem;
   }
@@ -835,14 +880,182 @@ footer {
   
   .integration-card {
     width: 100%;
-    max-width: 280px;
+    max-width: 350px;
   }
   
   .footer-links {
     gap: 1rem;
+    flex-wrap: wrap;
+  }
+  
+  .insight-text {
+    font-size: 0.95rem;
+  }
+  
+  .hero-cta-button {
+    padding: 0.8rem 1.8rem;
+  }
+  
+  .stats-container {
+    gap: 0.5rem;
   }
 
+  .stat-item {
+    min-width: 130px;
+  }
+}
+
+/* Phone-specific styles */
+@media (max-width: 480px) {
+  .header {
+    flex-direction: column;
+    gap: 1rem;
+    padding: 1rem 0.5rem;
+  }
+  
+  .nav-buttons {
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+  }
+  
+  .pricing-button, .athlete-portal-button {
+    width: 48%;
+    justify-content: center;
+    padding: 0.6rem 0.5rem;
+    font-size: 0.85rem;
+  }
+  
+  .athlete-portal-button .button-arrow, 
+  .pricing-button .button-arrow-hidden {
+    display: none;
+  }
+  
+  .content {
+    padding: 1rem;
+  }
+  
+  .content h1 {
+    font-size: 1.8rem;
+  }
+  
+  .hero-section {
+    margin-top: 1rem;
+    margin-bottom: 2rem;
+  }
+  
+  .hero-cta-button {
+    width: 100%;
+    justify-content: center;
+  }
+  
+  .stats-container {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    width: 100%;
+  }
+  
+  .stat-item {
+    min-width: 0;
+    width: 100%;
+  }
+  
+  .stat-value {
+    font-size: 2.2rem;
+  }
+  
+  .section {
+    margin: 2rem auto;
+    padding: 1rem;
+  }
+  
+  .section h2 {
+    font-size: 1.8rem;
+  }
+  
+  .goals-list li {
+    font-size: 0.95rem;
+  }
+  
+  .feature-card, .integration-card {
+    padding: 1.5rem;
+  }
+  
+  .hardware-options {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+  
+  .testimonial-quote {
+    font-size: 1rem;
+  }
+  
+  .footer-links {
+    flex-direction: column;
+    align-items: center;
+    gap: 1.5rem;
+  }
+  
+  .footer-links a {
+    padding: 0.5rem;
+  }
+  
+  .footer-content {
+    gap: 1.5rem;
+  }
+  
+  .dynamic-insights-section {
+    padding: 1rem;
+  }
+  
+  .insights-carousel {
+    max-height: 110px;
+  }
+  
+  .insight-card {
+    padding: 1rem;
+  }
+  
+  /* Integration and university sections */
+  .integrations-section,
+  .universities-section {
+    padding: 1rem 0;
+  }
+  
+  .integrations-container {
+    gap: 1rem;
+  }
+  
+  .integration-card {
+    width: 100%;
+    max-width: none;
+    margin: 0 0.5rem;
+  }
+  
+  .integration-logo {
+    font-size: 2rem;
+    height: 40px;
+    width: 40px;
+  }
+  
+  .goals-graphic {
+    display: none; /* Hide the data flow graphic on very small screens */
+  }
+  
+  .goals-text {
+    width: 100%;
+  }
+  
+  /* For smaller insights texts */
   .insight-text {
-    font-size: 1.2rem;
+    font-size: 0.9rem;
+    padding: 0 0.5rem;
+  }
+  
+  /* Smaller copyright text */
+  .copyright {
+    font-size: 0.8rem;
+    padding: 0 1rem;
   }
 } 

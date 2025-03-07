@@ -6,6 +6,7 @@ import Dashboard from './components/Dashboard/Dashboard'
 import RobotsText from './components/RobotsText'
 import PrivacyPolicy from './components/PrivacyPolicy'
 import HomePage from './components/HomePage'
+import PricingPage from './components/PricingPage'
 import './styles/Auth.css'
 import './styles/Dashboard.css'
 
@@ -52,6 +53,7 @@ function App() {
         )}
         
         <Route path="/privacy-policy" element={<PrivacyPolicy />} />
+        <Route path="/pricing" element={<PricingPage />} />
       </Routes>
     </Router>
   )

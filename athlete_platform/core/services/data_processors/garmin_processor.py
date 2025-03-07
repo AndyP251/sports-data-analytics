@@ -319,7 +319,13 @@ class GarminProcessor(BaseDataProcessor):
             return final_data if final_data else None
 
         except Exception as e:
-            logger.error(f"[GARMIN] Error getting data from API: {e}", exc_info=True)
+            error_message = str(e)
+            if "Rate limit exceeded" in error_message:
+                logger.error(f"[GARMIN] Rate limit error from Garmin API: {e}")
+                # Propagate the rate limit error
+                raise Exception("Rate limit exceeded. Please try again in a few minutes.")
+            else:
+                logger.error(f"[GARMIN] Error getting data from API: {e}", exc_info=True)
             return None
     
     def sync_data(self, start_date: Optional[date] = None, end_date: Optional[date] = None, force_refresh: bool = False) -> bool:

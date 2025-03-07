@@ -20,7 +20,12 @@ class GarminDataCollector:
             self.garmin_client.login()
             return True
         except Exception as e:
-            logger.error(f"Garmin authentication failed: {e}")
+            error_message = str(e)
+            if "429" in error_message and "Too Many Requests" in error_message:
+                logger.error(f"Garmin authentication failed due to rate limiting: {e}")
+                raise Exception("Rate limit exceeded. Please try again later.")
+            else:
+                logger.error(f"Garmin authentication failed: {e}")
             return False
 
     def collect_data(self, start_date: date, end_date: date) -> Optional[List[Dict[str, Any]]]:

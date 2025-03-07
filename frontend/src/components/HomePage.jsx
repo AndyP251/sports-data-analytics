@@ -19,13 +19,18 @@ const HomePage = () => {
         setScrolled(false);
       }
 
-      // Trigger stats animation when scrolled to that section
-      if (window.scrollY > 300) {
+      // Trigger stats animation when scrolled to that section - reduced threshold
+      if (window.scrollY > 100) {
         setAnimateStats(true);
       }
     };
 
     window.addEventListener('scroll', handleScroll);
+    
+    // Automatically show stats after 2 seconds even without scrolling
+    const statsTimer = setTimeout(() => {
+      setAnimateStats(true);
+    }, 2000);
     
     // Testimonial rotation
     const testimonialInterval = setInterval(() => {
@@ -49,6 +54,7 @@ const HomePage = () => {
     // Cleanup
     return () => {
       window.removeEventListener('scroll', handleScroll);
+      clearTimeout(statsTimer);
       clearInterval(testimonialInterval);
       clearInterval(insightInterval);
       clearInterval(countInterval);
@@ -62,6 +68,7 @@ const HomePage = () => {
   // Stats for counter animation
   const stats = [
     { label: 'Athletes', value: 5000, suffix: '+' },
+    { label: 'Teams', value: 50, suffix: '+' },
     { label: 'Data Points', value: 1000000, suffix: '+' },
     { label: 'Sports', value: 25, suffix: '' }
   ];
@@ -90,6 +97,25 @@ const HomePage = () => {
     }
   ];
   
+  // Partner universities
+  const universities = [
+    {
+      name: 'University of Virginia',
+      logo: '🔶',
+      description: 'Full athletic department integration across 25 varsity sports'
+    },
+    {
+      name: 'Stanford University',
+      logo: '🌲',
+      description: 'Performance tracking for Olympic development programs'
+    },
+    {
+      name: 'University of Michigan',
+      logo: '〽️',
+      description: 'Swimming and track & field recovery optimization'
+    }
+  ];
+  
   // Live insights for dynamic component
   const insights = [
     "Sleep quality impacts next-day performance by up to 37%",
@@ -113,7 +139,7 @@ const HomePage = () => {
     },
     {
       quote: "The ability to connect all my training devices and see patterns across different metrics helped me identify what was limiting my performance. Now I'm playing at my best.",
-      athlete: "Kate Galacia",
+      athlete: "Kate Galica",
       sport: "Women's Lacrosse, UVA"
     },
     {
@@ -201,7 +227,8 @@ const HomePage = () => {
               <p>
                 Current platforms simply visualize your data. We go further by 
                 <span className="highlight"> contextualizing and interpreting </span> 
-                your performance metrics.
+                your performance metrics. Our <span className="highlight">Coach Portal</span> allows staff to monitor 
+                entire teams from one cohesive interface, enabling data-driven decisions at both individual and team levels.
               </p>
               <ul className="goals-list">
                 <li>
@@ -219,6 +246,14 @@ const HomePage = () => {
                 <li>
                   <span className="icon">⏰</span>
                   <span>Optimize recovery and training schedules</span>
+                </li>
+                <li>
+                  <span className="icon">👥</span>
+                  <span>Enable coaches to track team-wide metrics and individual athlete progress</span>
+                </li>
+                <li>
+                  <span className="icon">🔔</span>
+                  <span>Alert coaching staff to potential injury risks and recovery needs</span>
                 </li>
               </ul>
             </div>
@@ -286,6 +321,19 @@ const HomePage = () => {
           </div>
         </div>
         
+        <div className="section universities-section">
+          <h2>University Partners</h2>
+          <div className="integrations-container">
+            {universities.map((university, index) => (
+              <div className="integration-card" key={index}>
+                <div className="integration-logo">{university.logo}</div>
+                <h3>{university.name}</h3>
+                <p>{university.description}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+        
         <div className="section testimonials-section">
           <h2>Athlete Testimonials</h2>
           <div className="testimonials-container">
@@ -320,6 +368,7 @@ const HomePage = () => {
             <a onClick={navigateToAthletePortal} className="footer-cta">Athlete Portal</a>
           </div>
           <p className="copyright">© 2025 Pulse Project LLC • Developed by Andrew Prince</p>
+          <p className="copyright">Many details on this homepage are not currently true and are used for demonstration purposes only.</p>
         </div>
       </footer>
     </div>

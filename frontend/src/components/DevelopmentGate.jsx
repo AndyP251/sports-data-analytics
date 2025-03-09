@@ -107,7 +107,7 @@ const DevelopmentGate = () => {
           marginBottom: '1.5rem',
           color: '#333'
         }}>
-          Enter Development Credentials
+          Enter Team Credentials
         </h2>
         {error && (
           <div style={{

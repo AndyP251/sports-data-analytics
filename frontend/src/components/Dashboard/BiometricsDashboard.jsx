@@ -4,13 +4,15 @@ import {
   LineChart, Line, AreaChart, Area, BarChart, Bar,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend,
   ResponsiveContainer, RadialBarChart, RadialBar, ComposedChart,
-  Cell // Add Cell import here
+  Cell, PieChart, Pie, Scatter,
+  ReferenceLine, RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis
 } from 'recharts';
 import {
   Card, Grid, Typography, Box, Button,
   CircularProgress, Alert, useTheme,
   AppBar, Toolbar, IconButton, Menu, MenuItem, Dialog, DialogTitle, DialogContent,
-  Tabs, Tab, styled, Select, FormControl, Switch, Tooltip as MuiTooltip
+  Tabs, Tab, styled, Select, FormControl, Switch, Tooltip as MuiTooltip,
+  ListItemIcon, ListItemText, Chip
 } from '@mui/material';
 import { format } from 'date-fns';
 import SyncIcon from '@mui/icons-material/Sync';
@@ -29,6 +31,11 @@ import DirectionsRunIcon from '@mui/icons-material/DirectionsRun';
 import FavoriteIcon from '@mui/icons-material/Favorite';
 import RestoreIcon from '@mui/icons-material/Restore';
 import MonitorHeartIcon from '@mui/icons-material/MonitorHeart';
+import MoreVertIcon from '@mui/icons-material/MoreVert';
+import AddCircleOutlineIcon from '@mui/icons-material/AddCircleOutline';
+import EditIcon from '@mui/icons-material/Edit';
+import DeleteIcon from '@mui/icons-material/Delete';
+import CheckIcon from '@mui/icons-material/Check';
 import './BiometricsDashboard.css';
 
 // Modern, professional color palette
@@ -215,6 +222,12 @@ const BiometricsDashboard = ({ username }) => {
     const savedDarkMode = localStorage.getItem('biometricsDarkMode');
     return savedDarkMode === 'true';
   });
+  // Add new state variables for visualization modules
+  const [visualizationModules, setVisualizationModules] = useState([]);
+  const [editModeEnabled, setEditModeEnabled] = useState(false);
+  const [moduleMenuAnchor, setModuleMenuAnchor] = useState(null);
+  const [activeModuleId, setActiveModuleId] = useState(null);
+  const [showAddModuleDialog, setShowAddModuleDialog] = useState(false);
 
   // Update localStorage when dark mode changes
   useEffect(() => {
@@ -1118,6 +1131,871 @@ const BiometricsDashboard = ({ username }) => {
     }
   };
 
+  // Function to register available visualization modules
+  const getAvailableModules = () => {
+    return [
+      {
+        id: 'rhr-recovery',
+        title: 'Resting Heart Rate & Recovery Score',
+        description: 'Track your resting heart rate trend and daily recovery score',
+        source: 'whoop',
+        requiredFields: ['resting_heart_rate', 'recovery_score'],
+        height: 300,
+        render: (data) => (
+          <ComposedChart data={data}>
+            <CartesianGrid strokeDasharray="3 3" />
+            <XAxis dataKey="date" />
+            <YAxis yAxisId="left" />
+            <YAxis yAxisId="right" orientation="right" domain={[0, 100]} />
+            <Tooltip />
+            <Legend />
+            <Bar dataKey="recovery_score" name="Recovery Score" fill="#27AE60" yAxisId="right" />
+            <Line type="monotone" dataKey="resting_heart_rate" name="Resting HR" stroke="#e74c3c" yAxisId="left" strokeWidth={2} />
+          </ComposedChart>
+        )
+      },
+      {
+        id: 'hrv-strain',
+        title: 'HRV & Strain',
+        description: 'Heart rate variability and daily strain metric',
+        source: 'whoop',
+        requiredFields: ['hrv_ms', 'strain'],
+        height: 300,
+        render: (data) => (
+          <ComposedChart data={data}>
+            <CartesianGrid strokeDasharray="3 3" />
+            <XAxis dataKey="date" />
+            <YAxis yAxisId="left" />
+            <YAxis yAxisId="right" orientation="right" />
+            <Tooltip />
+            <Legend />
+            <Bar dataKey="hrv_ms" name="HRV (ms)" fill="#3498DB" yAxisId="left" />
+            <Line type="monotone" dataKey="strain" name="Strain" stroke="#E74C3C" yAxisId="right" />
+          </ComposedChart>
+        )
+      },
+      {
+        id: 'sleep-metrics',
+        title: 'Sleep Quality Metrics',
+        description: 'Sleep efficiency, consistency and performance tracking',
+        source: 'whoop',
+        requiredFields: ['sleep_efficiency', 'sleep_consistency', 'sleep_performance'],
+        height: 300,
+        render: (data) => (
+          <ComposedChart data={data}>
+            <CartesianGrid strokeDasharray="3 3" />
+            <XAxis dataKey="date" />
+            <YAxis domain={[0, 100]} />
+            <Tooltip />
+            <Legend />
+            <Bar dataKey="sleep_efficiency" name="Sleep Efficiency" fill="#3498DB" />
+            <Bar dataKey="sleep_consistency" name="Sleep Consistency" fill="#F1C40F" />
+            <Bar dataKey="sleep_performance" name="Sleep Performance" fill="#27AE60" />
+          </ComposedChart>
+        )
+      },
+      {
+        id: 'heart-rate-trends',
+        title: 'Heart Rate Trends',
+        description: 'Max, resting, and minimum heart rate over time',
+        source: 'garmin',
+        requiredFields: ['max_heart_rate', 'resting_heart_rate', 'min_heart_rate'],
+        height: 300,
+        render: (data) => (
+          <LineChart data={data}>
+            <CartesianGrid strokeDasharray="3 3" />
+            <XAxis dataKey="date" />
+            <YAxis />
+            <Tooltip />
+            <Legend />
+            <Line type="monotone" dataKey="max_heart_rate" name="Max HR" stroke="#e74c3c" />
+            <Line type="monotone" dataKey="resting_heart_rate" name="Resting HR" stroke="#2ecc71" />
+            <Line type="monotone" dataKey="min_heart_rate" name="Min HR" stroke="#3498db" />
+          </LineChart>
+        )
+      },
+      {
+        id: 'sleep-duration',
+        title: 'Sleep Duration',
+        description: 'Total sleep hours per night',
+        source: 'garmin',
+        requiredFields: ['sleep_hours'],
+        height: 300,
+        render: (data) => (
+          <BarChart data={data}>
+            <CartesianGrid strokeDasharray="3 3" />
+            <XAxis dataKey="date" />
+            <YAxis domain={[0, 'dataMax + 2']} />
+            <Tooltip />
+            <Bar dataKey="sleep_hours" name="Sleep Hours" fill="#3498db" />
+          </BarChart>
+        )
+      },
+      {
+        id: 'steps-distance',
+        title: 'Steps & Distance',
+        description: 'Daily steps and distance traveled',
+        source: 'garmin',
+        requiredFields: ['steps', 'distance_meters'],
+        height: 300,
+        render: (data) => (
+          <ComposedChart data={data}>
+            <CartesianGrid strokeDasharray="3 3" />
+            <XAxis dataKey="date" />
+            <YAxis yAxisId="left" />
+            <YAxis yAxisId="right" orientation="right" />
+            <Tooltip />
+            <Legend />
+            <Bar dataKey="steps" name="Steps" fill="#3498db" yAxisId="left" />
+            <Line type="monotone" dataKey="distance_meters" name="Distance (m)" stroke="#27AE60" yAxisId="right" strokeWidth={2} />
+          </ComposedChart>
+        )
+      },
+      {
+        id: 'combined-sleep',
+        title: 'Sleep Comparison (All Sources)',
+        description: 'Compare sleep duration across different data sources',
+        source: 'all',
+        requiredFields: [],
+        height: 300,
+        render: (data) => {
+          // Create datasets for each source that has sleep data
+          const whoopData = getSourceSpecificData(data, 'whoop');
+          const garminData = getSourceSpecificData(data, 'garmin');
+          
+          // Combine data into a single format for the chart
+          const combinedData = [];
+          
+          // Process all unique dates
+          const allDates = [...new Set([
+            ...whoopData.map(item => item.date),
+            ...garminData.map(item => item.date)
+          ])].sort();
+          
+          allDates.forEach(date => {
+            const whoopItem = whoopData.find(item => item.date === date);
+            const garminItem = garminData.find(item => item.date === date);
+            
+            combinedData.push({
+              date,
+              'whoop_sleep': whoopItem?.sleep_hours || 0,
+              'garmin_sleep': garminItem?.sleep_hours || 0
+            });
+          });
+          
+          return (
+            <BarChart data={combinedData}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="date" />
+              <YAxis domain={[0, 'dataMax + 2']} />
+              <Tooltip />
+              <Legend />
+              <Bar dataKey="whoop_sleep" name="WHOOP Sleep (hrs)" fill="#9b59b6" />
+              <Bar dataKey="garmin_sleep" name="Garmin Sleep (hrs)" fill="#3498db" />
+            </BarChart>
+          );
+        }
+      },
+      {
+        id: 'combined-rhr',
+        title: 'Resting Heart Rate Comparison',
+        description: 'Compare resting HR across different data sources',
+        source: 'all',
+        requiredFields: [],
+        height: 300,
+        render: (data) => {
+          // Create datasets for each source that has RHR data
+          const whoopData = getSourceSpecificData(data, 'whoop');
+          const garminData = getSourceSpecificData(data, 'garmin');
+          
+          // Combine data into a single format for the chart
+          const combinedData = [];
+          
+          // Process all unique dates
+          const allDates = [...new Set([
+            ...whoopData.map(item => item.date),
+            ...garminData.map(item => item.date)
+          ])].sort();
+          
+          allDates.forEach(date => {
+            const whoopItem = whoopData.find(item => item.date === date);
+            const garminItem = garminData.find(item => item.date === date);
+            
+            combinedData.push({
+              date,
+              'whoop_rhr': whoopItem?.resting_heart_rate || null,
+              'garmin_rhr': garminItem?.resting_heart_rate || null
+            });
+          });
+          
+          return (
+            <LineChart data={combinedData}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="date" />
+              <YAxis domain={['dataMin - 5', 'dataMax + 5']} />
+              <Tooltip />
+              <Legend />
+              <Line type="monotone" dataKey="whoop_rhr" name="WHOOP RHR" stroke="#9b59b6" strokeWidth={2} />
+              <Line type="monotone" dataKey="garmin_rhr" name="Garmin RHR" stroke="#3498db" strokeWidth={2} />
+            </LineChart>
+          );
+        }
+      },
+      {
+        id: 'training-load-index',
+        title: 'Training Load Index',
+        description: 'Combined metric showing training intensity over time',
+        source: 'all',
+        requiredFields: [],
+        height: 300,
+        render: (data) => {
+          // Calculate a combined training load index
+          const processedData = data.map(item => {
+            // Calculate a training load score based on available metrics
+            let trainingLoad = 0;
+            let contributions = [];
+            
+            if (item.strain) {
+              trainingLoad += item.strain * 0.7; // WHOOP strain is a good indicator
+              contributions.push(`Strain: ${Math.round(item.strain * 0.7)}`);
+            }
+            
+            if (item.max_heart_rate && item.resting_heart_rate) {
+              // Heart rate reserve utilization
+              const hrReserve = item.max_heart_rate - item.resting_heart_rate;
+              const hrContribution = hrReserve * 0.05;
+              trainingLoad += hrContribution;
+              contributions.push(`HR: ${Math.round(hrContribution)}`);
+            }
+            
+            if (item.steps) {
+              // Steps contribution, capped to avoid overweighting
+              const stepsContribution = Math.min(item.steps / 1000, 5); 
+              trainingLoad += stepsContribution;
+              contributions.push(`Steps: ${Math.round(stepsContribution)}`);
+            }
+            
+            if (item.sleep_hours) {
+              // Recovery factor - less sleep means higher effective load
+              const optimalSleep = 8;
+              const sleepDeficit = Math.max(0, optimalSleep - item.sleep_hours);
+              const sleepContribution = sleepDeficit * 2;
+              trainingLoad += sleepContribution;
+              contributions.push(`Sleep: ${Math.round(sleepContribution)}`);
+            }
+            
+            // Categorize the load
+            let loadCategory = 'Low';
+            let color = '#2ecc71'; // Green
+            
+            if (trainingLoad > 15) {
+              loadCategory = 'High';
+              color = '#e74c3c'; // Red
+            } else if (trainingLoad > 8) {
+              loadCategory = 'Moderate';
+              color = '#f39c12'; // Orange
+            }
+            
+            return {
+              ...item,
+              date: item.date,
+              training_load: Math.round(trainingLoad),
+              load_category: loadCategory,
+              load_color: color,
+              load_details: contributions.join(', ')
+            };
+          });
+          
+          // Sort by date
+          processedData.sort((a, b) => new Date(a.date) - new Date(b.date));
+          
+          // Only include last 14 days for clarity
+          const recentData = processedData.slice(-14);
+          
+          return (
+            <ComposedChart data={recentData}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="date" />
+              <YAxis />
+              <Tooltip 
+                content={({ active, payload }) => {
+                  if (active && payload && payload.length) {
+                    const data = payload[0].payload;
+                    return (
+                      <Box sx={{ 
+                        bgcolor: 'background.paper', 
+                        p: 1.5, 
+                        border: '1px solid #ccc',
+                        borderRadius: 1,
+                        boxShadow: 2
+                      }}>
+                        <Typography variant="subtitle2">{data.date}</Typography>
+                        <Typography variant="body2" sx={{ fontWeight: 'bold', color: data.load_color }}>
+                          Load: {data.training_load} ({data.load_category})
+                        </Typography>
+                        <Typography variant="caption" sx={{ display: 'block', mt: 0.5 }}>
+                          {data.load_details}
+                        </Typography>
+                      </Box>
+                    );
+                  }
+                  return null;
+                }}
+              />
+              <Legend />
+              <Bar 
+                dataKey="training_load" 
+                name="Training Load Index" 
+              >
+                {recentData.map((entry, index) => (
+                  <Cell key={`cell-${index}`} fill={entry.load_color} />
+                ))}
+              </Bar>
+              <Line 
+                type="monotone" 
+                dataKey="training_load" 
+                stroke="#8884d8" 
+                strokeWidth={2}
+                dot={{ stroke: '#8884d8', strokeWidth: 2, r: 4 }}
+              />
+            </ComposedChart>
+          );
+        }
+      },
+      {
+        id: 'recovery-readiness',
+        title: 'Recovery Readiness',
+        description: 'Daily recovery status based on multiple metrics',
+        source: 'all',
+        requiredFields: [],
+        height: 300,
+        render: (data) => {
+          // Calculate a readiness score from available metrics
+          const processedData = data.map(item => {
+            let recoveryScore = 0;
+            let factors = [];
+            
+            // Start with WHOOP recovery if available (scale of 100)
+            if (item.recovery_score) {
+              recoveryScore = item.recovery_score;
+              factors.push(`WHOOP: ${item.recovery_score}`);
+            } 
+            // Otherwise calculate from other metrics
+            else {
+              // Base score - neutral starting point
+              recoveryScore = 70;
+              
+              // HRV contribution (higher HRV = better recovery)
+              if (item.hrv_ms) {
+                const hrvContribution = Math.min(Math.max(item.hrv_ms - 50, 0) / 10, 15);
+                recoveryScore += hrvContribution;
+                factors.push(`HRV: +${Math.round(hrvContribution)}`);
+              }
+              
+              // RHR contribution (lower RHR usually = better recovery)
+              if (item.resting_heart_rate) {
+                // Assume 45-75 is normal range, lower is better
+                const rhrNormalized = Math.min(Math.max(item.resting_heart_rate, 45), 75);
+                const rhrContribution = (75 - rhrNormalized) / 2;
+                recoveryScore += rhrContribution;
+                factors.push(`RHR: +${Math.round(rhrContribution)}`);
+              }
+              
+              // Sleep contribution
+              if (item.sleep_hours) {
+                const sleepContribution = (item.sleep_hours >= 7) ? 10 : (item.sleep_hours - 4) * 3;
+                recoveryScore += sleepContribution;
+                factors.push(`Sleep: ${sleepContribution > 0 ? '+' : ''}${Math.round(sleepContribution)}`);
+              }
+              
+              // Sleep quality if available (e.g. efficiency)
+              if (item.sleep_efficiency) {
+                const efficiencyContribution = (item.sleep_efficiency - 80) / 2;
+                recoveryScore += efficiencyContribution;
+                factors.push(`Efficiency: ${efficiencyContribution > 0 ? '+' : ''}${Math.round(efficiencyContribution)}`);
+              }
+              
+              // Cap at 0-100 range
+              recoveryScore = Math.max(0, Math.min(100, recoveryScore));
+            }
+            
+            // Determine category and color
+            let category = 'Good';
+            let color = '#2ecc71'; // Green
+            
+            if (recoveryScore < 33) {
+              category = 'Poor';
+              color = '#e74c3c'; // Red
+            } else if (recoveryScore < 66) {
+              category = 'Moderate';
+              color = '#f39c12'; // Orange
+            }
+            
+            return {
+              ...item,
+              date: item.date,
+              readiness_score: Math.round(recoveryScore),
+              readiness_category: category,
+              readiness_color: color,
+              readiness_factors: factors.join(', ')
+            };
+          });
+          
+          // Sort by date
+          processedData.sort((a, b) => new Date(a.date) - new Date(b.date));
+          
+          // Only include last 14 days for clarity
+          const recentData = processedData.slice(-14);
+          
+          return (
+            <ComposedChart data={recentData}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="date" />
+              <YAxis domain={[0, 100]} />
+              <Tooltip 
+                content={({ active, payload }) => {
+                  if (active && payload && payload.length) {
+                    const data = payload[0].payload;
+                    return (
+                      <Box sx={{ 
+                        bgcolor: 'background.paper', 
+                        p: 1.5, 
+                        border: '1px solid #ccc',
+                        borderRadius: 1,
+                        boxShadow: 2
+                      }}>
+                        <Typography variant="subtitle2">{data.date}</Typography>
+                        <Typography variant="body2" sx={{ fontWeight: 'bold', color: data.readiness_color }}>
+                          Readiness: {data.readiness_score}% ({data.readiness_category})
+                        </Typography>
+                        {data.readiness_factors && (
+                          <Typography variant="caption" sx={{ display: 'block', mt: 0.5 }}>
+                            {data.readiness_factors}
+                          </Typography>
+                        )}
+                      </Box>
+                    );
+                  }
+                  return null;
+                }}
+              />
+              <Legend />
+              <Area 
+                type="monotone" 
+                dataKey="readiness_score" 
+                name="Recovery Readiness" 
+                stroke="#8884d8"
+                fill="#8884d8"
+                fillOpacity={0.3}
+              />
+              <ReferenceLine y={33} stroke="#e74c3c" strokeDasharray="3 3" />
+              <ReferenceLine y={66} stroke="#f39c12" strokeDasharray="3 3" />
+            </ComposedChart>
+          );
+        }
+      },
+      {
+        id: 'sleep-analysis',
+        title: 'Sleep Quality Analysis',
+        description: 'Detailed breakdown of sleep metrics',
+        source: 'whoop',
+        requiredFields: ['sleep_hours', 'sleep_efficiency'],
+        height: 300,
+        render: (data) => {
+          // Focus on sleep quality metrics
+          const recentData = data
+            .filter(item => item.sleep_hours && item.sleep_hours > 0)
+            .slice(-10); // Show last 10 days with sleep data
+          
+          return (
+            <RadarChart outerRadius={100} width={500} height={300} data={recentData}>
+              <PolarGrid />
+              <PolarAngleAxis dataKey="date" />
+              <PolarRadiusAxis angle={30} domain={[0, 100]} />
+              <Radar 
+                name="Sleep Efficiency" 
+                dataKey="sleep_efficiency" 
+                stroke="#8884d8" 
+                fill="#8884d8" 
+                fillOpacity={0.6} 
+              />
+              {recentData[0]?.sleep_performance && (
+                <Radar 
+                  name="Sleep Performance" 
+                  dataKey="sleep_performance" 
+                  stroke="#82ca9d" 
+                  fill="#82ca9d" 
+                  fillOpacity={0.6} 
+                />
+              )}
+              {recentData[0]?.rem_sleep_percentage && (
+                <Radar 
+                  name="REM Sleep %" 
+                  dataKey="rem_sleep_percentage" 
+                  stroke="#ffc658" 
+                  fill="#ffc658" 
+                  fillOpacity={0.6} 
+                />
+              )}
+              <Legend />
+              <Tooltip />
+            </RadarChart>
+          );
+        }
+      },
+      {
+        id: 'health-score-trends',
+        title: 'Health Score Trends',
+        description: 'Overall health score calculated from multiple metrics',
+        source: 'all',
+        requiredFields: [],
+        height: 300,
+        render: (data) => {
+          // Use existing health score calculation
+          const processedData = data.map(item => {
+            // Only process if there are metrics available
+            if (!item.resting_heart_rate && !item.hrv_ms && !item.sleep_hours) {
+              return null;
+            }
+            
+            // Get health score using existing function
+            const score = calculateHealthScore([item]);
+            
+            return {
+              ...item,
+              date: item.date,
+              health_score: score
+            };
+          }).filter(Boolean);
+          
+          // Sort by date
+          processedData.sort((a, b) => new Date(a.date) - new Date(b.date));
+          
+          return (
+            <LineChart data={processedData}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="date" />
+              <YAxis domain={[0, 100]} />
+              <Tooltip />
+              <Legend />
+              <Line type="monotone" dataKey="health_score" name="Health Score" stroke="#8884d8" strokeWidth={2} />
+              <ReferenceLine y={70} label="Target" stroke="green" strokeDasharray="3 3" />
+            </LineChart>
+          );
+        }
+      }
+    ];
+  };
+
+  // Function to initialize default modules
+  const initializeDefaultModules = () => {
+    const availableModules = getAvailableModules();
+    
+    // Default configuration
+    const defaultModuleIds = [
+      'combined-rhr', 
+      'recovery-readiness',
+      'training-load-index',
+      'combined-sleep', 
+      'health-score-trends',
+      'rhr-recovery', 
+      'sleep-analysis',
+      'heart-rate-trends', 
+      'steps-distance'
+    ];
+    
+    // Filter available modules for defaults only
+    const defaultModules = availableModules.filter(
+      module => defaultModuleIds.includes(module.id)
+    );
+    
+    setVisualizationModules(defaultModules);
+  };
+
+  // Function to handle adding a new module
+  const handleAddModule = (moduleId) => {
+    const availableModules = getAvailableModules();
+    const moduleToAdd = availableModules.find(m => m.id === moduleId);
+    
+    if (moduleToAdd) {
+      setVisualizationModules(prev => [...prev, moduleToAdd]);
+    }
+    setShowAddModuleDialog(false);
+  };
+
+  // Function to handle removing a module
+  const handleRemoveModule = (moduleId) => {
+    setVisualizationModules(prev => prev.filter(m => m.id !== moduleId));
+  };
+
+  // Function to open module menu
+  const handleOpenModuleMenu = (event, moduleId) => {
+    setModuleMenuAnchor(event.currentTarget);
+    setActiveModuleId(moduleId);
+  };
+
+  // Function to close module menu
+  const handleCloseModuleMenu = () => {
+    setModuleMenuAnchor(null);
+    setActiveModuleId(null);
+  };
+
+  // Initialize default modules when dashboard mounts
+  useEffect(() => {
+    initializeDefaultModules();
+  }, []);
+
+  // Define the renderModuleVisualizations function to render all modules
+  const renderModuleVisualizations = (data) => {
+    if (!data || data.length === 0) {
+      return (
+        <Grid item xs={12}>
+          <Alert severity="info">
+            No data available for the selected source: {selectedDataSource}. 
+            Try selecting a different source or syncing more data.
+          </Alert>
+        </Grid>
+      );
+    }
+
+    return (
+      <>
+        {/* Header with controls for edit mode */}
+        <Grid item xs={12}>
+          <Box sx={{ 
+            display: 'flex', 
+            justifyContent: 'space-between', 
+            alignItems: 'center',
+            mb: 2 
+          }}>
+            <Typography variant="h5" sx={{ color: darkMode ? 'white' : colors.primary }}>
+              Biometrics Dashboard
+            </Typography>
+            
+            <Box>
+              {editModeEnabled ? (
+                <Button 
+                  variant="contained" 
+                  color="primary" 
+                  onClick={() => setEditModeEnabled(false)}
+                  startIcon={<CheckIcon />}
+                  sx={{ mr: 1 }}
+                >
+                  Done Editing
+                </Button>
+              ) : (
+                <Button 
+                  variant="outlined" 
+                  color="primary" 
+                  onClick={() => setEditModeEnabled(true)}
+                  startIcon={<EditIcon />}
+                  sx={{ mr: 1 }}
+                >
+                  Customize Dashboard
+                </Button>
+              )}
+            </Box>
+          </Box>
+        </Grid>
+        
+        {/* Render each visualization module */}
+        {visualizationModules.map(module => {
+          // Check if we have the required data for this module
+          const hasRequiredData = module.source === 'all' || 
+            shouldShowVisualization(module.source, module.requiredFields);
+          
+          if (!hasRequiredData) {
+            return null;
+          }
+          
+          // Get source-specific data if needed
+          const moduleData = module.source === 'all' 
+            ? data 
+            : getSourceSpecificData(data, module.source);
+          
+          return (
+            <Grid item xs={12} md={6} key={module.id}>
+              <Card sx={{ 
+                p: 2, 
+                height: '100%',
+                position: 'relative' 
+              }}>
+                {/* Module header with title and action menu */}
+                <Box sx={{ 
+                  display: 'flex', 
+                  justifyContent: 'space-between', 
+                  alignItems: 'flex-start',
+                  mb: 1
+                }}>
+                  <Box>
+                    <Typography variant="h6" gutterBottom sx={{ color: colors.headings }}>
+                      {module.title}
+                    </Typography>
+                    {(devMode || editModeEnabled) && 
+                      <Typography variant="caption" sx={{ display: 'block', mb: 1, color: 'text.secondary' }}>
+                        Source: {module.source === 'all' ? 'Combined Sources' : module.source.toUpperCase()}
+                      </Typography>
+                    }
+                  </Box>
+                  
+                  {editModeEnabled && (
+                    <IconButton 
+                      size="small" 
+                      onClick={(e) => handleOpenModuleMenu(e, module.id)}
+                      sx={{ mt: -1, mr: -1 }}
+                    >
+                      <MoreVertIcon />
+                    </IconButton>
+                  )}
+                </Box>
+                
+                {/* Module visualization */}
+                <ResponsiveContainer width="100%" height={module.height || 300}>
+                  {module.render(moduleData)}
+                </ResponsiveContainer>
+              </Card>
+            </Grid>
+          );
+        })}
+        
+        {/* Add module button (only visible in edit mode) */}
+        {editModeEnabled && (
+          <Grid item xs={12} md={6}>
+            <Card 
+              sx={{ 
+                p: 2, 
+                height: '100%', 
+                display: 'flex', 
+                alignItems: 'center', 
+                justifyContent: 'center',
+                border: '2px dashed rgba(0, 0, 0, 0.12)',
+                backgroundColor: 'rgba(0, 0, 0, 0.02)',
+                cursor: 'pointer',
+                transition: 'all 0.3s',
+                '&:hover': {
+                  borderColor: 'primary.main',
+                  backgroundColor: 'rgba(0, 0, 0, 0.04)',
+                }
+              }}
+              onClick={() => setShowAddModuleDialog(true)}
+            >
+              <Box sx={{ 
+                display: 'flex', 
+                flexDirection: 'column', 
+                alignItems: 'center'
+              }}>
+                <AddCircleOutlineIcon sx={{ fontSize: 48, color: 'primary.main', mb: 2 }} />
+                <Typography variant="h6" color="primary">Add Visualization</Typography>
+                <Typography variant="body2" color="textSecondary" sx={{ textAlign: 'center', mt: 1 }}>
+                  Click to add a new visualization module to your dashboard
+                </Typography>
+              </Box>
+            </Card>
+          </Grid>
+        )}
+        
+        {/* Module menu */}
+        <Menu
+          anchorEl={moduleMenuAnchor}
+          open={Boolean(moduleMenuAnchor)}
+          onClose={handleCloseModuleMenu}
+        >
+          <MenuItem onClick={() => {
+            handleRemoveModule(activeModuleId);
+            handleCloseModuleMenu();
+          }}>
+            <ListItemIcon>
+              <DeleteIcon fontSize="small" />
+            </ListItemIcon>
+            <ListItemText primary="Remove" />
+          </MenuItem>
+        </Menu>
+        
+        {/* Module Selection Dialog */}
+        <Dialog
+          open={showAddModuleDialog}
+          onClose={() => setShowAddModuleDialog(false)}
+          maxWidth="md"
+          fullWidth
+        >
+          <DialogTitle>Add Visualization Module</DialogTitle>
+          <DialogContent>
+            <Grid container spacing={2} sx={{ mt: 1 }}>
+              {getAvailableModules().map(module => {
+                // Check if module is already added
+                const isAlreadyAdded = visualizationModules.some(m => m.id === module.id);
+                
+                return (
+                  <Grid item xs={12} md={6} key={module.id}>
+                    <Card 
+                      sx={{ 
+                        p: 2, 
+                        opacity: isAlreadyAdded ? 0.6 : 1,
+                        cursor: isAlreadyAdded ? 'not-allowed' : 'pointer',
+                        position: 'relative',
+                        '&:hover': {
+                          boxShadow: isAlreadyAdded ? 'none' : '0 4px 20px rgba(0,0,0,0.1)',
+                          transform: isAlreadyAdded ? 'none' : 'translateY(-4px)'
+                        },
+                        transition: 'all 0.2s ease-in-out'
+                      }}
+                      onClick={() => !isAlreadyAdded && handleAddModule(module.id)}
+                    >
+                      {isAlreadyAdded && (
+                        <Box sx={{
+                          position: 'absolute',
+                          top: 0,
+                          left: 0,
+                          right: 0,
+                          bottom: 0,
+                          backgroundColor: 'rgba(0,0,0,0.05)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          zIndex: 1,
+                        }}>
+                          <Chip label="Already Added" color="primary" variant="outlined" />
+                        </Box>
+                      )}
+                      <Typography variant="h6" gutterBottom>
+                        {module.title}
+                      </Typography>
+                      <Typography variant="body2" color="textSecondary" gutterBottom>
+                        {module.description}
+                      </Typography>
+                      <Box sx={{ 
+                        mt: 2, 
+                        display: 'flex', 
+                        justifyContent: 'space-between', 
+                        alignItems: 'center' 
+                      }}>
+                        <Chip 
+                          label={module.source === 'all' ? 'Combined Sources' : module.source.toUpperCase()} 
+                          size="small" 
+                          color={
+                            module.source === 'all' ? 'primary' : 
+                            module.source === 'whoop' ? 'secondary' : 
+                            'warning'
+                          }
+                          variant="outlined"
+                        />
+                        {!isAlreadyAdded && (
+                          <IconButton size="small" color="primary">
+                            <AddCircleOutlineIcon />
+                          </IconButton>
+                        )}
+                      </Box>
+                    </Card>
+                  </Grid>
+                );
+              })}
+            </Grid>
+          </DialogContent>
+        </Dialog>
+      </>
+    );
+  };
+
   return (
     <Box sx={{ width: '100%' }} className={`biometrics-dashboard ${darkMode ? 'dark-mode' : ''}`}>
       <Box sx={{
@@ -1571,14 +2449,7 @@ const BiometricsDashboard = ({ username }) => {
         {tabValue === 0 && (
           <Box sx={{ mt: 3 }}>
             <Grid container spacing={3}>
-              {filteredData.length === 0 ? (
-                <Grid item xs={12}>
-                  <Alert severity="info">
-                    No data available for the selected source: {selectedDataSource}. 
-                    Try selecting a different source or syncing more data.
-                  </Alert>
-                </Grid>
-              ) : selectedDataSource === 'whoop' ? (
+              {selectedDataSource === 'whoop' ? (
                 // WHOOP-specific visualizations - keep existing code
                 <>
                   {/* Heart Rate and Recovery Score */}
@@ -1816,125 +2687,8 @@ const BiometricsDashboard = ({ username }) => {
                   </Grid>
                 </>
               ) : (
-                // Combined view for "all" data sources
-                <>
-                  {/* Show WHOOP visualizations if we have WHOOP data */}
-                  {shouldShowVisualization('whoop', ['recovery_score', 'hrv_ms']) && (
-                    <>
-                <Grid item xs={12}>
-                        <Typography variant="h5" sx={{ mb: 2, color: darkMode ? 'white' : colors.primary }}>
-                          WHOOP Metrics
-                    </Typography>
-                </Grid>
-                      
-                      {/* Heart Rate and Recovery Score */}
-                      <Grid item xs={12} md={6}>
-                        <Card sx={{ p: 2, height: '100%' }}>
-                          <Typography variant="h6" gutterBottom sx={{ color: colors.headings }}>
-                            Resting Heart Rate & Recovery Score
-                          </Typography>
-                          {devMode && <Typography variant="caption" sx={{ display: 'block', mb: 1, color: 'text.secondary' }}>
-                            Source: WHOOP
-                          </Typography>}
-                          <ResponsiveContainer width="100%" height={300}>
-                            <ComposedChart data={getSourceSpecificData(filteredData, 'whoop')}>
-                              <CartesianGrid strokeDasharray="3 3" />
-                              <XAxis dataKey="date" />
-                              <YAxis yAxisId="left" />
-                              <YAxis yAxisId="right" orientation="right" domain={[0, 100]} />
-                              <Tooltip />
-                              <Legend />
-                              <Bar dataKey="recovery_score" name="Recovery Score" fill="#27AE60" yAxisId="right" />
-                              <Line type="monotone" dataKey="resting_heart_rate" name="Resting HR" stroke="#e74c3c" yAxisId="left" strokeWidth={2} />
-                            </ComposedChart>
-                          </ResponsiveContainer>
-                        </Card>
-                      </Grid>
-                      
-                      {/* Add more WHOOP-specific visualizations for "all" view */}
-                    </>
-                  )}
-                  
-                  {/* Show Garmin visualizations if we have Garmin data */}
-                  {shouldShowVisualization('garmin', ['steps', 'sleep_hours']) && (
-                    <>
-                      <Grid item xs={12}>
-                        <Typography variant="h5" sx={{ mt: 4, mb: 2, color: darkMode ? 'white' : colors.primary }}>
-                          Garmin Metrics
-                        </Typography>
-                      </Grid>
-                      
-                      {/* Heart Rate Trends */}
-                      <Grid item xs={12} md={6}>
-                        <Card sx={{ p: 2, height: '100%' }}>
-                          <Typography variant="h6" gutterBottom>Heart Rate Trends</Typography>
-                          {devMode && <Typography variant="caption" sx={{ display: 'block', mb: 1, color: 'text.secondary' }}>
-                            Source: Garmin
-                          </Typography>}
-                          <ResponsiveContainer width="100%" height={300}>
-                            <LineChart data={getSourceSpecificData(filteredData, 'garmin')}>
-                              <CartesianGrid strokeDasharray="3 3" />
-                              <XAxis dataKey="date" />
-                              <YAxis />
-                              <Tooltip />
-                              <Legend />
-                              <Line type="monotone" dataKey="max_heart_rate" name="Max HR" stroke="#e74c3c" />
-                              <Line type="monotone" dataKey="resting_heart_rate" name="Resting HR" stroke="#2ecc71" />
-                              <Line type="monotone" dataKey="min_heart_rate" name="Min HR" stroke="#3498db" />
-                            </LineChart>
-                          </ResponsiveContainer>
-                        </Card>
-                      </Grid>
-                      
-                      {/* Add more Garmin-specific visualizations for "all" view */}
-                    </>
-                  )}
-                  
-                  {/* Common metrics across sources - only show if data is available */}
-                  <Grid item xs={12}>
-                    <Typography variant="h5" sx={{ mt: 4, mb: 2, color: darkMode ? 'white' : colors.primary }}>
-                      Combined Metrics
-                    </Typography>
-                  </Grid>
-                  
-                  {/* Sleep comparison across sources */}
-                  <Grid item xs={12} md={6}>
-                    <Card sx={{ p: 2, height: '100%' }}>
-                      <Typography variant="h6" gutterBottom>Sleep Duration By Source</Typography>
-                      {devMode && <Typography variant="caption" sx={{ display: 'block', mb: 1, color: 'text.secondary' }}>
-                        Sources: Combined
-                      </Typography>}
-                      <ResponsiveContainer width="100%" height={300}>
-                        <BarChart data={filteredData}>
-                          <CartesianGrid strokeDasharray="3 3" />
-                          <XAxis dataKey="date" />
-                          <YAxis />
-                          <Tooltip content={({ active, payload }) => {
-                            if (active && payload && payload.length) {
-                              return (
-                                <div style={{ backgroundColor: 'white', padding: '10px', border: '1px solid #ccc' }}>
-                                  <p>{`Date: ${payload[0].payload.date}`}</p>
-                                  <p>{`Sleep: ${payload[0].value} hrs`}</p>
-                                  <p>{`Source: ${payload[0].payload.source || 'unknown'}`}</p>
-                                </div>
-                              );
-                            }
-                            return null;
-                          }} />
-                          <Legend />
-                          <Bar dataKey="sleep_hours" name="Sleep (hrs)" fill="#8e44ad">
-                            {filteredData.map((entry, index) => (
-                              <Cell 
-                                key={`cell-${index}`} 
-                                fill={(entry.source || '').toLowerCase() === 'whoop' ? '#3498db' : '#e74c3c'} 
-                              />
-                            ))}
-                          </Bar>
-                        </BarChart>
-                      </ResponsiveContainer>
-                    </Card>
-                  </Grid>
-                </>
+                // For the 'all' source, use our new modular approach
+                renderModuleVisualizations(filteredData)
               )}
             </Grid>
           </Box>

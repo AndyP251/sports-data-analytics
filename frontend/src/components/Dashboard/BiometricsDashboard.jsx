@@ -2034,8 +2034,8 @@ const BiometricsDashboard = ({ username }) => {
     );
   };
 
-  // Function to fetch insights data
-  const fetchInsights = async () => {
+  // Enhance the fetchInsights function
+  const fetchInsights = async (specificSource = null) => {
     if (insightsFetching) return;
     
     setInsightsFetching(true);
@@ -2052,18 +2052,24 @@ const BiometricsDashboard = ({ username }) => {
         setInsightCategories(categoriesData.categories);
       }
       
-      // Fetch insights
-      const sourceParam = selectedDataSource && selectedDataSource !== 'all' 
-        ? `&source=${selectedDataSource}` 
+      // Determine which source to use - prioritize specifically requested source
+      const sourceToUse = specificSource || selectedDataSource;
+      const sourceParam = sourceToUse && sourceToUse !== 'all' 
+        ? `&source=${sourceToUse}` 
         : '';
-        
+      
+      // Fetch insights
       const insightsResponse = await fetch(`/api/insights/generate/?days=30${sourceParam}`, {
         credentials: 'include'
       });
       const insightsData = await insightsResponse.json();
       
       if (insightsData.success) {
-        setInsights(insightsData.insights);
+        if (insightsData.insights && insightsData.insights.length > 0) {
+          setInsights(insightsData.insights);
+        } else {
+          addSyncMessage(`No insights available for ${sourceToUse || 'selected sources'}. Try a different source.`, 'info');
+        }
       }
       
       // Fetch recommendations
@@ -2073,7 +2079,7 @@ const BiometricsDashboard = ({ username }) => {
       const recommendationsData = await recommendationsResponse.json();
       
       if (recommendationsData.success) {
-        setRecommendations(recommendationsData.recommendations);
+        setRecommendations(recommendationsData.recommendations || []);
       }
       
       // Fetch trends
@@ -2083,7 +2089,7 @@ const BiometricsDashboard = ({ username }) => {
       const trendsData = await trendsResponse.json();
       
       if (trendsData.success) {
-        setInsightTrends(trendsData.trends);
+        setInsightTrends(trendsData.trends || {});
       }
       
     } catch (error) {
@@ -2093,7 +2099,20 @@ const BiometricsDashboard = ({ username }) => {
       setInsightsFetching(false);
     }
   };
-  
+
+  // Update the useEffect hook for insights
+  useEffect(() => {
+    if (tabValue === 2) {
+      // Clear previous insights when changing tabs or data sources
+      setInsights([]);
+      setRecommendations([]);
+      setInsightTrends({});
+      
+      // Fetch new insights
+      fetchInsights();
+    }
+  }, [tabValue, selectedDataSource]);
+
   // Submit feedback for an insight
   const submitInsightFeedback = async (insightId, feedbackType, feedback = '') => {
     try {
@@ -2168,13 +2187,6 @@ const BiometricsDashboard = ({ username }) => {
   const handleInsightTabChange = (event, newValue) => {
     setInsightTabValue(newValue);
   };
-  
-  // Fetch insights when tab is selected or data source changes
-  useEffect(() => {
-    if (tabValue === 2) {
-      fetchInsights();
-    }
-  }, [tabValue, selectedDataSource]);
 
   return (
     <Box sx={{ width: '100%' }} className={`biometrics-dashboard ${darkMode ? 'dark-mode' : ''}`}>
@@ -2928,6 +2940,8 @@ const BiometricsDashboard = ({ username }) => {
               display: 'flex', 
               justifyContent: 'space-between', 
               alignItems: 'center',
+              flexWrap: 'wrap',
+              gap: 2,
               mb: 3
             }}>
               <Typography variant="h5" sx={{
@@ -2937,15 +2951,73 @@ const BiometricsDashboard = ({ username }) => {
                 Your Personal Health Insights
               </Typography>
               
-              <Box>
+              <Box sx={{ 
+                display: 'flex',
+                alignItems: 'center',
+                gap: 2
+              }}>
+                {/* Source selector specifically for insights */}
+                <FormControl variant="outlined" size="small" sx={{ minWidth: 150 }}>
+                  <Select
+                    value={selectedDataSource}
+                    onChange={(e) => {
+                      setSelectedDataSource(e.target.value);
+                      // Refresh insights with new source
+                      fetchInsights(e.target.value);
+                    }}
+                    displayEmpty
+                    sx={{
+                      backgroundColor: darkMode ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.02)',
+                      '& .MuiSelect-select': {
+                        display: 'flex',
+                        alignItems: 'center',
+                      }
+                    }}
+                  >
+                    <MenuItem value="all">All Sources</MenuItem>
+                    {activeSources.map(source => (
+                      <MenuItem 
+                        key={source.id} 
+                        value={source.id}
+                        sx={{
+                          display: 'flex',
+                          alignItems: 'center',
+                        }}
+                      >
+                        {source.id === 'whoop' ? (
+                          <img 
+                            src="/static/images/whoop_logo.png" 
+                            alt="WHOOP" 
+                            style={{ 
+                              height: 20, 
+                              marginRight: 8,
+                              filter: darkMode ? 'brightness(1.5)' : 'none'
+                            }} 
+                          />
+                        ) : source.id === 'garmin' ? (
+                          <img 
+                            src="/static/images/garmin_logo.png" 
+                            alt="Garmin" 
+                            style={{ 
+                              height: 20, 
+                              marginRight: 8,
+                              filter: darkMode ? 'brightness(1.5)' : 'none'
+                            }} 
+                          />
+                        ) : null}
+                        {source.name}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+                
                 <Button
                   variant="outlined"
                   startIcon={<RestoreIcon />}
-                  onClick={fetchInsights}
+                  onClick={() => fetchInsights()}
                   disabled={insightsFetching}
-                  sx={{ mr: 1 }}
                 >
-                  Refresh Insights
+                  Refresh
                 </Button>
               </Box>
             </Box>
@@ -3092,6 +3164,32 @@ const BiometricsDashboard = ({ username }) => {
                                 }}>
                                   {getIconByName(categoryInfo.icon)}
                                 </Box>
+                                
+                                {/* Add source indicator */}
+                                {devMode && insight.source && (
+                                  <Chip
+                                    size="small"
+                                    label={insight.source === 'multiple' ? 'Multiple Sources' : 
+                                           insight.source === 'garmin' ? 'Garmin' : 
+                                           insight.source === 'whoop' ? 'WHOOP' : 
+                                           insight.source}
+                                    sx={{ 
+                                      mr: 2, 
+                                      height: 24,
+                                      backgroundColor: insight.source === 'garmin' ? 'rgba(0, 169, 224, 0.1)' : 
+                                                       insight.source === 'whoop' ? 'rgba(0, 0, 0, 0.1)' : 
+                                                       'rgba(0, 0, 0, 0.05)',
+                                      borderColor: insight.source === 'garmin' ? '#00A9E0' : 
+                                                   insight.source === 'whoop' ? '#000000' : 
+                                                   'rgba(0, 0, 0, 0.2)',
+                                      '& .MuiChip-label': {
+                                        fontSize: '0.7rem',
+                                        fontWeight: 600
+                                      }
+                                    }}
+                                    variant="outlined"
+                                  />
+                                )}
                                 
                                 <Box sx={{ flexGrow: 1 }}>
                                   <Box sx={{ display: 'flex', alignItems: 'center', mb: 0.5 }}>
@@ -3330,58 +3428,137 @@ const BiometricsDashboard = ({ username }) => {
                       </Alert>
                     ) : (
                       <Grid container spacing={3}>
-                        {Object.entries(insightTrends).map(([metric, data]) => {
-                          // Format the metric name for display
-                          const formattedMetric = metric
-                            .replace(/_/g, ' ')
-                            .split(' ')
-                            .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-                            .join(' ');
+                        {Object.entries(insightTrends)
+                          // Filter out metrics that don't have meaningful data (all zeros or empty)
+                          .filter(([metric, data]) => {
+                            // Check if we have any non-zero values
+                            const hasNonZeroValues = data.data_points && 
+                              data.data_points.some(val => val > 0);
                             
-                          return (
-                            <Grid item xs={12} md={6} key={metric}>
-                              <Card sx={{ p: 2 }}>
-                                <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                                  <Typography variant="h6" sx={{ flexGrow: 1 }}>
-                                    {formattedMetric}
+                            // Skip metrics with all zeros or no data points
+                            return hasNonZeroValues && data.data_points && data.data_points.length > 0;
+                          })
+                          .map(([metric, data]) => {
+                            // Format the metric name for display
+                            const formattedMetric = metric
+                              .replace(/_/g, ' ')
+                              .split(' ')
+                              .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+                              .join(' ');
+                            
+                            // Get min and max for proper Y-axis scaling
+                            const values = data.data_points.filter(val => val !== null && val !== undefined);
+                            const minValue = Math.max(0, Math.min(...values) - (Math.min(...values) * 0.1));
+                            const maxValue = Math.max(...values) + (Math.max(...values) * 0.1);
+                              
+                            return (
+                              <Grid item xs={12} md={6} key={metric}>
+                                <Card sx={{ p: 2 }}>
+                                  <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                                    <Typography variant="h6" sx={{ flexGrow: 1 }}>
+                                      {formattedMetric}
+                                    </Typography>
+                                    
+                                    <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                                      {getTrendIcon(data.trend)}
+                                      <Typography variant="body2" sx={{ ml: 0.5 }}>
+                                        {data.trend}
+                                      </Typography>
+                                    </Box>
+                                  </Box>
+                                  
+                                  <Typography variant="body2" sx={{ mb: 2 }}>
+                                    Recent average: <strong>{data.recent_average.toFixed(1)}</strong>
+                                    {metric === 'resting_heart_rate' && ' bpm'}
+                                    {metric === 'hrv_ms' && ' ms'}
+                                    {metric === 'sleep_hours' && ' hours'}
+                                    {metric === 'recovery_score' && '%'}
+                                    {metric === 'sleep_efficiency' && '%'}
+                                    {metric === 'steps' && ' steps'}
                                   </Typography>
                                   
-                                  <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                                    {getTrendIcon(data.trend)}
-                                    <Typography variant="body2" sx={{ ml: 0.5 }}>
-                                      {data.trend}
-                                    </Typography>
+                                  <Box sx={{ height: 200 }}>
+                                    <ResponsiveContainer width="100%" height="100%">
+                                      <LineChart data={data.data_points.map((val, idx) => ({ 
+                                        date: idx, 
+                                        value: val,
+                                        // Add formatted date if available in original data
+                                        label: idx.toString()
+                                      }))}>
+                                        <CartesianGrid strokeDasharray="3 3" />
+                                        <XAxis 
+                                          dataKey="label"
+                                          tickFormatter={(value, index) => {
+                                            // Show fewer x-axis labels for clarity
+                                            return index % Math.ceil(data.data_points.length / 5) === 0 ? value : '';
+                                          }}
+                                        />
+                                        <YAxis 
+                                          domain={[minValue, maxValue]}
+                                          tickFormatter={(value) => {
+                                            // Format large numbers (like steps) for better display
+                                            return value >= 1000 ? `${Math.round(value/1000)}k` : value;
+                                          }}
+                                        />
+                                        <Tooltip 
+                                          formatter={(value) => {
+                                            // Format the value in the tooltip
+                                            if (metric === 'steps' && value >= 1000) {
+                                              return [`${value.toLocaleString()} steps`, formattedMetric];
+                                            }
+                                            
+                                            // Add units to values in tooltip
+                                            const unit = 
+                                              metric === 'resting_heart_rate' ? ' bpm' :
+                                              metric === 'hrv_ms' ? ' ms' :
+                                              metric === 'sleep_hours' ? ' hours' :
+                                              metric === 'recovery_score' ? '%' :
+                                              metric === 'sleep_efficiency' ? '%' :
+                                              metric === 'distance_meters' ? ' km' :
+                                              metric === 'active_calories' ? ' calories' :
+                                              metric === 'intensity_minutes' ? ' min' :
+                                              metric === 'floors_climbed' ? ' floors' :
+                                              '';
+                                              
+                                            return [`${value}${unit}`, formattedMetric];
+                                          }}
+                                          labelFormatter={(label) => {
+                                            // Try to convert numeric index to a more meaningful date if possible
+                                            return `Day ${parseInt(label) + 1}`;
+                                          }}
+                                        />
+                                        <Line 
+                                          type="monotone" 
+                                          dataKey="value" 
+                                          stroke={
+                                            data.trend === 'increasing' ? '#2ecc71' :
+                                            data.trend === 'decreasing' ? '#e74c3c' :
+                                            '#3498db'
+                                          } 
+                                          strokeWidth={2}
+                                          dot={{ r: 3 }}
+                                          activeDot={{ r: 5, stroke: '#fff', strokeWidth: 2 }}
+                                        />
+                                        
+                                        {/* Add reference line at the average value */}
+                                        <ReferenceLine 
+                                          y={data.recent_average} 
+                                          stroke="#95a5a6" 
+                                          strokeDasharray="3 3"
+                                          label={{ 
+                                            value: 'avg', 
+                                            position: 'insideBottomRight',
+                                            fill: '#95a5a6',
+                                            fontSize: 10
+                                          }}
+                                        />
+                                      </LineChart>
+                                    </ResponsiveContainer>
                                   </Box>
-                                </Box>
-                                
-                                <Typography variant="body2" sx={{ mb: 2 }}>
-                                  Recent average: <strong>{data.recent_average.toFixed(1)}</strong>
-                                </Typography>
-                                
-                                <Box sx={{ height: 200 }}>
-                                  <ResponsiveContainer width="100%" height="100%">
-                                    <LineChart data={data.data_points.map((val, idx) => ({ date: idx, value: val }))}>
-                                      <CartesianGrid strokeDasharray="3 3" />
-                                      <XAxis dataKey="date" />
-                                      <YAxis />
-                                      <Tooltip />
-                                      <Line 
-                                        type="monotone" 
-                                        dataKey="value" 
-                                        stroke={
-                                          data.trend === 'increasing' ? '#2ecc71' :
-                                          data.trend === 'decreasing' ? '#e74c3c' :
-                                          '#3498db'
-                                        } 
-                                        strokeWidth={2} 
-                                      />
-                                    </LineChart>
-                                  </ResponsiveContainer>
-                                </Box>
-                              </Card>
-                            </Grid>
-                          );
-                        })}
+                                </Card>
+                              </Grid>
+                            );
+                          })}
                       </Grid>
                     )}
                   </Box>

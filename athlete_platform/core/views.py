@@ -217,15 +217,69 @@ def get_biometric_data(request):
         # Get days parameter from query string, default to 30 days
         days = int(request.GET.get('days', 30))
         
+        # Add source filter if present
+        source_filter = request.GET.get('source', None)
+        
+        # DEBUG: Check database directly for available sources
+        from django.db.models import Count
+        
+        # Get source counts for this athlete
+        source_counts = CoreBiometricData.objects.filter(
+            athlete=athlete
+        ).values('source').annotate(count=Count('id'))
+        
+        logger.info(f"DB source counts for athlete {athlete.id}: {list(source_counts)}")
+        
+        # ADDED: Direct query to check all available sources in the database
+        all_sources = CoreBiometricData.objects.values_list('source', flat=True).distinct()
+        logger.info(f"All sources in database: {list(all_sources)}")
+        
+        # ADDED: Check if any Garmin data exists in database for any athlete
+        garmin_count = CoreBiometricData.objects.filter(source__iexact='garmin').count()
+        logger.info(f"Total Garmin entries in database: {garmin_count}")
+        
+    
         # Use DataSyncService to get data
         sync_service = DataSyncService(athlete)
+        
+        # ADDED: Log active sources from sync_service
+        logger.info(f"Active sources from sync_service: {sync_service.active_sources}")
+        
+        # Check if Garmin processor exists and is working
+        if hasattr(sync_service, 'processors'):
+            for processor in sync_service.processors:
+                logger.info(f"Processor: {type(processor).__name__} is active")
+                
         data = sync_service.get_biometric_data(days=days)
         
-        # If no data found, try to sync first
-        if not data:
+        # Log what's being returned by the sync service
+        if data:
+            # Count by source
+            source_distribution = {}
+            for item in data:
+                source = item.get('source', 'unknown')
+                source_distribution[source] = source_distribution.get(source, 0) + 1
+            
+            logger.info(f"API returning {len(data)} items with source distribution: {source_distribution}")
+            
+            # Log any source field inconsistencies
+            unique_sources = set(item.get('source', 'unknown') for item in data)
+            logger.info(f"Unique source values in API data: {unique_sources}")
+            
+            # Check if we should apply source filter
+            if source_filter:
+                filtered_data = [item for item in data if item.get('source', '').lower() == source_filter.lower()]
+                logger.info(f"Filtered to {len(filtered_data)} items for source '{source_filter}'")
+                data = filtered_data
+        else:
             logger.info(f"No data found for athlete {athlete.id}, attempting to sync")
             sync_service.sync_specific_sources(sync_service.active_sources)
             data = sync_service.get_biometric_data(days=days)
+            
+            if source_filter and data:
+                filtered_data = [item for item in data if item.get('source', '').lower() == source_filter.lower()]
+                logger.info(f"After sync, filtered to {len(filtered_data)} items for source '{source_filter}'")
+                data = filtered_data
         
         return Response(data)
     except Exception as e:
@@ -486,4 +540,59 @@ def verify_dev_password(request):
             {'error': 'Server error'}, 
             status=500
         )
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_db_info(request):
+    """Diagnostic endpoint to check database state for biometric data"""
+    try:
+        # Get all sources and counts
+        from django.db.models import Count
+        
+        # Overall source distribution
+        all_sources = CoreBiometricData.objects.values('source').annotate(count=Count('id'))
+        
+        # User's source distribution
+        user_sources = CoreBiometricData.objects.filter(
+            athlete=request.user.athlete
+        ).values('source').annotate(count=Count('id'))
+        
+        # Check for Garmin processing issues
+        garmin_files_in_s3 = 0
+        
+        try:
+            from .utils.s3_utils import S3Utils
+            s3_utils = S3Utils()
+            garmin_path = f'accounts/{request.user.id}/biometric-data/garmin'
+            garmin_files = s3_utils.list_objects(garmin_path)
+            garmin_files_in_s3 = len(garmin_files)
+        except Exception as e:
+            logger.error(f"Error checking S3: {e}")
+        
+        # Check sync service state
+        sync_service = DataSyncService(request.user.athlete)
+        active_sources = sync_service.active_sources
+        
+        return JsonResponse({
+            'success': True,
+            'database': {
+                'all_sources': list(all_sources),
+                'user_sources': list(user_sources),
+                'total_records': CoreBiometricData.objects.count(),
+                'user_records': CoreBiometricData.objects.filter(athlete=request.user.athlete).count()
+            },
+            's3': {
+                'garmin_files': garmin_files_in_s3
+            },
+            'sync_service': {
+                'active_sources': active_sources,
+                'processors': [type(p).__name__ for p in sync_service.processors]
+            }
+        })
+    except Exception as e:
+        logger.error(f"Error in get_db_info: {e}", exc_info=True)
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=500)
 

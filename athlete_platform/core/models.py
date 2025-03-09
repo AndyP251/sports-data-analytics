@@ -302,10 +302,11 @@ class CoreBiometricData(models.Model):
 
     class Meta:
         db_table = 'core_biometric_data'
-        unique_together = ['athlete', 'date']
+        unique_together = ['athlete', 'date', 'source']
         indexes = [
             models.Index(fields=['-date']),
             models.Index(fields=['athlete', '-date']),
+            models.Index(fields=['athlete', 'source']),
         ]
 
     def __str__(self):

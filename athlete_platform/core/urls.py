@@ -10,7 +10,7 @@ from .api_views.auth import (
     check_auth, login_view, register_view, 
     logout_view, get_data
 )
-from .views import dashboard_data, sync_biometric_data, get_biometric_data, get_current_user, activate_source, get_garmin_profiles, get_raw_biometric_data, active_sources, verify_dev_password, get_db_info
+from .views import dashboard_data, sync_biometric_data, get_biometric_data, get_current_user, activate_source, get_garmin_profiles, get_raw_biometric_data, active_sources, verify_dev_password, get_db_info, generate_insights, get_insight_categories, get_insight_trends, get_recommendations, submit_insight_feedback
 from .api_views.oauth import (
     WhoopOAuthView, WhoopCallbackView, WhoopWebhookView
 )
@@ -35,8 +35,12 @@ urlpatterns = [
     path('api/biometrics/active-sources/', active_sources, name='active_sources'),
     path('api/verify-dev-password/', verify_dev_password, name='verify-dev-password'),
     path('api/biometrics/db-info/', get_db_info, name='get_db_info'), #DEBUGGING ENDPOINT
-    
-
+    # AI Insights endpoints
+    path('api/insights/generate/', generate_insights, name='generate_insights'),
+    path('api/insights/categories/', get_insight_categories, name='get_insight_categories'),
+    path('api/insights/trends/', get_insight_trends, name='get_insight_trends'),
+    path('api/insights/recommendations/', get_recommendations, name='get_recommendations'),
+    path('api/insights/user-feedback/', submit_insight_feedback, name='submit_insight_feedback'),
     
     # OAuth endpoints
     path('api/oauth/whoop/authorize', WhoopOAuthView.as_view(), name='whoop-oauth'),

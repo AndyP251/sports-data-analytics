@@ -31,6 +31,12 @@ from functools import wraps
 from rest_framework import status
 from django.core.cache import cache
 from django.middleware.csrf import get_token, CsrfViewMiddleware
+from .ai_insights import (
+    get_all_insight_categories, 
+    generate_insights_for_athlete, 
+    get_recommendations_for_athlete, 
+    get_insight_trends_for_athlete
+)
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -591,6 +597,129 @@ def get_db_info(request):
         })
     except Exception as e:
         logger.error(f"Error in get_db_info: {e}", exc_info=True)
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=500)
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def generate_insights(request):
+    """Generate and return insights based on the user's biometric data"""
+    try:
+        days = int(request.GET.get('days', 30))
+        source = request.GET.get('source', None)
+        
+        insights = generate_insights_for_athlete(
+            athlete_id=request.user.athlete.id,
+            days=days,
+            source=source
+        )
+        
+        return JsonResponse({
+            'success': True,
+            'insights': insights
+        })
+    except Exception as e:
+        logger.error(f"Error generating insights: {e}", exc_info=True)
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=500)
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_insight_categories(request):
+    """Return all available insight categories"""
+    try:
+        categories = get_all_insight_categories()
+        return JsonResponse({
+            'success': True,
+            'categories': categories
+        })
+    except Exception as e:
+        logger.error(f"Error getting insight categories: {e}", exc_info=True)
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=500)
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_insight_trends(request):
+    """Return trend data for key metrics"""
+    try:
+        days = int(request.GET.get('days', 30))
+        source = request.GET.get('source', None)
+        
+        trends = get_insight_trends_for_athlete(
+            athlete_id=request.user.athlete.id,
+            days=days,
+            source=source
+        )
+        
+        return JsonResponse({
+            'success': True,
+            'trends': trends
+        })
+    except Exception as e:
+        logger.error(f"Error getting insight trends: {e}", exc_info=True)
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=500)
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_recommendations(request):
+    """Return personalized recommendations based on biometric data"""
+    try:
+        days = int(request.GET.get('days', 30))
+        source = request.GET.get('source', None)
+        
+        recommendations = get_recommendations_for_athlete(
+            athlete_id=request.user.athlete.id,
+            days=days,
+            source=source
+        )
+        
+        return JsonResponse({
+            'success': True,
+            'recommendations': recommendations
+        })
+    except Exception as e:
+        logger.error(f"Error getting recommendations: {e}", exc_info=True)
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=500)
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def submit_insight_feedback(request):
+    """Submit user feedback about an insight or recommendation"""
+    try:
+        data = json.loads(request.body)
+        insight_id = data.get('insight_id')
+        feedback_type = data.get('type')  # 'helpful', 'not_helpful', etc.
+        feedback_text = data.get('feedback', '')
+        
+        if not insight_id or not feedback_type:
+            return JsonResponse({
+                'success': False,
+                'error': 'Missing required parameters'
+            }, status=400)
+            
+        # In a real implementation, you would store this feedback in the database
+        # For now, we'll just log it
+        logger.info(f"Received feedback for insight {insight_id}: {feedback_type} - {feedback_text}")
+        
+        return JsonResponse({
+            'success': True,
+            'message': 'Feedback submitted successfully'
+        })
+    except Exception as e:
+        logger.error(f"Error submitting insight feedback: {e}", exc_info=True)
         return JsonResponse({
             'success': False,
             'error': str(e)

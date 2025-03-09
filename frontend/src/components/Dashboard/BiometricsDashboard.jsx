@@ -19,23 +19,50 @@ import SyncIcon from '@mui/icons-material/Sync';
 import MenuIcon from '@mui/icons-material/Menu';
 import LogoutIcon from '@mui/icons-material/Logout';
 import BarChartIcon from '@mui/icons-material/BarChart';
-import BugReportIcon from '@mui/icons-material/BugReport';
-import TableChartIcon from '@mui/icons-material/TableChart';
-import DeveloperModeIcon from '@mui/icons-material/DeveloperMode';
 import Brightness4Icon from '@mui/icons-material/Brightness4';
-import HeartRateMetrics from '../HeartRateMetrics';
-import axios from 'axios';
-import WhoopConnect from '../WhoopConnect';
+import AddCircleIcon from '@mui/icons-material/AddCircle';
+import DeveloperModeIcon from '@mui/icons-material/DeveloperMode';
 import BedtimeIcon from '@mui/icons-material/Bedtime';
 import DirectionsRunIcon from '@mui/icons-material/DirectionsRun';
 import FavoriteIcon from '@mui/icons-material/Favorite';
-import RestoreIcon from '@mui/icons-material/Restore';
 import MonitorHeartIcon from '@mui/icons-material/MonitorHeart';
+import RestoreIcon from '@mui/icons-material/Restore';
+import BugReportIcon from '@mui/icons-material/BugReport';
+import TableChartIcon from '@mui/icons-material/TableChart';
+import DashboardIcon from '@mui/icons-material/Dashboard';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
 import AddCircleOutlineIcon from '@mui/icons-material/AddCircleOutline';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import CheckIcon from '@mui/icons-material/Check';
+import RestaurantIcon from '@mui/icons-material/Restaurant';
+import SpaIcon from '@mui/icons-material/Spa';
+import EmojiEventsIcon from '@mui/icons-material/EmojiEvents';
+import InfoIcon from '@mui/icons-material/Info';
+import LocalHospitalIcon from '@mui/icons-material/LocalHospital';
+import ThumbUpIcon from '@mui/icons-material/ThumbUp';
+import ThumbDownIcon from '@mui/icons-material/ThumbDown';
+import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
+import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
+import RemoveIcon from '@mui/icons-material/Remove';
+import CategoryIcon from '@mui/icons-material/Category';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import FilterAltIcon from '@mui/icons-material/FilterAlt';
+import Accordion from '@mui/material/Accordion';
+import AccordionSummary from '@mui/material/AccordionSummary';
+import AccordionDetails from '@mui/material/AccordionDetails';
+import List from '@mui/material/List';
+import ListItem from '@mui/material/ListItem';
+import ButtonGroup from '@mui/material/ButtonGroup';
+import Divider from '@mui/material/Divider';
+import Radio from '@mui/material/Radio';
+import RadioGroup from '@mui/material/RadioGroup';
+import FormControlLabel from '@mui/material/FormControlLabel';
+import FormLabel from '@mui/material/FormLabel';
+import HeartRateMetrics from '../HeartRateMetrics';
+import axios from 'axios';
+import WhoopConnect from '../WhoopConnect';
+
 import './BiometricsDashboard.css';
 
 // Modern, professional color palette
@@ -228,6 +255,17 @@ const BiometricsDashboard = ({ username }) => {
   const [moduleMenuAnchor, setModuleMenuAnchor] = useState(null);
   const [activeModuleId, setActiveModuleId] = useState(null);
   const [showAddModuleDialog, setShowAddModuleDialog] = useState(false);
+  // Add new state variables for insights
+  const [insights, setInsights] = useState([]);
+  const [recommendations, setRecommendations] = useState([]);
+  const [insightCategories, setInsightCategories] = useState([]);
+  const [insightTrends, setInsightTrends] = useState({});
+  const [selectedInsightCategory, setSelectedInsightCategory] = useState('all');
+  const [insightPriorityFilter, setInsightPriorityFilter] = useState('all');
+  const [insightsFetching, setInsightsFetching] = useState(false);
+  const [insightsError, setInsightsError] = useState(null);
+  const [insightTabValue, setInsightTabValue] = useState(0);
+  const [expandedInsightId, setExpandedInsightId] = useState(null);
 
   // Update localStorage when dark mode changes
   useEffect(() => {
@@ -1996,6 +2034,148 @@ const BiometricsDashboard = ({ username }) => {
     );
   };
 
+  // Function to fetch insights data
+  const fetchInsights = async () => {
+    if (insightsFetching) return;
+    
+    setInsightsFetching(true);
+    setInsightsError(null);
+    
+    try {
+      // Fetch categories
+      const categoriesResponse = await fetch('/api/insights/categories/', {
+        credentials: 'include'
+      });
+      const categoriesData = await categoriesResponse.json();
+      
+      if (categoriesData.success) {
+        setInsightCategories(categoriesData.categories);
+      }
+      
+      // Fetch insights
+      const sourceParam = selectedDataSource && selectedDataSource !== 'all' 
+        ? `&source=${selectedDataSource}` 
+        : '';
+        
+      const insightsResponse = await fetch(`/api/insights/generate/?days=30${sourceParam}`, {
+        credentials: 'include'
+      });
+      const insightsData = await insightsResponse.json();
+      
+      if (insightsData.success) {
+        setInsights(insightsData.insights);
+      }
+      
+      // Fetch recommendations
+      const recommendationsResponse = await fetch(`/api/insights/recommendations/?days=30${sourceParam}`, {
+        credentials: 'include'
+      });
+      const recommendationsData = await recommendationsResponse.json();
+      
+      if (recommendationsData.success) {
+        setRecommendations(recommendationsData.recommendations);
+      }
+      
+      // Fetch trends
+      const trendsResponse = await fetch(`/api/insights/trends/?days=30${sourceParam}`, {
+        credentials: 'include'
+      });
+      const trendsData = await trendsResponse.json();
+      
+      if (trendsData.success) {
+        setInsightTrends(trendsData.trends);
+      }
+      
+    } catch (error) {
+      console.error('Error fetching insights:', error);
+      setInsightsError('Failed to fetch insights. Please try again later.');
+    } finally {
+      setInsightsFetching(false);
+    }
+  };
+  
+  // Submit feedback for an insight
+  const submitInsightFeedback = async (insightId, feedbackType, feedback = '') => {
+    try {
+      const response = await fetch('/api/insights/user-feedback/', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRFToken': getCookie('csrftoken')
+        },
+        body: JSON.stringify({
+          insight_id: insightId,
+          type: feedbackType,
+          feedback
+        }),
+        credentials: 'include'
+      });
+      
+      const data = await response.json();
+      
+      if (data.success) {
+        // Update the local state to reflect the feedback
+        // This is just UI feedback - no need to modify the actual insights
+        addSyncMessage(`Thank you for your feedback!`, 'success');
+      } else {
+        addSyncMessage(`Failed to submit feedback: ${data.error}`, 'error');
+      }
+    } catch (error) {
+      console.error('Error submitting feedback:', error);
+      addSyncMessage('Failed to submit feedback. Please try again later.', 'error');
+    }
+  };
+  
+  // Helper function to get icon component by name
+  const getIconByName = (iconName) => {
+    const iconMap = {
+      'BedtimeIcon': <BedtimeIcon />,
+      'DirectionsRunIcon': <DirectionsRunIcon />,
+      'RestoreIcon': <RestoreIcon />,
+      'FavoriteIcon': <FavoriteIcon />,
+      'MonitorHeartIcon': <MonitorHeartIcon />,
+      'RestaurantIcon': <RestaurantIcon />,
+      'SpaIcon': <SpaIcon />,
+      'EmojiEventsIcon': <EmojiEventsIcon />,
+      'InfoIcon': <InfoIcon />
+    };
+    
+    return iconMap[iconName] || <InfoIcon />;
+  };
+  
+  // Filter insights by category and priority
+  const getFilteredInsights = () => {
+    return insights.filter(insight => {
+      const categoryMatch = selectedInsightCategory === 'all' || insight.category === selectedInsightCategory;
+      const priorityMatch = insightPriorityFilter === 'all' || insight.priority === insightPriorityFilter;
+      return categoryMatch && priorityMatch;
+    });
+  };
+  
+  // Get trend icon based on trend direction
+  const getTrendIcon = (trend) => {
+    if (trend === 'increasing') return <ArrowUpwardIcon color="success" />;
+    if (trend === 'decreasing') return <ArrowDownwardIcon color="error" />;
+    return <RemoveIcon color="action" />;
+  };
+  
+  // Handle clicking on an insight accordion
+  const handleInsightAccordionChange = (insightId) => (event, isExpanded) => {
+    setExpandedInsightId(isExpanded ? insightId : null);
+  };
+  
+  // Handle changing insight tabs
+  const handleInsightTabChange = (event, newValue) => {
+    setInsightTabValue(newValue);
+  };
+  
+  // Fetch insights when tab is selected or data source changes
+  useEffect(() => {
+    if (tabValue === 2) {
+      fetchInsights();
+    }
+  }, [tabValue, selectedDataSource]);
+
   return (
     <Box sx={{ width: '100%' }} className={`biometrics-dashboard ${darkMode ? 'dark-mode' : ''}`}>
       <Box sx={{
@@ -2744,234 +2924,469 @@ const BiometricsDashboard = ({ username }) => {
 
         {tabValue === 2 && (
           <Box sx={{ mt: 3 }}>
-            <Typography variant="h5" sx={{
-              mb: 3,
-              color: darkMode ? 'white' : colors.primary,
-              fontWeight: 600
+            <Box sx={{ 
+              display: 'flex', 
+              justifyContent: 'space-between', 
+              alignItems: 'center',
+              mb: 3
             }}>
-              Your Personal Health Insights
-            </Typography>
-
-            {biometricData.length === 0 && !loading ? (
-              <Typography variant="body1" color="textSecondary">
-                No data available for insights. Please sync your data.
+              <Typography variant="h5" sx={{
+                color: darkMode ? 'white' : colors.primary,
+                fontWeight: 600
+              }}>
+                Your Personal Health Insights
               </Typography>
-            ) : (
-              <Grid container spacing={3}>
-                {/* Sleep Insight */}
-                <Grid item xs={12} md={6}>
-                  <Card sx={{
-                    p: 3,
-                    borderRadius: '12px',
-                    height: '100%',
-                    transition: 'transform 0.3s ease',
-                    '&:hover': { transform: 'translateY(-5px)' }
-                  }}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                      <BedtimeIcon sx={{
-                        fontSize: 32,
-                        color: '#8e44ad',
-                        mr: 2,
-                        p: 1,
-                        borderRadius: '50%',
-                        backgroundColor: darkMode ? 'rgba(142, 68, 173, 0.2)' : 'rgba(142, 68, 173, 0.1)',
-                      }} />
-                      <Typography variant="h6" sx={{ fontWeight: 600 }}>Sleep Quality</Typography>
+              
+              <Box>
+                <Button
+                  variant="outlined"
+                  startIcon={<RestoreIcon />}
+                  onClick={fetchInsights}
+                  disabled={insightsFetching}
+                  sx={{ mr: 1 }}
+                >
+                  Refresh Insights
+                </Button>
+              </Box>
+            </Box>
+            
+            {insightsFetching && (
+              <Box sx={{ display: 'flex', justifyContent: 'center', my: 4 }}>
+                <CircularProgress />
+              </Box>
+            )}
+            
+            {insightsError && (
+              <Alert severity="error" sx={{ mb: 3 }}>
+                {insightsError}
+              </Alert>
+            )}
+            
+            {!insightsFetching && !insightsError && insights.length === 0 && (
+              <Alert severity="info" sx={{ mb: 3 }}>
+                No insights available. Please sync more data or try a different data source.
+              </Alert>
+            )}
+            
+            {!insightsFetching && insights.length > 0 && (
+              <>
+                {/* Insights navigation tabs */}
+                <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 3 }}>
+                  <Tabs 
+                    value={insightTabValue} 
+                    onChange={handleInsightTabChange}
+                    aria-label="insights tabs"
+                  >
+                    <Tab label="All Insights" />
+                    <Tab label="Recommendations" />
+                    <Tab label="Trends" />
+                  </Tabs>
+                </Box>
+                
+                {/* All Insights Tab */}
+                {insightTabValue === 0 && (
+                  <>
+                    {/* Filters */}
+                    <Box sx={{ 
+                      display: 'flex', 
+                      flexWrap: 'wrap', 
+                      gap: 2, 
+                      mb: 3,
+                      alignItems: 'center'
+                    }}>
+                      <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                        <FilterAltIcon sx={{ mr: 1, color: 'text.secondary' }} />
+                        <Typography variant="body2" sx={{ mr: 2, color: 'text.secondary' }}>
+                          Filter by:
+                        </Typography>
+                      </Box>
+                      
+                      {/* Category Filter */}
+                      <Box>
+                        <FormControl component="fieldset" size="small">
+                          <FormLabel component="legend" sx={{ fontSize: '0.75rem' }}>Category</FormLabel>
+                          <RadioGroup 
+                            row 
+                            value={selectedInsightCategory} 
+                            onChange={(e) => setSelectedInsightCategory(e.target.value)}
+                          >
+                            <FormControlLabel value="all" control={<Radio size="small" />} label="All" />
+                            {insightCategories.map(category => (
+                              <FormControlLabel 
+                                key={category.id} 
+                                value={category.id} 
+                                control={<Radio size="small" />} 
+                                label={category.name} 
+                              />
+                            ))}
+                          </RadioGroup>
+                        </FormControl>
+                      </Box>
+                      
+                      {/* Priority Filter */}
+                      <Box>
+                        <FormControl component="fieldset" size="small">
+                          <FormLabel component="legend" sx={{ fontSize: '0.75rem' }}>Priority</FormLabel>
+                          <RadioGroup 
+                            row 
+                            value={insightPriorityFilter} 
+                            onChange={(e) => setInsightPriorityFilter(e.target.value)}
+                          >
+                            <FormControlLabel value="all" control={<Radio size="small" />} label="All" />
+                            <FormControlLabel value="high" control={<Radio size="small" />} label="High" />
+                            <FormControlLabel value="medium" control={<Radio size="small" />} label="Medium" />
+                            <FormControlLabel value="low" control={<Radio size="small" />} label="Low" />
+                          </RadioGroup>
+                        </FormControl>
+                      </Box>
                     </Box>
-
-                    <Typography variant="body1" sx={{ mb: 2 }}>
-                      {selectedDataSource === 'whoop'
-                        ? `Your sleep performance has been ${biometricData[0]?.sleep_performance > 85 ? 'excellent' : biometricData[0]?.sleep_performance > 70 ? 'good' : 'below average'} 
-                          lately. You've been getting an average of ${(biometricData.reduce((acc, item) => acc + (item.sleep_hours || 0), 0) / biometricData.length).toFixed(1)} hours of sleep.`
-                        : `Your sleep patterns show you're averaging ${(biometricData.reduce((acc, item) => acc + (item.sleep_hours || 0), 0) / biometricData.length).toFixed(1)} hours per night, 
-                          with deep sleep accounting for about ${Math.round(biometricData[0]?.deep_sleep / biometricData[0]?.sleep_hours * 100) || 25}% of your total sleep.`
-                      }
-                    </Typography>
-
-                    <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1 }}>Recommendation:</Typography>
-                    <Typography variant="body2" sx={{ color: darkMode ? 'rgba(255,255,255,0.7)' : 'rgba(0,0,0,0.7)' }}>
-                      {biometricData[0]?.sleep_hours < 7
-                        ? "Try to increase your sleep duration to at least 7 hours for better recovery and performance."
-                        : "Maintain your current sleep routine. Consider adding 15 minutes of meditation before bed for even better quality."
-                      }
-                    </Typography>
-                  </Card>
-                </Grid>
-
-                {/* Activity Insight */}
-                <Grid item xs={12} md={6}>
-                  <Card sx={{
-                    p: 3,
-                    borderRadius: '12px',
-                    height: '100%',
-                    transition: 'transform 0.3s ease',
-                    '&:hover': { transform: 'translateY(-5px)' }
-                  }}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                      <DirectionsRunIcon sx={{
-                        fontSize: 32,
-                        color: '#2ecc71',
-                        mr: 2,
-                        p: 1,
-                        borderRadius: '50%',
-                        backgroundColor: darkMode ? 'rgba(46, 204, 113, 0.2)' : 'rgba(46, 204, 113, 0.1)',
-                      }} />
-                      <Typography variant="h6" sx={{ fontWeight: 600 }}>Activity Level</Typography>
+                    
+                    {/* Insights List */}
+                    <Box>
+                      {getFilteredInsights().length === 0 ? (
+                        <Alert severity="info">
+                          No insights match your current filters. Try adjusting your filters or refreshing.
+                        </Alert>
+                      ) : (
+                        getFilteredInsights().map((insight) => {
+                          // Find the category info
+                          const categoryInfo = insightCategories.find(c => c.id === insight.category) || {
+                            color: '#95a5a6',
+                            icon: 'InfoIcon'
+                          };
+                          
+                          return (
+                            <Accordion 
+                              key={insight.id}
+                              expanded={expandedInsightId === insight.id}
+                              onChange={handleInsightAccordionChange(insight.id)}
+                              sx={{ 
+                                mb: 2,
+                                boxShadow: '0 2px 10px rgba(0,0,0,0.08)',
+                                borderLeft: `4px solid ${categoryInfo.color}`,
+                                '&:before': {
+                                  display: 'none',
+                                }
+                              }}
+                            >
+                              <AccordionSummary
+                                expandIcon={<ExpandMoreIcon />}
+                                aria-controls={`panel-${insight.id}-content`}
+                                id={`panel-${insight.id}-header`}
+                                sx={{
+                                  '& .MuiAccordionSummary-content': {
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                  }
+                                }}
+                              >
+                                <Box sx={{ 
+                                  mr: 2, 
+                                  display: 'flex', 
+                                  alignItems: 'center', 
+                                  justifyContent: 'center',
+                                  width: 40,
+                                  height: 40,
+                                  borderRadius: '50%',
+                                  backgroundColor: `${categoryInfo.color}20`
+                                }}>
+                                  {getIconByName(categoryInfo.icon)}
+                                </Box>
+                                
+                                <Box sx={{ flexGrow: 1 }}>
+                                  <Box sx={{ display: 'flex', alignItems: 'center', mb: 0.5 }}>
+                                    <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
+                                      {insight.title}
+                                    </Typography>
+                                    
+                                    {insight.trend && (
+                                      <Box sx={{ display: 'flex', alignItems: 'center', ml: 2 }}>
+                                        {getTrendIcon(insight.trend)}
+                                        <Typography variant="caption" sx={{ ml: 0.5 }}>
+                                          {insight.trend}
+                                        </Typography>
+                                      </Box>
+                                    )}
+                                    
+                                    <Box sx={{ flexGrow: 1 }} />
+                                    
+                                    <Chip 
+                                      label={insight.priority.toUpperCase()} 
+                                      size="small"
+                                      color={
+                                        insight.priority === 'high' ? 'error' :
+                                        insight.priority === 'medium' ? 'warning' : 'success'
+                                      }
+                                      sx={{ ml: 1, height: 24 }}
+                                    />
+                                  </Box>
+                                  
+                                  <Typography variant="body2" color="text.secondary" sx={{ 
+                                    display: '-webkit-box',
+                                    overflow: 'hidden',
+                                    WebkitBoxOrient: 'vertical',
+                                    WebkitLineClamp: 1,
+                                  }}>
+                                    {insight.content}
+                                  </Typography>
+                                </Box>
+                              </AccordionSummary>
+                              
+                              <AccordionDetails>
+                                <Box sx={{ mb: 2 }}>
+                                  <Typography variant="body1" paragraph>
+                                    {insight.content}
+                                  </Typography>
+                                  
+                                  <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1 }}>
+                                    Recommendation:
+                                  </Typography>
+                                  <Typography variant="body2" sx={{ mb: 2 }}>
+                                    {insight.recommendation}
+                                  </Typography>
+                                  
+                                  {/* Visualization when data_points are available */}
+                                  {insight.data_points && insight.data_points.length > 0 && (
+                                    <Box sx={{ height: 200, mb: 2 }}>
+                                      <Typography variant="caption" sx={{ mb: 1, display: 'block', color: 'text.secondary' }}>
+                                        {insight.visualization === 'line' && 'Line chart showing your trend over time'}
+                                        {insight.visualization === 'bar' && 'Bar chart showing your values over time'}
+                                        {insight.visualization === 'area' && 'Area chart showing your trend over time'}
+                                        {insight.visualization === 'gauge' && 'Gauge showing your current level'}
+                                      </Typography>
+                                      
+                                      <ResponsiveContainer width="100%" height="100%">
+                                        {insight.visualization === 'line' && (
+                                          <LineChart data={insight.data_points.map((val, idx) => ({ date: idx, value: val }))}>
+                                            <CartesianGrid strokeDasharray="3 3" />
+                                            <XAxis dataKey="date" />
+                                            <YAxis />
+                                            <Tooltip />
+                                            <Line type="monotone" dataKey="value" stroke={categoryInfo.color} strokeWidth={2} />
+                                          </LineChart>
+                                        )}
+                                        
+                                        {insight.visualization === 'bar' && (
+                                          <BarChart data={insight.data_points.map((val, idx) => ({ date: idx, value: val }))}>
+                                            <CartesianGrid strokeDasharray="3 3" />
+                                            <XAxis dataKey="date" />
+                                            <YAxis />
+                                            <Tooltip />
+                                            <Bar dataKey="value" fill={categoryInfo.color} />
+                                          </BarChart>
+                                        )}
+                                        
+                                        {insight.visualization === 'area' && (
+                                          <AreaChart data={insight.data_points.map((val, idx) => ({ date: idx, value: val }))}>
+                                            <CartesianGrid strokeDasharray="3 3" />
+                                            <XAxis dataKey="date" />
+                                            <YAxis />
+                                            <Tooltip />
+                                            <Area type="monotone" dataKey="value" fill={`${categoryInfo.color}50`} stroke={categoryInfo.color} />
+                                          </AreaChart>
+                                        )}
+                                        
+                                        {insight.visualization === 'gauge' && (
+                                          <RadialBarChart 
+                                            innerRadius="60%" 
+                                            outerRadius="100%" 
+                                            data={[{value: insight.data_points[insight.data_points.length-1], fill: categoryInfo.color}]} 
+                                            startAngle={180} 
+                                            endAngle={0}
+                                          >
+                                            <RadialBar background dataKey="value" />
+                                            <text x="50%" y="50%" textAnchor="middle" dominantBaseline="middle" className="progress-label">
+                                              {Math.round(insight.data_points[insight.data_points.length-1])}%
+                                            </text>
+                                          </RadialBarChart>
+                                        )}
+                                      </ResponsiveContainer>
+                                    </Box>
+                                  )}
+                                  
+                                  <Divider sx={{ my: 2 }} />
+                                  
+                                  {/* Feedback buttons */}
+                                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <Typography variant="caption" color="text.secondary">
+                                      Was this insight helpful?
+                                    </Typography>
+                                    
+                                    <ButtonGroup size="small" aria-label="feedback buttons">
+                                      <Button 
+                                        startIcon={<ThumbUpIcon />}
+                                        onClick={() => submitInsightFeedback(insight.id, 'helpful')}
+                                      >
+                                        Yes
+                                      </Button>
+                                      <Button 
+                                        startIcon={<ThumbDownIcon />}
+                                        onClick={() => submitInsightFeedback(insight.id, 'not_helpful')}
+                                      >
+                                        No
+                                      </Button>
+                                    </ButtonGroup>
+                                  </Box>
+                                </Box>
+                              </AccordionDetails>
+                            </Accordion>
+                          );
+                        })
+                      )}
                     </Box>
-
-                    <Typography variant="body1" sx={{ mb: 2 }}>
-                      {selectedDataSource === 'whoop'
-                        ? `Your recent strain levels have been ${biometricData[0]?.strain > 15 ? 'very high' : biometricData[0]?.strain > 10 ? 'moderate' : 'low'}. 
-                          Your body is handling this load ${biometricData[0]?.recovery_score > 66 ? 'well' : 'with some difficulty'}.`
-                        : `You've averaged ${Math.round(biometricData.reduce((acc, item) => acc + (item.steps || 0), 0) / biometricData.length).toLocaleString()} steps daily, 
-                          burning approximately ${Math.round(biometricData.reduce((acc, item) => acc + (item.active_calories || 0), 0) / biometricData.length)} active calories.`
-                      }
+                  </>
+                )}
+                
+                {/* Recommendations Tab */}
+                {insightTabValue === 1 && (
+                  <Box>
+                    <Typography variant="h6" sx={{ mb: 3 }}>
+                      Actionable Recommendations
                     </Typography>
-
-                    <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1 }}>Recommendation:</Typography>
-                    <Typography variant="body2" sx={{ color: darkMode ? 'rgba(255,255,255,0.7)' : 'rgba(0,0,0,0.7)' }}>
-                      {biometricData[0]?.steps < 7000 || biometricData[0]?.strain < 8
-                        ? "Consider increasing your daily activity. Even a 20-minute walk can boost your cardiovascular health."
-                        : biometricData[0]?.recovery_score < 33
-                          ? "Your body needs more recovery time. Focus on light activities for the next 1-2 days."
-                          : "Your activity level is well-balanced with your recovery. Keep up the good work!"
-                      }
+                    
+                    {recommendations.length === 0 ? (
+                      <Alert severity="info">
+                        No recommendations available at this time.
+                      </Alert>
+                    ) : (
+                      <List>
+                        {recommendations.map((rec) => {
+                          // Find the category info
+                          const categoryInfo = insightCategories.find(c => c.id === rec.category) || {
+                            color: '#95a5a6',
+                            icon: 'InfoIcon'
+                          };
+                          
+                          return (
+                            <ListItem 
+                              key={rec.id}
+                              sx={{ 
+                                mb: 2, 
+                                backgroundColor: darkMode ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.02)',
+                                borderRadius: 1,
+                                borderLeft: `4px solid ${
+                                  rec.priority === 'high' ? '#e74c3c' :
+                                  rec.priority === 'medium' ? '#f39c12' : '#2ecc71'
+                                }`
+                              }}
+                            >
+                              <ListItemIcon>
+                                <Box sx={{ 
+                                  display: 'flex', 
+                                  alignItems: 'center', 
+                                  justifyContent: 'center',
+                                  width: 40,
+                                  height: 40,
+                                  borderRadius: '50%',
+                                  backgroundColor: `${categoryInfo.color}20`
+                                }}>
+                                  {getIconByName(categoryInfo.icon)}
+                                </Box>
+                              </ListItemIcon>
+                              <ListItemText 
+                                primary={rec.title}
+                                secondary={
+                                  <>
+                                    <Typography variant="body2" sx={{ mb: 1 }}>
+                                      {rec.content}
+                                    </Typography>
+                                    <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
+                                      <ButtonGroup size="small" aria-label="feedback buttons">
+                                        <Button 
+                                          startIcon={<ThumbUpIcon />}
+                                          onClick={() => submitInsightFeedback(rec.id, 'helpful')}
+                                        >
+                                          Helpful
+                                        </Button>
+                                        <Button 
+                                          startIcon={<ThumbDownIcon />}
+                                          onClick={() => submitInsightFeedback(rec.id, 'not_helpful')}
+                                        >
+                                          Not Helpful
+                                        </Button>
+                                      </ButtonGroup>
+                                    </Box>
+                                  </>
+                                }
+                              />
+                            </ListItem>
+                          );
+                        })}
+                      </List>
+                    )}
+                  </Box>
+                )}
+                
+                {/* Trends Tab */}
+                {insightTabValue === 2 && (
+                  <Box>
+                    <Typography variant="h6" sx={{ mb: 3 }}>
+                      Key Metric Trends
                     </Typography>
-                  </Card>
-                </Grid>
-
-                {/* Heart Rate Insight */}
-                <Grid item xs={12} md={6}>
-                  <Card sx={{
-                    p: 3,
-                    borderRadius: '12px',
-                    height: '100%',
-                    transition: 'transform 0.3s ease',
-                    '&:hover': { transform: 'translateY(-5px)' }
-                  }}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                      <FavoriteIcon sx={{
-                        fontSize: 32,
-                        color: '#e74c3c',
-                        mr: 2,
-                        p: 1,
-                        borderRadius: '50%',
-                        backgroundColor: darkMode ? 'rgba(231, 76, 60, 0.2)' : 'rgba(231, 76, 60, 0.1)',
-                      }} />
-                      <Typography variant="h6" sx={{ fontWeight: 600 }}>Heart Rate Trends</Typography>
-                    </Box>
-
-                    <Typography variant="body1" sx={{ mb: 2 }}>
-                      {`Your resting heart rate is ${Math.round(biometricData[0]?.resting_heart_rate || 60)} bpm, which is 
-                        ${biometricData[0]?.resting_heart_rate < 60 ? 'excellent' : biometricData[0]?.resting_heart_rate < 70 ? 'good' : 'average'} for your profile.
-                        ${selectedDataSource === 'whoop'
-                          ? `Your HRV of ${Math.round(biometricData[0]?.hrv_ms || 50)} ms indicates ${biometricData[0]?.hrv_ms > 70 ? 'strong' : biometricData[0]?.hrv_ms > 50 ? 'good' : 'moderate'} recovery capacity.`
-                          : `Your heart rate reaches ${Math.round(biometricData[0]?.max_heart_rate || 150)} bpm during peak activity.`
-                        }`
-                      }
-                    </Typography>
-
-                    <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1 }}>Recommendation:</Typography>
-                    <Typography variant="body2" sx={{ color: darkMode ? 'rgba(255,255,255,0.7)' : 'rgba(0,0,0,0.7)' }}>
-                      {biometricData[0]?.resting_heart_rate > 70
-                        ? "Your resting heart rate is slightly elevated. Consider more aerobic exercise and stress reduction techniques."
-                        : biometricData[0]?.hrv_ms < 50
-                          ? "Your heart rate variability could improve. Focus on quality sleep and recovery."
-                          : "Your cardiovascular indicators look healthy. Continue your current exercise routine."
-                      }
-                    </Typography>
-                  </Card>
-                </Grid>
-
-                {/* Recovery Insight */}
-                <Grid item xs={12} md={6}>
-                  <Card sx={{
-                    p: 3,
-                    borderRadius: '12px',
-                    height: '100%',
-                    transition: 'transform 0.3s ease',
-                    '&:hover': { transform: 'translateY(-5px)' }
-                  }}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                      <RestoreIcon sx={{
-                        fontSize: 32,
-                        color: '#3498db',
-                        mr: 2,
-                        p: 1,
-                        borderRadius: '50%',
-                        backgroundColor: darkMode ? 'rgba(52, 152, 219, 0.2)' : 'rgba(52, 152, 219, 0.1)',
-                      }} />
-                      <Typography variant="h6" sx={{ fontWeight: 600 }}>Recovery Status</Typography>
-                    </Box>
-
-                    <Typography variant="body1" sx={{ mb: 2 }}>
-                      {selectedDataSource === 'whoop'
-                        ? `Your body is ${biometricData[0]?.recovery_score > 66 ? 'well recovered' : biometricData[0]?.recovery_score > 33 ? 'moderately recovered' : 'under-recovered'}.
-                          This suggests your ${biometricData[0]?.recovery_score > 66 ? 'body is adapting well to recent training loads' : 'system needs more recovery time'}.`
-                        : `Based on your resting heart rate and sleep quality, your recovery level appears 
-                          ${biometricData[0]?.resting_heart_rate < (biometricData[1]?.resting_heart_rate || 60) ? 'good' : 'incomplete'}.`
-                      }
-                    </Typography>
-
-                    <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1 }}>Recommendation:</Typography>
-                    <Typography variant="body2" sx={{ color: darkMode ? 'rgba(255,255,255,0.7)' : 'rgba(0,0,0,0.7)' }}>
-                      {(biometricData[0]?.recovery_score < 33) || (biometricData[0]?.resting_heart_rate > (biometricData[1]?.resting_heart_rate || 60) + 5)
-                        ? "Focus on recovery today. Consider light activity, proper hydration, and an extra hour of sleep."
-                        : (biometricData[0]?.recovery_score < 66) || (biometricData[0]?.resting_heart_rate > (biometricData[1]?.resting_heart_rate || 60))
-                          ? "Your body is in a moderate recovery state. Moderate intensity training is appropriate."
-                          : "You're well recovered. This is an optimal day for higher intensity training if desired."
-                      }
-                    </Typography>
-                  </Card>
-                </Grid>
-
-                {/* Long-term Trends Insight */}
-                <Grid item xs={12}>
-                  <Card sx={{
-                    p: 3,
-                    borderRadius: '12px',
-                    transition: 'transform 0.3s ease',
-                    '&:hover': { transform: 'translateY(-5px)' }
-                  }}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                      <MonitorHeartIcon sx={{
-                        fontSize: 32,
-                        color: '#f39c12',
-                        mr: 2,
-                        p: 1,
-                        borderRadius: '50%',
-                        backgroundColor: darkMode ? 'rgba(243, 156, 18, 0.2)' : 'rgba(243, 156, 18, 0.1)',
-                      }} />
-                      <Typography variant="h6" sx={{ fontWeight: 600 }}>Health Trends</Typography>
-                    </Box>
-
-                    <Typography variant="body1" sx={{ mb: 2 }}>
-                      {`Over the past ${biometricData.length} days, your metrics indicate 
-                      ${biometricData[0]?.resting_heart_rate < biometricData[biometricData.length - 1]?.resting_heart_rate ? 'improving' : 'stable'} cardiovascular fitness
-                      and ${(biometricData.reduce((a, b, i, arr) => i > 0 ? a + (b.sleep_hours > arr[i - 1].sleep_hours ? 1 : 0) : 0, 0) > biometricData.length / 2) ? 'improving' : 'consistent'} sleep habits.`}
-
-                      {selectedDataSource === 'whoop'
-                        ? ` Your recovery scores have been trending ${biometricData.slice(0, 3).reduce((acc, item) => acc + (item.recovery_score || 0), 0) / 3 >
-                          biometricData.slice(biometricData.length - 3).reduce((acc, item) => acc + (item.recovery_score || 0), 0) / 3 ? 'upward' : 'consistently'}.`
-                        : ` Your overall activity level has been ${biometricData.slice(0, 3).reduce((acc, item) => acc + (item.steps || 0), 0) / 3 >
-                          biometricData.slice(biometricData.length - 3).reduce((acc, item) => acc + (item.steps || 0), 0) / 3 ? 'increasing' : 'steady'}.`
-                      }
-                    </Typography>
-
-                    <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1 }}>Personalized Insight:</Typography>
-                    <Typography variant="body2" sx={{ color: darkMode ? 'rgba(255,255,255,0.7)' : 'rgba(0,0,0,0.7)' }}>
-                      {`Your data suggests that your body responds best to 
-                      ${biometricData.find(d => d.sleep_hours > 8)?.resting_heart_rate < biometricData.find(d => d.sleep_hours < 7)?.resting_heart_rate ?
-                          'longer sleep durations' : 'consistent sleep patterns'} 
-                      and ${biometricData.find(d => d.steps > 10000) ?
-                          'regular physical activity' : 'balanced activity levels'}. 
-                      Consider ${biometricData[0]?.resting_heart_rate > 65 ?
-                          'adding more cardio exercises to your routine' : 'maintaining your current exercise balance'} 
-                      to optimize your health metrics.`}
-                    </Typography>
-                  </Card>
-                </Grid>
-              </Grid>
+                    
+                    {Object.keys(insightTrends).length === 0 ? (
+                      <Alert severity="info">
+                        No trend data available at this time.
+                      </Alert>
+                    ) : (
+                      <Grid container spacing={3}>
+                        {Object.entries(insightTrends).map(([metric, data]) => {
+                          // Format the metric name for display
+                          const formattedMetric = metric
+                            .replace(/_/g, ' ')
+                            .split(' ')
+                            .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+                            .join(' ');
+                            
+                          return (
+                            <Grid item xs={12} md={6} key={metric}>
+                              <Card sx={{ p: 2 }}>
+                                <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                                  <Typography variant="h6" sx={{ flexGrow: 1 }}>
+                                    {formattedMetric}
+                                  </Typography>
+                                  
+                                  <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                                    {getTrendIcon(data.trend)}
+                                    <Typography variant="body2" sx={{ ml: 0.5 }}>
+                                      {data.trend}
+                                    </Typography>
+                                  </Box>
+                                </Box>
+                                
+                                <Typography variant="body2" sx={{ mb: 2 }}>
+                                  Recent average: <strong>{data.recent_average.toFixed(1)}</strong>
+                                </Typography>
+                                
+                                <Box sx={{ height: 200 }}>
+                                  <ResponsiveContainer width="100%" height="100%">
+                                    <LineChart data={data.data_points.map((val, idx) => ({ date: idx, value: val }))}>
+                                      <CartesianGrid strokeDasharray="3 3" />
+                                      <XAxis dataKey="date" />
+                                      <YAxis />
+                                      <Tooltip />
+                                      <Line 
+                                        type="monotone" 
+                                        dataKey="value" 
+                                        stroke={
+                                          data.trend === 'increasing' ? '#2ecc71' :
+                                          data.trend === 'decreasing' ? '#e74c3c' :
+                                          '#3498db'
+                                        } 
+                                        strokeWidth={2} 
+                                      />
+                                    </LineChart>
+                                  </ResponsiveContainer>
+                                </Box>
+                              </Card>
+                            </Grid>
+                          );
+                        })}
+                      </Grid>
+                    )}
+                  </Box>
+                )}
+              </>
             )}
           </Box>
         )}

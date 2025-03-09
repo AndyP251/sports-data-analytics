@@ -106,7 +106,7 @@ class S3Utils:
     def get_latest_json_data(self, base_path: str, date: datetime.date) -> Optional[dict]:
         """Get latest JSON data for a given date"""
         try:
-            logger.info(f"Getting latest JSON data at {base_path}/{date}_raw.json")
+            # logger.info(f"Getting latest JSON data at {base_path}/{date}_raw.json")
             date_prefix = f"{base_path}/{date}_raw.json"
             response = self.client.list_objects_v2(
                 Bucket=self.bucket,
@@ -156,7 +156,7 @@ class S3Utils:
             return json.loads(obj['Body'].read())
             
         except Exception as e:
-            logger.error(f"Error getting latest JSON data: {e}")
+            # logger.error(f"Error getting latest JSON data: {e}")
             return None 
 
     def get_paginator(self, operation_name: str) -> Any:

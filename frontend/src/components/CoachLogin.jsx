@@ -18,7 +18,7 @@ function getCsrfToken() {
   return cookieValue
 }
 
-const Login = ({ setIsAuthenticated }) => {
+const CoachLogin = ({ setIsAuthenticated }) => {
   const [isLoginMode, setIsLoginMode] = useState(true)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [formData, setFormData] = useState({
@@ -26,15 +26,14 @@ const Login = ({ setIsAuthenticated }) => {
     password: '',
     email: '',
     confirmPassword: '',
-    team: '',
-    position: 'FORWARD', // Default position
+    coachCode: '', // Added coach code field
+    specialization: '', // Added specialization field for coaches
+    experience: '', // Added experience field
   })
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
   const [csrfToken, setCsrfToken] = useState('')
   const [csrfStatus, setCsrfStatus] = useState('loading')
-  const [teams, setTeams] = useState([])
-  const [loadingTeams, setLoadingTeams] = useState(false)
 
   useEffect(() => {
     // Get CSRF token on component mount
@@ -65,34 +64,7 @@ const Login = ({ setIsAuthenticated }) => {
     }
 
     getCsrfToken()
-    
-    // Fetch teams if in registration mode
-    if (!isLoginMode) {
-      fetchTeams()
-    }
-  }, [isLoginMode])
-  
-  // Function to fetch available teams
-  const fetchTeams = async () => {
-    try {
-      setLoadingTeams(true)
-      const response = await fetch('/api/teams/', {
-        method: 'GET',
-        credentials: 'include',
-      })
-      
-      if (!response.ok) {
-        throw new Error('Failed to fetch teams')
-      }
-      
-      const data = await response.json()
-      setTeams(data)
-    } catch (error) {
-      console.error('Error fetching teams:', error)
-    } finally {
-      setLoadingTeams(false)
-    }
-  }
+  }, [])
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -107,14 +79,29 @@ const Login = ({ setIsAuthenticated }) => {
     setError('')
     setSuccess('')
 
-    if (!isLoginMode && formData.password !== formData.confirmPassword) {
-      setError('Passwords do not match')
-      setIsSubmitting(false)
-      return
+    // Validation checks
+    if (!isLoginMode) {
+      if (formData.password !== formData.confirmPassword) {
+        setError('Passwords do not match')
+        setIsSubmitting(false)
+        return
+      }
+      
+      if (!formData.coachCode) {
+        setError('Coach code is required for registration')
+        setIsSubmitting(false)
+        return
+      }
+      
+      if (formData.coachCode.length !== 6) {
+        setError('Coach code must be 6 characters')
+        setIsSubmitting(false)
+        return
+      }
     }
 
     try {
-      const endpoint = isLoginMode ? 'login' : 'register'
+      const endpoint = isLoginMode ? 'coach-login' : 'coach-register'
       
       // Only send required fields for registration
       const requestData = isLoginMode ? {
@@ -124,8 +111,9 @@ const Login = ({ setIsAuthenticated }) => {
         username: formData.username,
         password: formData.password,
         email: formData.email,
-        team_id: formData.team || null,
-        position: formData.position || 'FORWARD'
+        coach_code: formData.coachCode,
+        specialization: formData.specialization,
+        experience: formData.experience ? parseInt(formData.experience) : 0
       }
 
       const response = await fetch(`/api/${endpoint}/`, {
@@ -144,14 +132,15 @@ const Login = ({ setIsAuthenticated }) => {
       
       if (response.ok) {
         if (!isLoginMode) {
-          setSuccess('Account created successfully! Please sign in.')
+          setSuccess('Coach account created successfully! Please sign in.')
           setFormData({
             username: '',
             password: '',
             email: '',
             confirmPassword: '',
-            team: '',
-            position: 'FORWARD',
+            coachCode: '',
+            specialization: '',
+            experience: '',
           })
 
           // Fetch a fresh CSRF token after registration
@@ -185,7 +174,11 @@ const Login = ({ setIsAuthenticated }) => {
         }
       } else {
         // More detailed error handling
-        setError(data.error || data.detail || `${isLoginMode ? 'Login' : 'Registration'} failed`)
+        if (data.error === 'invalid_coach_code') {
+          setError('Invalid or expired coach code')
+        } else {
+          setError(data.error || data.detail || `${isLoginMode ? 'Login' : 'Registration'} failed`)
+        }
         console.log('Response data:', data) // For debugging
       }
     } catch (error) {
@@ -196,19 +189,13 @@ const Login = ({ setIsAuthenticated }) => {
     }
   }
 
-  // Add switch to registration mode which triggers team fetch
-  const switchToRegistration = () => {
-    setIsLoginMode(false)
-    fetchTeams()
-  }
-
   return (
     <div className="auth-page">
       <div className="auth-container">
         <div className="auth-box">
           <div className="brand-title">Pulse Project</div>
           <div className="developer-credit">Developed by Andrew Prince</div>
-          <h2 className="auth-title">{isLoginMode ? 'Welcome Back' : 'Create Account'}</h2>
+          <h2 className="auth-title">{isLoginMode ? 'Coach Login' : 'Register as Coach'}</h2>
           <div className={`csrf-status ${csrfStatus}`}>
             {csrfStatus === 'loading' && 'Initializing security...'}
             {csrfStatus === 'ready' && 'Security initialized'}
@@ -262,32 +249,36 @@ const Login = ({ setIsAuthenticated }) => {
                   />
                 </div>
                 <div className="form-group">
-                  <label>Team (Optional)</label>
-                  <select
-                    value={formData.team}
-                    onChange={(e) => setFormData({...formData, team: e.target.value})}
+                  <label>Coach Code</label>
+                  <input
+                    type="text"
+                    value={formData.coachCode}
+                    onChange={(e) => setFormData({...formData, coachCode: e.target.value.toUpperCase()})}
+                    placeholder="Enter your 6-character coach code"
+                    maxLength="6"
                     className="auth-input"
-                    disabled={loadingTeams}
-                  >
-                    <option value="">Select a team (optional)</option>
-                    {teams.map(team => (
-                      <option key={team.id} value={team.id}>{team.name}</option>
-                    ))}
-                  </select>
-                  {loadingTeams && <div className="loading-indicator">Loading teams...</div>}
+                  />
                 </div>
                 <div className="form-group">
-                  <label>Position</label>
-                  <select
-                    value={formData.position}
-                    onChange={(e) => setFormData({...formData, position: e.target.value})}
+                  <label>Specialization</label>
+                  <input
+                    type="text"
+                    value={formData.specialization}
+                    onChange={(e) => setFormData({...formData, specialization: e.target.value})}
+                    placeholder="Enter your coaching specialization"
                     className="auth-input"
-                  >
-                    <option value="FORWARD">Forward</option>
-                    <option value="MIDFIELDER">Midfielder</option>
-                    <option value="DEFENDER">Defender</option>
-                    <option value="GOALKEEPER">Goalkeeper</option>
-                  </select>
+                  />
+                </div>
+                <div className="form-group">
+                  <label>Years of Experience</label>
+                  <input
+                    type="number"
+                    value={formData.experience}
+                    onChange={(e) => setFormData({...formData, experience: e.target.value})}
+                    placeholder="Enter years of coaching experience"
+                    className="auth-input"
+                    min="0"
+                  />
                 </div>
               </>
             )}
@@ -298,15 +289,15 @@ const Login = ({ setIsAuthenticated }) => {
             >
               {isSubmitting 
                 ? 'Processing...' 
-                : (isLoginMode ? 'Sign In' : 'Create Account')
+                : (isLoginMode ? 'Sign In as Coach' : 'Register as Coach')
               }
             </button>
           </form>
           <button 
             className="toggle-mode-button" 
-            onClick={isLoginMode ? switchToRegistration : () => setIsLoginMode(true)}
+            onClick={() => setIsLoginMode(!isLoginMode)}
           >
-            {isLoginMode ? 'Need an account? Sign up' : 'Already have an account? Sign in'}
+            {isLoginMode ? 'Need a coach account? Sign up' : 'Already have a coach account? Sign in'}
           </button>
         </div>
       </div>
@@ -314,4 +305,4 @@ const Login = ({ setIsAuthenticated }) => {
   )
 }
 
-export default Login 
+export default CoachLogin 

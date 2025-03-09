@@ -3,6 +3,8 @@
   --dark-surface: #1e1e1e;
   --blue-accent: #6e8efb;
   --blue-accent-hover: #4a6ef7;
+  --red-accent: #fb6e6e;
+  --red-accent-hover: #f74a4a;
   --text-primary: #ffffff;
   --text-secondary: rgba(255, 255, 255, 0.7);
   --gradient-blue: linear-gradient(90deg, #6e8efb, #7873f5);
@@ -156,6 +158,45 @@ html, body {
 }
 
 .athlete-portal-button:active {
+  transform: translateY(0);
+}
+
+
+
+.coach-portal-button {
+  background: transparent;
+  color: white;
+  border: 2px solid var(--red-accent);
+  border-radius: 25px;
+  padding: 0.75rem 1.5rem;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  height: 42px;
+  box-sizing: border-box;
+}
+
+.button-arrow {
+  transition: transform 0.3s ease;
+}
+
+.coach-portal-button:hover {
+  background: var(--red-accent);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(255, 3, 3, 0.4);
+}
+
+.coach-portal-button:hover .button-arrow {
+  transform: translateX(3px);
+}
+
+.coach-portal-buttonn:active {
   transform: translateY(0);
 }
 
@@ -842,7 +883,7 @@ footer {
     gap: 0.75rem;
   }
   
-  .pricing-button, .athlete-portal-button {
+  .pricing-button, .athlete-portal-button, .coach-portal-button {
     font-size: 0.9rem;
     padding: 0.6rem 1.2rem;
   }

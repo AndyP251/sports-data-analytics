@@ -77,6 +77,10 @@ const HomePage = () => {
     navigate('/pricing');
   };
 
+  const navigateToCoachPortal = () => {
+    navigate('/coach-portal');
+  };
+
   // Stats for counter animation
   const stats = [
     { label: 'Athletes', value: 5000, suffix: '+' },
@@ -201,6 +205,13 @@ const HomePage = () => {
           >
             Pricing
             <span className="button-arrow-hidden"></span>
+          </button>
+          <button 
+            className="coach-portal-button" 
+            onClick={navigateToCoachPortal}
+          >
+            Coach Portal
+            <span className="button-arrow">→</span>
           </button>
           <button 
             className="athlete-portal-button" 
@@ -414,6 +425,7 @@ const HomePage = () => {
             <a href="#integrations">Integrations</a>
             <a href="#testimonials">Testimonials</a>
             <a onClick={navigateToPricing}>Pricing</a>
+            <a onClick={navigateToCoachPortal}>Coach Portal</a>
             <a onClick={navigateToAthletePortal} className="footer-cta">Athlete Portal</a>
             <a onClick={navigateToPrivacyPolicy}>Privacy Policy</a>
           </div>

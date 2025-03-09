@@ -10,7 +10,10 @@ from .api_views.auth import (
     check_auth, login_view, register_view, 
     logout_view, get_data
 )
-from .views import dashboard_data, sync_biometric_data, get_biometric_data, get_current_user, activate_source, get_garmin_profiles, get_raw_biometric_data, active_sources, verify_dev_password, get_db_info, generate_insights, get_insight_categories, get_insight_trends, get_recommendations, submit_insight_feedback
+from .api_views.coach_auth import (
+    coach_login_view, coach_register_view, check_coach_auth
+)
+from .views import dashboard_data, sync_biometric_data, get_biometric_data, get_current_user, activate_source, get_garmin_profiles, get_raw_biometric_data, active_sources, verify_dev_password, get_db_info, generate_insights, get_insight_categories, get_insight_trends, get_recommendations, submit_insight_feedback, get_teams, get_team_athletes
 from .api_views.oauth import (
     WhoopOAuthView, WhoopCallbackView, WhoopWebhookView
 )
@@ -23,6 +26,17 @@ urlpatterns = [
     path('api/logout/', logout_view, name='logout'),
     path('api/check-auth/', check_auth, name='check_auth'),
     path('api/data/', get_data, name='get_data'),
+    
+    # Coach auth endpoints
+    path('api/coach-login/', coach_login_view, name='coach_login'),
+    path('api/coach-register/', coach_register_view, name='coach_register'),
+    path('api/check-coach-auth/', check_coach_auth, name='check_coach_auth'),
+    
+    # Team data
+    path('api/teams/', get_teams, name='get_teams'),
+    path('api/team-athletes/<str:team_id>/', get_team_athletes, name='get_team_athletes'),
+    
+    # Dashboard data
     path('api/dashboard/', dashboard_data, name='dashboard_data'),
     path('api/dashboard/data/', views.dashboard_data, name='dashboard_data'),
     path('api/biometrics/sync/', sync_biometric_data, name='sync_biometric_data'),

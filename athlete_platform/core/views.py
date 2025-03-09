@@ -4,7 +4,7 @@ from django.contrib.auth import login, logout
 from django.contrib import messages
 from .forms import CustomUserCreationForm
 from .utils.s3_utils import S3Utils
-from .models import Athlete, CoreBiometricData, create_biometric_data, get_athlete_biometrics
+from .models import Athlete, CoreBiometricData, create_biometric_data, get_athlete_biometrics, Team
 from django.http import JsonResponse
 from django.views.decorators.http import require_POST, require_http_methods
 from datetime import datetime
@@ -724,4 +724,76 @@ def submit_insight_feedback(request):
             'success': False,
             'error': str(e)
         }, status=500)
+
+def get_teams(request):
+    """
+    Returns a list of all teams for use in registration forms
+    """
+    teams = Team.objects.all().values('id', 'name')
+    return JsonResponse(list(teams), safe=False)
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_team_athletes(request, team_id):
+    """
+    Returns a list of athletes for a specific team
+    """
+    try:
+        # Check if user is a coach with access to this team
+        is_authorized = False
+        
+        # If user is a coach and has this team
+        try:
+            if hasattr(request.user, 'coach_profile'):
+                coach = request.user.coach_profile
+                if coach.team and str(coach.team.id) == team_id:
+                    is_authorized = True
+        except Exception as e:
+            logger.error(f"Error checking coach authorization: {e}")
+        
+        # If user is an admin
+        if request.user.is_staff or request.user.is_superuser:
+            is_authorized = True
+            
+        if not is_authorized:
+            return Response(
+                {"error": "Not authorized to view this team's athletes"}, 
+                status=403
+            )
+        
+        # Get the team
+        team = Team.objects.get(id=team_id)
+        
+        # Get all athletes for this team
+        athletes = Athlete.objects.filter(team=team)
+        
+        # Serialize athlete data
+        athlete_data = []
+        for athlete in athletes:
+            athlete_data.append({
+                'id': str(athlete.id),
+                'user': {
+                    'id': str(athlete.user.id),
+                    'username': athlete.user.username,
+                    'email': athlete.user.email
+                },
+                'position': athlete.position,
+                'jersey_number': athlete.jersey_number,
+                'height': float(athlete.height) if athlete.height else None,
+                'weight': float(athlete.weight) if athlete.weight else None
+            })
+        
+        return Response({
+            'team': {
+                'id': str(team.id),
+                'name': team.name
+            },
+            'athletes': athlete_data
+        })
+        
+    except Team.DoesNotExist:
+        return Response({"error": "Team not found"}, status=404)
+    except Exception as e:
+        logger.error(f"Error getting team athletes: {e}")
+        return Response({"error": f"Error retrieving team athletes: {str(e)}"}, status=500)
 

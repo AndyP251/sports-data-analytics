@@ -2,7 +2,7 @@ import logging
 import json
 import random
 from datetime import datetime, timedelta
-from typing import List, Dict, Any, Optional, Tuple
+from typing import List, Dict, Any, Optional, Tuple, Set
 import numpy as np
 from django.conf import settings
 from django.utils import timezone
@@ -67,6 +67,12 @@ class InsightGenerator:
     def __init__(self, athlete_id: str):
         self.athlete_id = athlete_id
         self.trends_cache = {}
+        self.source_capabilities = {
+            'whoop': ['recovery_score', 'hrv_ms', 'strain', 'sleep_efficiency', 'sleep_consistency', 'sleep_performance'],
+            'garmin': ['steps', 'distance_meters', 'active_calories', 'total_calories', 'floors_climbed', 'intensity_minutes']
+        }
+        # Fields tracked by both sources
+        self.common_fields = ['resting_heart_rate', 'sleep_hours', 'max_heart_rate', 'min_heart_rate']
     
     def get_data(self, days: int = 30, source: Optional[str] = None) -> List[Dict]:
         """Retrieve biometric data for the specified time period"""
@@ -302,9 +308,14 @@ class InsightGenerator:
             return []
         
         insights = []
+        garmin_data = [d for d in data if d.get('source', '').lower() == 'garmin']
+        
+        # Check if we have Garmin data to analyze
+        if not garmin_data:
+            return []
         
         # Steps analysis
-        steps_data = [d.get('steps', 0) for d in data if d.get('steps', 0) > 0]
+        steps_data = [d.get('steps', 0) for d in garmin_data if d.get('steps', 0) > 0]
         
         if steps_data:
             avg_steps = sum(steps_data) / len(steps_data)
@@ -314,38 +325,206 @@ class InsightGenerator:
                 insights.append({
                     'category': InsightCategory.ACTIVITY,
                     'title': 'Low Activity Level',
-                    'content': f"Your average of {int(avg_steps)} steps per day is below recommended levels for good health.",
+                    'content': f"Your average of {int(avg_steps):,} steps per day is below recommended levels for good health.",
                     'recommendation': "Try to increase daily movement with walking breaks, using stairs, or short walks during the day.",
                     'priority': 'high',
                     'trend': steps_trend,
                     'data_points': steps_data[-7:] if len(steps_data) >= 7 else steps_data,
-                    'visualization': 'bar'
+                    'visualization': 'bar',
+                    'source': 'garmin',
+                    'primary_metric': 'steps'
                 })
             elif avg_steps < 7500:
                 insights.append({
                     'category': InsightCategory.ACTIVITY,
                     'title': 'Moderate Activity Level',
-                    'content': f"Your average of {int(avg_steps)} steps per day indicates a somewhat active lifestyle.",
+                    'content': f"Your average of {int(avg_steps):,} steps per day indicates a somewhat active lifestyle.",
                     'recommendation': "For optimal health benefits, aim to increase to 10,000+ steps daily.",
                     'priority': 'medium',
                     'trend': steps_trend,
                     'data_points': steps_data[-7:] if len(steps_data) >= 7 else steps_data,
-                    'visualization': 'bar'
+                    'visualization': 'bar',
+                    'source': 'garmin',
+                    'primary_metric': 'steps'
                 })
             else:
                 insights.append({
                     'category': InsightCategory.ACTIVITY,
                     'title': 'Active Lifestyle',
-                    'content': f"Great job maintaining an average of {int(avg_steps)} steps per day, which supports good health.",
+                    'content': f"Great job maintaining an average of {int(avg_steps):,} steps per day, which supports good health.",
                     'recommendation': "Keep up this excellent activity level.",
                     'priority': 'low',
                     'trend': steps_trend,
                     'data_points': steps_data[-7:] if len(steps_data) >= 7 else steps_data,
-                    'visualization': 'bar'
+                    'visualization': 'bar',
+                    'source': 'garmin',
+                    'primary_metric': 'steps'
                 })
         
-        # Strain/workload analysis if available
-        strain_data = [d.get('strain', None) for d in data]
+        # Distance analysis
+        distance_data = [d.get('distance_meters', 0) for d in garmin_data if d.get('distance_meters', 0) > 0]
+        
+        if distance_data:
+            avg_distance_km = sum(distance_data) / len(distance_data) / 1000  # Convert to km
+            distance_trend = self._calculate_trend(distance_data)
+            
+            if avg_distance_km > 5:
+                insights.append({
+                    'category': InsightCategory.ACTIVITY,
+                    'title': 'Good Daily Distance',
+                    'content': f"You're covering an average of {avg_distance_km:.2f} km per day, which is a healthy amount of movement.",
+                    'recommendation': "Your daily distance is good for cardiovascular health. Consider adding variety in terrain or intensity for additional benefits.",
+                    'priority': 'low',
+                    'trend': distance_trend,
+                    'data_points': [d/1000 for d in distance_data[-7:]] if len(distance_data) >= 7 else [d/1000 for d in distance_data],  # Convert to km
+                    'visualization': 'line',
+                    'source': 'garmin',
+                    'primary_metric': 'distance_meters'
+                })
+            elif avg_distance_km > 2:
+                insights.append({
+                    'category': InsightCategory.ACTIVITY,
+                    'title': 'Moderate Daily Distance',
+                    'content': f"You're covering an average of {avg_distance_km:.2f} km per day, which provides some health benefits.",
+                    'recommendation': "Try to gradually increase your daily distance for improved cardiovascular health.",
+                    'priority': 'medium',
+                    'trend': distance_trend,
+                    'data_points': [d/1000 for d in distance_data[-7:]] if len(distance_data) >= 7 else [d/1000 for d in distance_data],
+                    'visualization': 'line',
+                    'source': 'garmin',
+                    'primary_metric': 'distance_meters'
+                })
+        
+        # Calories analysis
+        active_calories = [d.get('active_calories', 0) for d in garmin_data if d.get('active_calories', 0) > 0]
+        
+        if active_calories:
+            avg_active_calories = sum(active_calories) / len(active_calories)
+            calories_trend = self._calculate_trend(active_calories)
+            
+            if avg_active_calories > 500:
+                insights.append({
+                    'category': InsightCategory.ACTIVITY,
+                    'title': 'Good Calorie Burn',
+                    'content': f"You're burning an average of {int(avg_active_calories)} active calories daily, which indicates a good level of physical activity.",
+                    'recommendation': "This calorie burn supports weight management and cardiovascular health. Keep up the good work!",
+                    'priority': 'low',
+                    'trend': calories_trend,
+                    'data_points': active_calories[-7:] if len(active_calories) >= 7 else active_calories,
+                    'visualization': 'bar',
+                    'source': 'garmin',
+                    'primary_metric': 'active_calories'
+                })
+            elif avg_active_calories > 300:
+                insights.append({
+                    'category': InsightCategory.ACTIVITY,
+                    'title': 'Moderate Calorie Burn',
+                    'content': f"You're burning an average of {int(avg_active_calories)} active calories daily, which provides some health benefits.",
+                    'recommendation': "Consider adding more intensity to your activities to increase calorie burn and fitness benefits.",
+                    'priority': 'medium',
+                    'trend': calories_trend,
+                    'data_points': active_calories[-7:] if len(active_calories) >= 7 else active_calories,
+                    'visualization': 'bar',
+                    'source': 'garmin',
+                    'primary_metric': 'active_calories'
+                })
+            else:
+                insights.append({
+                    'category': InsightCategory.ACTIVITY,
+                    'title': 'Low Calorie Burn',
+                    'content': f"You're burning an average of {int(avg_active_calories)} active calories daily, which is on the lower side.",
+                    'recommendation': "Try to increase your physical activity level to boost calorie burn and overall fitness.",
+                    'priority': 'high',
+                    'trend': calories_trend,
+                    'data_points': active_calories[-7:] if len(active_calories) >= 7 else active_calories,
+                    'visualization': 'bar',
+                    'source': 'garmin',
+                    'primary_metric': 'active_calories'
+                })
+        
+        # Intensity minutes analysis
+        intensity_data = [d.get('intensity_minutes', 0) for d in garmin_data if 'intensity_minutes' in d]
+        
+        if intensity_data:
+            avg_intensity = sum(intensity_data) / len(intensity_data)
+            intensity_trend = self._calculate_trend(intensity_data)
+            
+            if avg_intensity >= 30:
+                insights.append({
+                    'category': InsightCategory.ACTIVITY,
+                    'title': 'Meeting Intensity Guidelines',
+                    'content': f"You're averaging {int(avg_intensity)} minutes of moderate-to-vigorous activity daily, which meets health guidelines.",
+                    'recommendation': "You're meeting the recommended 150+ minutes of moderate activity per week. Great job maintaining this healthy habit!",
+                    'priority': 'low',
+                    'trend': intensity_trend,
+                    'data_points': intensity_data[-7:] if len(intensity_data) >= 7 else intensity_data,
+                    'visualization': 'bar',
+                    'source': 'garmin',
+                    'primary_metric': 'intensity_minutes'
+                })
+            elif avg_intensity >= 15:
+                insights.append({
+                    'category': InsightCategory.ACTIVITY,
+                    'title': 'Approaching Intensity Guidelines',
+                    'content': f"You're averaging {int(avg_intensity)} minutes of moderate-to-vigorous activity daily.",
+                    'recommendation': "You're getting close to the recommended 150+ minutes per week. Try to add a few more minutes of moderate activity each day.",
+                    'priority': 'medium',
+                    'trend': intensity_trend,
+                    'data_points': intensity_data[-7:] if len(intensity_data) >= 7 else intensity_data,
+                    'visualization': 'bar',
+                    'source': 'garmin',
+                    'primary_metric': 'intensity_minutes'
+                })
+            else:
+                insights.append({
+                    'category': InsightCategory.ACTIVITY,
+                    'title': 'Below Intensity Guidelines',
+                    'content': f"You're averaging only {int(avg_intensity)} minutes of moderate-to-vigorous activity daily.",
+                    'recommendation': "Health guidelines recommend at least 150 minutes of moderate activity per week. Try to increase your daily intensity minutes.",
+                    'priority': 'high',
+                    'trend': intensity_trend,
+                    'data_points': intensity_data[-7:] if len(intensity_data) >= 7 else intensity_data,
+                    'visualization': 'bar',
+                    'source': 'garmin',
+                    'primary_metric': 'intensity_minutes'
+                })
+        
+        # Floors climbed analysis if available
+        floors_data = [d.get('floors_climbed', 0) for d in garmin_data if d.get('floors_climbed', 0) > 0]
+        
+        if floors_data:
+            avg_floors = sum(floors_data) / len(floors_data)
+            floors_trend = self._calculate_trend(floors_data)
+            
+            if avg_floors >= 10:
+                insights.append({
+                    'category': InsightCategory.ACTIVITY,
+                    'title': 'Great Stair Activity',
+                    'content': f"You're climbing an average of {avg_floors:.1f} floors daily, which is excellent for leg strength and cardiovascular health.",
+                    'recommendation': "Climbing stairs is a great form of exercise. Keep up this healthy habit!",
+                    'priority': 'low',
+                    'trend': floors_trend,
+                    'data_points': floors_data[-7:] if len(floors_data) >= 7 else floors_data,
+                    'visualization': 'bar',
+                    'source': 'garmin',
+                    'primary_metric': 'floors_climbed'
+                })
+            elif avg_floors >= 5:
+                insights.append({
+                    'category': InsightCategory.ACTIVITY,
+                    'title': 'Good Stair Activity',
+                    'content': f"You're climbing an average of {avg_floors:.1f} floors daily, which provides good health benefits.",
+                    'recommendation': "Consider adding a few more flights of stairs throughout your day for additional cardiovascular benefits.",
+                    'priority': 'medium',
+                    'trend': floors_trend,
+                    'data_points': floors_data[-7:] if len(floors_data) >= 7 else floors_data,
+                    'visualization': 'bar',
+                    'source': 'garmin',
+                    'primary_metric': 'floors_climbed'
+                })
+        
+        # Strain/workload analysis if available (from WHOOP)
+        strain_data = [d.get('strain', None) for d in data if d.get('source', '').lower() == 'whoop']
         strain_data = [s for s in strain_data if s is not None]
         
         if strain_data:
@@ -361,7 +540,9 @@ class InsightGenerator:
                     'priority': 'medium',
                     'trend': strain_trend,
                     'data_points': strain_data[-7:] if len(strain_data) >= 7 else strain_data,
-                    'visualization': 'line'
+                    'visualization': 'line',
+                    'source': 'whoop',
+                    'primary_metric': 'strain'
                 })
             elif avg_strain < 14:
                 insights.append({
@@ -372,7 +553,9 @@ class InsightGenerator:
                     'priority': 'low',
                     'trend': strain_trend,
                     'data_points': strain_data[-7:] if len(strain_data) >= 7 else strain_data,
-                    'visualization': 'line'
+                    'visualization': 'line',
+                    'source': 'whoop',
+                    'primary_metric': 'strain'
                 })
             else:
                 insights.append({
@@ -383,7 +566,9 @@ class InsightGenerator:
                     'priority': 'high',
                     'trend': strain_trend,
                     'data_points': strain_data[-7:] if len(strain_data) >= 7 else strain_data,
-                    'visualization': 'line'
+                    'visualization': 'line',
+                    'source': 'whoop',
+                    'primary_metric': 'strain'
                 })
         
         return insights
@@ -535,6 +720,66 @@ class InsightGenerator:
         
         return insights
     
+    def get_insight_trends(self, data: Optional[List[Dict]] = None, days: int = 30, source: Optional[str] = None) -> Dict[str, Any]:
+        """Get trend information about key metrics"""
+        if data is None:
+            data = self.get_data(days, source)
+        
+        if not data:
+            return {}
+        
+        trends = {}
+        
+        # Determine which metrics to analyze based on the source
+        metrics_to_analyze = []
+        
+        # Get unique sources in the data
+        sources_in_data = set(item.get('source', '').lower() for item in data if item.get('source'))
+        
+        # Always include common metrics
+        metrics_to_analyze.extend(self.common_fields)
+        
+        # Add source-specific metrics if that source is present in the data
+        for src, metrics in self.source_capabilities.items():
+            if source == 'all' or src in sources_in_data:
+                metrics_to_analyze.extend(metrics)
+        
+        # Remove duplicates
+        metrics_to_analyze = list(set(metrics_to_analyze))
+        
+        for metric in metrics_to_analyze:
+            metric_data = [d.get(metric, None) for d in data]
+            metric_data = [m for m in metric_data if m is not None]
+            
+            if metric_data and len(metric_data) > 0:
+                trend_direction = self._calculate_trend(metric_data)
+                recent_avg = sum(metric_data[-min(7, len(metric_data)):]) / min(7, len(metric_data))
+                
+                # Only include metrics that have actual data
+                if recent_avg > 0 or metric in ['resting_heart_rate', 'min_heart_rate']:  # Some metrics like heart rate can be very low
+                    trends[metric] = {
+                        'trend': trend_direction,
+                        'recent_average': recent_avg,
+                        'data_points': metric_data[-14:] if len(metric_data) >= 14 else metric_data,
+                        'source': self._determine_data_source(metric, sources_in_data)
+                    }
+        
+        # Cache the trends for use in other functions
+        self.trends_cache = trends
+        
+        return trends
+    
+    def _determine_data_source(self, metric: str, sources: Set[str]) -> str:
+        """Determine which source likely provided this metric"""
+        if metric in self.common_fields:
+            return "multiple"
+            
+        for source, capabilities in self.source_capabilities.items():
+            if metric in capabilities and source in sources:
+                return source
+                
+        return "unknown"
+    
     def generate_all_insights(self, data: Optional[List[Dict]] = None, days: int = 30, source: Optional[str] = None) -> List[Dict]:
         """Generate all available insights for the athlete"""
         if data is None:
@@ -543,14 +788,25 @@ class InsightGenerator:
         if not data:
             return []
         
+        # Get the sources present in the data
+        sources_in_data = set(item.get('source', '').lower() for item in data if item.get('source'))
+        
         all_insights = []
         
-        # Run all analysis functions
+        # Always run analyses for common metrics
         all_insights.extend(self.analyze_sleep(data))
         all_insights.extend(self.analyze_cardiovascular(data))
-        all_insights.extend(self.analyze_activity(data))
-        all_insights.extend(self.analyze_recovery(data))
-        all_insights.extend(self.analyze_trends(data))
+        
+        # Run source-specific analyses only if we have that source's data
+        if 'whoop' in sources_in_data and (source == 'all' or source == 'whoop'):
+            all_insights.extend(self.analyze_recovery(data))
+            
+        if 'garmin' in sources_in_data and (source == 'all' or source == 'garmin'):
+            all_insights.extend(self.analyze_activity(data))
+            
+        # Trends analysis requires sufficient data points
+        if len(data) >= 10:  # Need sufficient data for trends
+            all_insights.extend(self.analyze_trends(data))
         
         # Sort insights by priority
         priority_map = {'high': 0, 'medium': 1, 'low': 2}
@@ -560,6 +816,12 @@ class InsightGenerator:
         for i, insight in enumerate(all_insights):
             insight['id'] = f"insight_{i}_{timezone.now().timestamp()}"
             insight['timestamp'] = timezone.now().isoformat()
+            # Add the source information if not already present
+            if 'source' not in insight:
+                insight['source'] = self._determine_data_source(
+                    insight.get('primary_metric', ''), 
+                    sources_in_data
+                )
         
         return all_insights
     
@@ -585,41 +847,6 @@ class InsightGenerator:
             recommendations.append(recommendation)
         
         return recommendations
-    
-    def get_insight_trends(self, data: Optional[List[Dict]] = None, days: int = 30, source: Optional[str] = None) -> Dict[str, Any]:
-        """Get trend information about key metrics"""
-        if data is None:
-            data = self.get_data(days, source)
-        
-        if not data:
-            return {}
-        
-        trends = {}
-        
-        # Key metrics to track
-        metrics = [
-            'resting_heart_rate', 'hrv_ms', 'sleep_hours', 'recovery_score',
-            'strain', 'steps', 'sleep_efficiency'
-        ]
-        
-        for metric in metrics:
-            metric_data = [d.get(metric, None) for d in data]
-            metric_data = [m for m in metric_data if m is not None]
-            
-            if metric_data:
-                trend_direction = self._calculate_trend(metric_data)
-                recent_avg = sum(metric_data[-min(7, len(metric_data)):]) / min(7, len(metric_data))
-                
-                trends[metric] = {
-                    'trend': trend_direction,
-                    'recent_average': recent_avg,
-                    'data_points': metric_data[-14:] if len(metric_data) >= 14 else metric_data
-                }
-        
-        # Cache the trends for use in other functions
-        self.trends_cache = trends
-        
-        return trends
     
     def _calculate_trend(self, data_points: List[float]) -> str:
         """

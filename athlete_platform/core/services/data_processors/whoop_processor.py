@@ -13,6 +13,8 @@ import json
 
 logger = logging.getLogger(__name__)
 
+DEBUG_MODE = False
+
 class WhoopProcessor(BaseDataProcessor):
     """Processor for Whoop data"""
     
@@ -32,20 +34,23 @@ class WhoopProcessor(BaseDataProcessor):
             return self.s3_utils.check_data_freshness(self.base_path, date_range)
             
         except Exception as e:
-            logger.error(f"[WHOOP] Error checking S3 freshness: {e}")
+            if DEBUG_MODE:
+                logger.error(f"[WHOOP] Error checking S3 freshness: {e}")
             return False
     
     def process_raw_data(self, raw_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """Process raw Whoop data into standardized format"""
         try:
             if not raw_data:
-                logger.error("[WHOOP] No raw data to process")
+                if DEBUG_MODE:
+                    logger.error("[WHOOP] No raw data to process")
                 return None
             
             # Extract daily stats from raw data
             daily_stats = raw_data.get('daily_stats', {})
             if not daily_stats:
-                logger.error("[WHOOP] No daily stats found in raw data")
+                if DEBUG_MODE:
+                    logger.error("[WHOOP] No daily stats found in raw data")
                 return None
             
             # Extract data components safely
@@ -143,11 +148,13 @@ class WhoopProcessor(BaseDataProcessor):
                 'respiratory_rate': processed_data['respiratory_rate']
             }
             
-            logger.info(f"[WHOOP] Successfully processed raw data for {processed_data.get('date')}")
+            if DEBUG_MODE:
+                logger.info(f"[WHOOP] Successfully processed raw data for {processed_data.get('date')}")
             return processed_data
             
         except Exception as e:
-            logger.error(f"[WHOOP] Error processing raw data: {e}", exc_info=True)
+            if DEBUG_MODE:
+                logger.error(f"[WHOOP] Error processing raw data: {e}", exc_info=True)
             return None
     
     
@@ -161,12 +168,14 @@ class WhoopProcessor(BaseDataProcessor):
         # Only validate the existence of these fields, not their values
         for field in required_fields:
             if field not in processed_data:
-                logger.error(f"[WHOOP] Missing required field: {field}")
+                if DEBUG_MODE:
+                    logger.error(f"[WHOOP] Missing required field: {field}")
                 return False
                 
         # Ensure metrics dictionary exists
         if 'metrics' not in processed_data:
-            logger.error("[WHOOP] Missing metrics dictionary")
+            if DEBUG_MODE:
+                logger.error("[WHOOP] Missing metrics dictionary")
             return False
             
         return True
@@ -175,17 +184,21 @@ class WhoopProcessor(BaseDataProcessor):
         """Store processed data in CoreBiometricData model"""
         try:
             if not processed_data:
-                logger.warning(f"[WHOOP] No processed data to store for date {date_value}")
+                if DEBUG_MODE:
+                    logger.warning(f"[WHOOP] No processed data to store for date {date_value}")
                 return None
             
-            logger.info(f"[WHOOP] Storing processed data for {self.athlete.user.username} on {date_value}")
+            if DEBUG_MODE:
+                logger.info(f"[WHOOP] Storing processed data for {self.athlete.user.username} on {date_value}")
             if date_value is None:
-                logger.warning(f"[WHOOP] No date value provided for {self.athlete.user.username}, defaulting to current date")
+                if DEBUG_MODE:
+                    logger.warning(f"[WHOOP] No date value provided for {self.athlete.user.username}, defaulting to current date")
                 date_value = str(datetime.now())
 
             # Convert date to string if it's a datetime or date object
             if isinstance(date_value, (datetime, date)):
-                logger.info(f"[WHOOP] Converting date to string: {date_value} in store_processed_data of whoop_processor.py")
+                if DEBUG_MODE:
+                    logger.info(f"[WHOOP] Converting date to string: {date_value} in store_processed_data of whoop_processor.py")
                 date_str = date_value.isoformat().split('T')[0]  # Get just the date part
             else:
                 date_str = str(date_value)
@@ -232,20 +245,24 @@ class WhoopProcessor(BaseDataProcessor):
             }
             
             # Log the fields for debugging
-            logger.debug(f"Field values for storage: {fields_map}")
+            if DEBUG_MODE:
+                logger.debug(f"Field values for storage: {fields_map}")
             
             # Store the data
             bio_data, created = CoreBiometricData.objects.update_or_create(
                 athlete=self.athlete,
-                date=date_str,  # Use the converted date string
+                date=date_str,
+                source='whoop',  # Include source in the lookup criteria
                 defaults=fields_map
             )
             
-            logger.info(f"[WHOOP] Successfully stored data for {date_str}, record {'created' if created else 'updated'}")
+            if DEBUG_MODE:
+                logger.info(f"[WHOOP] Successfully stored data for {date_str}, record {'created' if created else 'updated'}")
             return bio_data
             
         except Exception as e:
-            logger.error(f"[WHOOP] Error storing processed data: {e}", exc_info=True)
+            if DEBUG_MODE:
+                logger.error(f"[WHOOP] Error storing processed data: {e}", exc_info=True)
             return None
     
     def _get_from_db(self, date_range: List[date]) -> Optional[List[Dict[str, Any]]]:
@@ -279,7 +296,8 @@ class WhoopProcessor(BaseDataProcessor):
             } for item in data]
             
         except Exception as e:
-            logger.error(f"[WHOOP] Error getting data from DB: {e}")
+            if DEBUG_MODE:
+                logger.error(f"[WHOOP] Error getting data from DB: {e}")
             return None
     
     def _get_from_s3(self, date_range: List[date]) -> Optional[List[Dict[str, Any]]]:
@@ -295,7 +313,8 @@ class WhoopProcessor(BaseDataProcessor):
             return data if data else None
             
         except Exception as e:
-            logger.error(f"[WHOOP] Error getting data from S3: {e}")
+            if DEBUG_MODE:
+                logger.error(f"[WHOOP] Error getting data from S3: {e}")
             return None
     
     def _get_from_api(self, date_range: List[date]) -> Optional[List[Dict[str, Any]]]:
@@ -314,7 +333,11 @@ class WhoopProcessor(BaseDataProcessor):
     def sync_data(self, start_date: Optional[date] = None, end_date: Optional[date] = None, force_refresh: bool = False) -> bool:
         """Simple WHOOP data sync that fetches from API and stores in S3"""
         try:
-            logger.info(f"[WHOOP] Starting data sync for athlete {self.athlete.user.username}")
+            # Always log this one regardless of DEBUG_MODE
+            logger.info(f"[WHOOP] collecting data for athlete {self.athlete.user.username}")
+            
+            if DEBUG_MODE:
+                logger.info(f"[WHOOP] Starting data sync for athlete {self.athlete.user.username}")
             
             # Use today if no dates provided
             if not start_date:
@@ -322,53 +345,137 @@ class WhoopProcessor(BaseDataProcessor):
             if not end_date:
                 end_date = date.today()
                 
-            logger.info(f"[WHOOP] Fetching data from {start_date} to {end_date}")
+            if DEBUG_MODE:
+                logger.info(f"[WHOOP] Fetching data from {start_date} to {end_date}")
 
-            # Get data from API using collector
-            if not self.collector.authenticate():
-                logger.error("[WHOOP] Failed to authenticate with API")
-                return False
-                
-            raw_data = self.collector.collect_data(start_date, end_date)
+            # Generate list of dates in the range
+            date_range = [start_date + timedelta(days=x) for x in range((end_date - start_date).days + 1)]
             
-            if not raw_data:
-                logger.warning("[WHOOP] No data retrieved from API")
-                return False
-
-            # Store each day's raw data in S3 and process for DB
-            success = True
-            for daily_data in raw_data:
-                try:
-                    # Store raw data in S3
-                    current_date = datetime.strptime(daily_data['date'], '%Y-%m-%d').date()
+            # Track which dates we need data for
+            missing_dates = date_range.copy()
+            all_data = []
+            
+            # First check S3 for data unless force refresh is True
+            if not force_refresh:
+                if DEBUG_MODE:
+                    logger.info("[WHOOP] Checking S3 for existing data")
+                s3_data = self._get_from_s3(date_range)
+                
+                if s3_data:
+                    all_data.extend(s3_data)
+                    # Remove dates we already have data for
+                    for daily_data in s3_data:
+                        try:
+                            current_date = datetime.strptime(daily_data['date'], '%Y-%m-%d').date()
+                            if current_date in missing_dates:
+                                missing_dates.remove(current_date)
+                        except (KeyError, ValueError) as e:
+                            if DEBUG_MODE:
+                                logger.warning(f"[WHOOP] Error processing S3 data date: {e}")
+                
+                # If we still have missing dates, check the database
+                if missing_dates and not force_refresh:
+                    if DEBUG_MODE:
+                        logger.info("[WHOOP] Checking database for remaining dates")
+                    db_data = self._get_from_db(missing_dates)
                     
-                    logger.info(f"[WHOOP] Storing raw data in S3 for {current_date}")
-                    self.s3_utils.store_json_data(
-                        self.base_path, 
-                        f"{current_date.strftime('%Y-%m-%d')}_raw.json",
-                        daily_data
-                    )
+                    if db_data:
+                        all_data.extend(db_data)
+                        # Remove dates we got from the database
+                        for daily_data in db_data:
+                            try:
+                                if isinstance(daily_data.get('date'), date):
+                                    current_date = daily_data['date']
+                                else:
+                                    current_date = datetime.strptime(daily_data['date'], '%Y-%m-%d').date()
+                                if current_date in missing_dates:
+                                    missing_dates.remove(current_date)
+                            except (KeyError, ValueError) as e:
+                                if DEBUG_MODE:
+                                    logger.warning(f"[WHOOP] Error processing DB data date: {e}")
+            
+            # If we still have missing dates, or force refresh is True, use the API
+            if missing_dates or force_refresh:
+                # Get data from API using collector
+                if not self.collector.authenticate():
+                    if DEBUG_MODE:
+                        logger.error("[WHOOP] Failed to authenticate with API")
+                    return False
+                
+                # If force_refresh, we need all dates; otherwise, just the missing ones
+                api_start_date = start_date if force_refresh else min(missing_dates)
+                api_end_date = end_date if force_refresh else max(missing_dates)
+                
+                if DEBUG_MODE:
+                    logger.info(f"[WHOOP] Fetching data from API for dates {api_start_date} to {api_end_date}")
+                raw_data = self.collector.collect_data(api_start_date, api_end_date)
+                
+                if not raw_data:
+                    if DEBUG_MODE:
+                        logger.warning("[WHOOP] No data retrieved from API")
+                    # If we have some data from S3 or DB, continue processing that
+                    if not all_data:
+                        return False
+                else:
+                    # Add API data to our collection
+                    for daily_data in raw_data:
+                        # Store raw data in S3
+                        try:
+                            current_date = datetime.strptime(daily_data['date'], '%Y-%m-%d').date()
+                            
+                            # Always log this one regardless of DEBUG_MODE
+                            logger.info(f"[WHOOP] collecting data for this day {current_date}")
+                            
+                            if DEBUG_MODE:
+                                logger.info(f"[WHOOP] Storing raw data in S3 for {current_date}")
+                            self.s3_utils.store_json_data(
+                                self.base_path, 
+                                f"{current_date.strftime('%Y-%m-%d')}_raw.json",
+                                daily_data
+                            )
+                            
+                            # Add to our all_data collection
+                            all_data.append(daily_data)
+                        except Exception as e:
+                            if DEBUG_MODE:
+                                logger.error(f"[WHOOP] Error storing raw data in S3: {e}", exc_info=True)
+
+            # Process and store all collected data
+            success = True
+            for daily_data in all_data:
+                try:
+                    # Get the date for this data
+                    if isinstance(daily_data.get('date'), date):
+                        current_date = daily_data['date']
+                    else:
+                        current_date = datetime.strptime(daily_data['date'], '%Y-%m-%d').date()
                     
                     # Process and store in database
                     processed_data = self.process_raw_data(daily_data)
                     if processed_data and self.validate_data(processed_data):
-                        logger.info(f"[WHOOP] Processed data: {processed_data}")
+                        if DEBUG_MODE:
+                            logger.info(f"[WHOOP] Processed data: {processed_data}")
                         if not self.store_processed_data(processed_data, current_date):
-                            logger.error(f"[WHOOP] Failed to store processed data for {current_date}")
+                            if DEBUG_MODE:
+                                logger.error(f"[WHOOP] Failed to store processed data for {current_date}")
                             success = False
                     else:
-                        logger.warning(f"[WHOOP] Invalid processed data for {current_date}")
+                        if DEBUG_MODE:
+                            logger.warning(f"[WHOOP] Invalid processed data for {current_date}")
                         success = False
                         
                 except Exception as e:
-                    logger.error(f"[WHOOP] Error processing data for {daily_data.get('date')}: {e}", exc_info=True)
+                    if DEBUG_MODE:
+                        logger.error(f"[WHOOP] Error processing data: {e}", exc_info=True)
                     success = False
 
-            logger.info(f"[WHOOP] data sync completed with status: {success}")
+            if DEBUG_MODE:
+                logger.info(f"[WHOOP] data sync completed with status: {success}")
             return success
 
         except Exception as e:
-            logger.error(f"[WHOOP] Error in data sync: {e}", exc_info=True)
+            if DEBUG_MODE:
+                logger.error(f"[WHOOP] Error in sync_data: {e}", exc_info=True)
             return False
 
     def store_raw_data_in_s3(self, raw_data):
@@ -377,12 +484,14 @@ class WhoopProcessor(BaseDataProcessor):
             try:
                 current_date = datetime.strptime(daily_data['date'], '%Y-%m-%d').date()
                 
-                logger.info(f"[WHOOP] Storing data in S3 for {current_date}")
+                if DEBUG_MODE:
+                    logger.info(f"[WHOOP] Storing data in S3 for {current_date}")
                 self.s3_utils.store_json_data(
                     self.base_path, 
                     f"{current_date.strftime('%Y-%m-%d')}_raw.json",
                     daily_data
                 )
             except Exception as e:
-                logger.error(f"[WHOOP] Error storing data in S3 for {daily_data.get('date')}: {e}")
+                if DEBUG_MODE:
+                    logger.error(f"[WHOOP] Error storing data in S3 for {daily_data.get('date')}: {e}")
                 continue 

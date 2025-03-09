@@ -10,7 +10,7 @@ from .api_views.auth import (
     check_auth, login_view, register_view, 
     logout_view, get_data
 )
-from .views import dashboard_data, sync_biometric_data, get_biometric_data, get_current_user, activate_source, get_garmin_profiles, get_raw_biometric_data, active_sources, verify_dev_password
+from .views import dashboard_data, sync_biometric_data, get_biometric_data, get_current_user, activate_source, get_garmin_profiles, get_raw_biometric_data, active_sources, verify_dev_password, get_db_info
 from .api_views.oauth import (
     WhoopOAuthView, WhoopCallbackView, WhoopWebhookView
 )
@@ -34,6 +34,7 @@ urlpatterns = [
     path('api/biometrics/raw/', get_raw_biometric_data, name='raw-biometric-data'),
     path('api/biometrics/active-sources/', active_sources, name='active_sources'),
     path('api/verify-dev-password/', verify_dev_password, name='verify-dev-password'),
+    path('api/biometrics/db-info/', get_db_info, name='get_db_info'), #DEBUGGING ENDPOINT
     
 
     

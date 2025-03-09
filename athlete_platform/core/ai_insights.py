@@ -6,7 +6,7 @@ from typing import List, Dict, Any, Optional, Tuple
 import numpy as np
 from django.conf import settings
 from django.utils import timezone
-from .models import CoreBiometricData, CoreAthlete
+from .models import CoreBiometricData, User
 
 # Configure logging
 logger = logging.getLogger(__name__)

@@ -1,6 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import '../styles/HomePage.css';
+import whoopLogo from '../assets/whoop-black-puck.png';
+import catapultLogo from '../assets/catapult-black-square.png';
+import garminLogo from '../assets/garmin-white-text.png';
+
 
 const HomePage = () => {
   const navigate = useNavigate();
@@ -85,17 +89,46 @@ const HomePage = () => {
   const integrations = [
     { 
       name: 'Whoop', 
-      logo: '⚡', 
+      logo: <img 
+        src={whoopLogo} 
+        alt="WHOOP"
+        style={{
+          width: '80px',
+          height: '80px',
+          objectFit: 'contain',
+          filter: 'brightness(1)'
+        }}
+      />, 
       description: 'Recovery optimization and sleep tracking'
     },
     { 
       name: 'Catapult', 
-      logo: '📊', 
+      logo: <img 
+        src={catapultLogo} 
+        alt="Catapult"
+        style={{
+          width: '80px',
+          height: '80px',
+          objectFit: 'cover',
+          borderRadius: '50%',
+          backgroundColor: 'transparent',
+        }}
+      />,
       description: 'Advanced GPS performance tracking'
     },
     { 
       name: 'Garmin', 
-      logo: '⌚', 
+      logo: <img 
+        src={garminLogo} 
+        alt="Garmin"
+        style={{
+          width: '189px', // Wider to accommodate the text
+          height: '50px', // Shorter height for proper proportions
+          objectFit: 'contain',
+          filter: 'brightness(1)',
+          margin: '20px 0', // Add vertical margin to center in the space
+        }}
+      />,
       description: 'Comprehensive fitness data collection'
     },
     { 

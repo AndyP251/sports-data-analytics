@@ -15,6 +15,7 @@ import logging
 from django.db import transaction
 from django.contrib.auth.signals import user_logged_in
 from django.dispatch import receiver
+import random
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +37,36 @@ class User(AbstractUser):
     phone_number = models.CharField(max_length=15, blank=True, null=True)
     date_of_birth = models.DateField(null=True, blank=True)
     profile_image = models.ImageField(upload_to='profile_images/', null=True, blank=True)
+    
+    # Direct team association and position
+    team = models.ForeignKey(
+        'Team', 
+        on_delete=models.SET_NULL, 
+        null=True, 
+        blank=True, 
+        related_name='team_users'
+    )
+    
+    POSITION_CHOICES = [
+        ('FORWARD', 'Forward'),
+        ('MIDFIELDER', 'Midfielder'),
+        ('DEFENDER', 'Defender'),
+        ('GOALKEEPER', 'Goalkeeper'),
+        ('', 'Not Specified'),
+    ]
+    position = models.CharField(
+        max_length=20, 
+        choices=POSITION_CHOICES, 
+        blank=True, 
+        default='', 
+        help_text="Position for athletes"
+    )
+    
+    # Data permissions level
+    data_permissions = models.IntegerField(
+        default=1,
+        help_text="Level of data access permissions (higher = more access)"
+    )
     
     # New fields for tracking active sources
     active_data_sources = models.JSONField(
@@ -130,6 +161,138 @@ class Team(models.Model):
 
     def __str__(self):
         return self.name
+
+class CoachCode(models.Model):
+    """
+    Model for coach invitation codes. Each code is 6 unique hex characters and serves as a primary key.
+    Codes are used during coach registration to validate access.
+    """
+    code = models.CharField(
+        primary_key=True,
+        max_length=6,
+        help_text="Unique 6-character hexadecimal code for coach registration"
+    )
+    team = models.ForeignKey(
+        Team, 
+        on_delete=models.CASCADE, 
+        related_name='coach_codes',
+        help_text="Team this coach code is associated with"
+    )
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='created_coach_codes',
+        help_text="User who created this coach code"
+    )
+    is_used = models.BooleanField(default=False, help_text="Whether this code has been used")
+    created_at = models.DateTimeField(default=timezone.now)
+    expires_at = models.DateTimeField(help_text="When this code expires")
+
+    def __str__(self):
+        return f"Coach Code {self.code} for {self.team.name}"
+
+    def save(self, *args, **kwargs):
+        # Generate a random 6-character hex code if not provided
+        if not self.code:
+            self.code = ''.join(random.choice('0123456789ABCDEF') for _ in range(6))
+        
+        # Set expiration date to 7 days from creation if not provided
+        if not self.expires_at:
+            self.expires_at = timezone.now() + timezone.timedelta(days=7)
+            
+        super().save(*args, **kwargs)
+
+    class Meta:
+        db_table = 'core_coach_code'
+
+class Coach(models.Model):
+    """
+    Model for coaches containing additional coach-specific information
+    """
+    id = models.UUIDField(
+        primary_key=True,
+        default=uuid.uuid4,
+        editable=False,
+        help_text="Unique identifier for the coach"
+    )
+    user = models.OneToOneField(
+        User, 
+        on_delete=models.CASCADE,
+        related_name='coach_profile',
+        help_text="User account associated with this coach"
+    )
+    team = models.ForeignKey(
+        Team,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='team_coaches',
+        help_text="Primary team this coach is associated with"
+    )
+    athletes = models.ManyToManyField(
+        'Athlete',
+        related_name='coaches',
+        blank=True,
+        help_text="Athletes coached by this coach"
+    )
+    
+    # Coach permissions
+    can_view_athlete_data = models.BooleanField(
+        default=True,
+        help_text="Whether this coach can view athlete data"
+    )
+    can_edit_athlete_profiles = models.BooleanField(
+        default=False,
+        help_text="Whether this coach can edit athlete profiles"
+    )
+    can_create_training_plans = models.BooleanField(
+        default=True,
+        help_text="Whether this coach can create training plans"
+    )
+    can_invite_athletes = models.BooleanField(
+        default=False,
+        help_text="Whether this coach can invite athletes to the platform"
+    )
+    can_invite_coaches = models.BooleanField(
+        default=False,
+        help_text="Whether this coach can invite other coaches"
+    )
+    
+    # Coach metadata
+    specialization = models.CharField(
+        max_length=100,
+        blank=True,
+        help_text="Coach's area of specialization (e.g., 'Strength and Conditioning')"
+    )
+    bio = models.TextField(
+        blank=True,
+        help_text="Coach's biographical information"
+    )
+    coaching_experience_years = models.IntegerField(
+        default=0,
+        help_text="Years of coaching experience"
+    )
+    certifications = models.JSONField(
+        default=list,
+        help_text="List of coaching certifications"
+    )
+    registration_code_used = models.ForeignKey(
+        CoachCode,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='registered_coach',
+        help_text="Coach code used during registration"
+    )
+    created_at = models.DateTimeField(default=timezone.now)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"Coach {self.user.username} - {self.team.name if self.team else 'No Team'}"
+
+    class Meta:
+        db_table = 'core_coach'
+        verbose_name_plural = 'Coaches'
 
 class Athlete(models.Model):
     id = models.UUIDField(

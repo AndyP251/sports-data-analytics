@@ -26,11 +26,15 @@ const Login = ({ setIsAuthenticated }) => {
     password: '',
     email: '',
     confirmPassword: '',
+    team: '',
+    position: 'FORWARD', // Default position
   })
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
   const [csrfToken, setCsrfToken] = useState('')
   const [csrfStatus, setCsrfStatus] = useState('loading')
+  const [teams, setTeams] = useState([])
+  const [loadingTeams, setLoadingTeams] = useState(false)
 
   useEffect(() => {
     // Get CSRF token on component mount
@@ -61,7 +65,34 @@ const Login = ({ setIsAuthenticated }) => {
     }
 
     getCsrfToken()
-  }, [])
+    
+    // Fetch teams if in registration mode
+    if (!isLoginMode) {
+      fetchTeams()
+    }
+  }, [isLoginMode])
+  
+  // Function to fetch available teams
+  const fetchTeams = async () => {
+    try {
+      setLoadingTeams(true)
+      const response = await fetch('/api/teams/', {
+        method: 'GET',
+        credentials: 'include',
+      })
+      
+      if (!response.ok) {
+        throw new Error('Failed to fetch teams')
+      }
+      
+      const data = await response.json()
+      setTeams(data)
+    } catch (error) {
+      console.error('Error fetching teams:', error)
+    } finally {
+      setLoadingTeams(false)
+    }
+  }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -92,7 +123,9 @@ const Login = ({ setIsAuthenticated }) => {
       } : {
         username: formData.username,
         password: formData.password,
-        email: formData.email
+        email: formData.email,
+        team_id: formData.team || null,
+        position: formData.position || 'FORWARD'
       }
 
       const response = await fetch(`/api/${endpoint}/`, {
@@ -117,6 +150,8 @@ const Login = ({ setIsAuthenticated }) => {
             password: '',
             email: '',
             confirmPassword: '',
+            team: '',
+            position: 'FORWARD',
           })
 
           // Fetch a fresh CSRF token after registration
@@ -161,6 +196,12 @@ const Login = ({ setIsAuthenticated }) => {
     }
   }
 
+  // Add switch to registration mode which triggers team fetch
+  const switchToRegistration = () => {
+    setIsLoginMode(false)
+    fetchTeams()
+  }
+
   return (
     <div className="auth-page">
       <div className="auth-container">
@@ -175,7 +216,7 @@ const Login = ({ setIsAuthenticated }) => {
           </div>
           {error && <div className="error-message">{error}</div>}
           {success && <div className="success-message">{success}</div>}
-          <form onSubmit={handleSubmit} className="auth-form">
+          <form onSubmit={handleSubmit} className="auth-form" style={{ marginBottom: '20px' }}>
             <div className="form-group">
               <label>Username</label>
               <input
@@ -209,16 +250,46 @@ const Login = ({ setIsAuthenticated }) => {
               />
             </div>
             {!isLoginMode && (
-              <div className="form-group">
-                <label>Confirm Password</label>
-                <input
-                  type="password"
-                  value={formData.confirmPassword}
-                  onChange={(e) => setFormData({...formData, confirmPassword: e.target.value})}
-                  placeholder="Confirm your password"
-                  className="auth-input"
-                />
-              </div>
+              <>
+                <div className="form-group">
+                  <label>Confirm Password</label>
+                  <input
+                    type="password"
+                    value={formData.confirmPassword}
+                    onChange={(e) => setFormData({...formData, confirmPassword: e.target.value})}
+                    placeholder="Confirm your password"
+                    className="auth-input"
+                  />
+                </div>
+                <div className="form-group">
+                  <label>Team (Optional)</label>
+                  <select
+                    value={formData.team}
+                    onChange={(e) => setFormData({...formData, team: e.target.value})}
+                    className="auth-input"
+                    disabled={loadingTeams}
+                  >
+                    <option value="">Select a team (optional)</option>
+                    {teams.map(team => (
+                      <option key={team.id} value={team.id}>{team.name}</option>
+                    ))}
+                  </select>
+                  {loadingTeams && <div className="loading-indicator">Loading teams...</div>}
+                </div>
+                <div className="form-group">
+                  <label>Position</label>
+                  <select
+                    value={formData.position}
+                    onChange={(e) => setFormData({...formData, position: e.target.value})}
+                    className="auth-input"
+                  >
+                    <option value="FORWARD">Forward</option>
+                    <option value="MIDFIELDER">Midfielder</option>
+                    <option value="DEFENDER">Defender</option>
+                    <option value="GOALKEEPER">Goalkeeper</option>
+                  </select>
+                </div>
+              </>
             )}
             <button 
               type="submit" 
@@ -233,7 +304,7 @@ const Login = ({ setIsAuthenticated }) => {
           </form>
           <button 
             className="toggle-mode-button" 
-            onClick={() => setIsLoginMode(!isLoginMode)}
+            onClick={isLoginMode ? switchToRegistration : () => setIsLoginMode(true)}
           >
             {isLoginMode ? 'Need an account? Sign up' : 'Already have an account? Sign in'}
           </button>

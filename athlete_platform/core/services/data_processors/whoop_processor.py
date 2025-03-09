@@ -251,7 +251,8 @@ class WhoopProcessor(BaseDataProcessor):
             # Store the data
             bio_data, created = CoreBiometricData.objects.update_or_create(
                 athlete=self.athlete,
-                date=date_str,  # Use the converted date string
+                date=date_str,
+                source='whoop',  # Include source in the lookup criteria
                 defaults=fields_map
             )
             

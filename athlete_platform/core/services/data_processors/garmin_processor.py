@@ -101,54 +101,61 @@ class GarminProcessor(BaseDataProcessor):
 
                 if DEBUG_MODE:
                     logger.info(f"[GARMIN] Storing processed data for {current_date}, and doing sleep check, this is your sleep data: {metrics.get('total_sleep_seconds',0)}\n\n\n")
+                    logger.info(f"[GARMIN] Ensuring association with athlete ID: {self.athlete.id}")
 
+                # Create the defaults dictionary to maintain readability
+                defaults = {
+                    'total_sleep_seconds': self._safe_get(metrics, 'total_sleep_seconds', 0),
+                    'deep_sleep_seconds': self._safe_get(metrics, 'deep_sleep_seconds', 0),
+                    'light_sleep_seconds': self._safe_get(metrics, 'light_sleep_seconds', 0),
+                    'rem_sleep_seconds': self._safe_get(metrics, 'rem_sleep_seconds', 0),
+                    'awake_seconds': self._safe_get(metrics, 'awake_seconds', 0),
+                    'average_respiration': self._safe_get(metrics, 'average_respiration', 0),
+                    'lowest_respiration': self._safe_get(metrics, 'lowest_respiration', 0),
+                    'highest_respiration': self._safe_get(metrics, 'highest_respiration', 0),
+                    'body_battery_change': self._safe_get(metrics, 'body_battery_change', 0),
+                    'sleep_resting_heart_rate': self._safe_get(metrics, 'sleep_resting_heart_rate', 0),
+                    
+                    # Heart Rate Metrics
+                    'resting_heart_rate': self._safe_get(metrics, 'resting_heart_rate', 0),
+                    'max_heart_rate': self._safe_get(metrics, 'max_heart_rate', 0),
+                    'min_heart_rate': self._safe_get(metrics, 'min_heart_rate', 0),
+                    'last_seven_days_avg_resting_heart_rate': self._safe_get(metrics, 'last_seven_days_avg_resting_heart_rate', 0),
+                    
+                    # User Summary Metrics
+                    'total_calories': self._safe_get(metrics, 'total_calories', 0),
+                    'active_calories': self._safe_get(metrics, 'active_calories', 0),
+                    'total_steps': self._safe_get(metrics, 'total_steps', 0),
+                    'total_distance_meters': self._safe_get(metrics, 'total_distance_meters', 0),
+                    'bmr_calories': self._safe_get(metrics, 'bmr_calories', 0),
+                    'net_calorie_goal': self._safe_get(metrics, 'net_calorie_goal', 0),
+                    'daily_step_goal': self._safe_get(metrics, 'daily_step_goal', 0),
+                    'highly_active_seconds': self._safe_get(metrics, 'highly_active_seconds', 0),
+                    'sedentary_seconds': self._safe_get(metrics, 'sedentary_seconds', 0),
+
+                    # Stress Metrics
+                    'average_stress_level': self._safe_get(metrics, 'average_stress_level', 0),
+                    'max_stress_level': self._safe_get(metrics, 'max_stress_level', 0),
+                    'stress_duration_seconds': self._safe_get(metrics, 'stress_duration_seconds', 0),
+                    'rest_stress_duration': self._safe_get(metrics, 'rest_stress_duration', 0),
+                    'activity_stress_duration': self._safe_get(metrics, 'activity_stress_duration', 0),
+                    'low_stress_percentage': self._safe_get(metrics, 'low_stress_percentage', 0),
+                    'medium_stress_percentage': self._safe_get(metrics, 'medium_stress_percentage', 0),
+                    'high_stress_percentage': self._safe_get(metrics, 'high_stress_percentage', 0),
+                    
+                    # Metadata
+                    'created_at': self._safe_get(metrics, 'created_at', now),
+                    'updated_at': now,
+                    'source': 'garmin',
+                    'athlete': self.athlete,  # Explicitly ensure athlete is set in defaults
+                }
+
+                # Use get_or_create to ensure we don't create multiple records for same date/athlete
                 biometric_data, created = CoreBiometricData.objects.update_or_create(
                     athlete=self.athlete,
                     date=current_date,
-                    defaults={
-                        'total_sleep_seconds': self._safe_get(metrics, 'total_sleep_seconds', 0),
-                        'deep_sleep_seconds': self._safe_get(metrics, 'deep_sleep_seconds', 0),
-                        'light_sleep_seconds': self._safe_get(metrics, 'light_sleep_seconds', 0),
-                        'rem_sleep_seconds': self._safe_get(metrics, 'rem_sleep_seconds', 0),
-                        'awake_seconds': self._safe_get(metrics, 'awake_seconds', 0),
-                        'average_respiration': self._safe_get(metrics, 'average_respiration', 0),
-                        'lowest_respiration': self._safe_get(metrics, 'lowest_respiration', 0),
-                        'highest_respiration': self._safe_get(metrics, 'highest_respiration', 0),
-                        'body_battery_change': self._safe_get(metrics, 'body_battery_change', 0),
-                        'sleep_resting_heart_rate': self._safe_get(metrics, 'sleep_resting_heart_rate', 0),
-                        
-                        # Heart Rate Metrics
-                        'resting_heart_rate': self._safe_get(metrics, 'resting_heart_rate', 0),
-                        'max_heart_rate': self._safe_get(metrics, 'max_heart_rate', 0),
-                        'min_heart_rate': self._safe_get(metrics, 'min_heart_rate', 0),
-                        'last_seven_days_avg_resting_heart_rate': self._safe_get(metrics, 'last_seven_days_avg_resting_heart_rate', 0),
-                        
-                        # User Summary Metrics
-                        'total_calories': self._safe_get(metrics, 'total_calories', 0),
-                        'active_calories': self._safe_get(metrics, 'active_calories', 0),
-                        'total_steps': self._safe_get(metrics, 'total_steps', 0),
-                        'total_distance_meters': self._safe_get(metrics, 'total_distance_meters', 0),
-                        'bmr_calories': self._safe_get(metrics, 'bmr_calories', 0),
-                        'net_calorie_goal': self._safe_get(metrics, 'net_calorie_goal', 0),
-                        'daily_step_goal': self._safe_get(metrics, 'daily_step_goal', 0),
-                        'highly_active_seconds': self._safe_get(metrics, 'highly_active_seconds', 0),
-                        'sedentary_seconds': self._safe_get(metrics, 'sedentary_seconds', 0),
-
-                        # Stress Metrics
-                        'average_stress_level': self._safe_get(metrics, 'average_stress_level', 0),
-                        'max_stress_level': self._safe_get(metrics, 'max_stress_level', 0),
-                        'stress_duration_seconds': self._safe_get(metrics, 'stress_duration_seconds', 0),
-                        'rest_stress_duration': self._safe_get(metrics, 'rest_stress_duration', 0),
-                        'activity_stress_duration': self._safe_get(metrics, 'activity_stress_duration', 0),
-                        'low_stress_percentage': self._safe_get(metrics, 'low_stress_percentage', 0),
-                        'medium_stress_percentage': self._safe_get(metrics, 'medium_stress_percentage', 0),
-                        'high_stress_percentage': self._safe_get(metrics, 'high_stress_percentage', 0),
-                        
-                        # Metadata
-                        'created_at': self._safe_get(metrics, 'created_at', now),
-                        'updated_at': now,
-                        'source': 'garmin',
-                    }
+                    source='garmin',  # This is already included in the lookup
+                    defaults=defaults
                 )
                 
                 # 2) Store detailed time series data
@@ -160,8 +167,9 @@ class GarminProcessor(BaseDataProcessor):
                         'sleep_body_battery': self._safe_get(metrics, 'sleep_body_battery', []),
                     }
                 )
+            
             if DEBUG_MODE:
-                logger.info(f"[GARMIN] {'Created' if created else 'Updated'} DB record for date {current_date}")
+                logger.info(f"[GARMIN] {'Created' if created else 'Updated'} DB record for date {current_date}, athlete {self.athlete.id}")
             return True
                 
             
@@ -388,6 +396,10 @@ class GarminProcessor(BaseDataProcessor):
             else:
                 # Get what we already have in the database
                 db_data = self._get_from_db(date_range)
+                if db_data:
+                    logger.info(f"[GARMIN] Found {len(db_data)} records in database for athlete {self.athlete.id}")
+                else:
+                    logger.info(f"[GARMIN] No Garmin data found in database for athlete {self.athlete.id}")
                 
             # Determine what dates we need to get from S3
             if db_data and not force_refresh:
@@ -418,26 +430,34 @@ class GarminProcessor(BaseDataProcessor):
             if s3_data:
                 if DEBUG_MODE:
                     logger.info(f"[GARMIN] Processing {len(s3_data)} items from S3")
-                success = False
+                success_count = 0
+                failure_count = 0
+                
                 for item in s3_data:
                     item_date = item.get('date')
                     try:
                         # The item should already be transformed by _get_from_s3
                         if DEBUG_MODE:
-                            logger.info(f"[GARMIN] Storing S3 data for {item_date} into DB")
+                            logger.info(f"[GARMIN] Storing S3 data for {item_date} into DB for athlete {self.athlete.id}")
                         store_success = self.store_processed_data(item)
                         if store_success:
-                            success = True
+                            success_count += 1
                             if DEBUG_MODE:
                                 logger.info(f"[GARMIN] Successfully stored data for {item_date}")
-                        elif DEBUG_MODE:
-                            logger.error(f"[GARMIN] Failed to store data for {item_date}")
+                        else:
+                            failure_count += 1
+                            if DEBUG_MODE:
+                                logger.error(f"[GARMIN] Failed to store data for {item_date}")
                     except Exception as e:
+                        failure_count += 1
                         if DEBUG_MODE:
                             logger.error(f"[GARMIN] Error storing data for {item_date}: {str(e)}", exc_info=True)
                 
+                # Log detailed summary
+                logger.info(f"[GARMIN] Storage summary: {success_count} successes, {failure_count} failures out of {len(s3_data)} total items")
+                
                 # Return True if at least one item was successfully processed
-                return success
+                return success_count > 0
             else:
                 if DEBUG_MODE:
                     logger.warning(f"[GARMIN] No S3 data found or processed")
@@ -455,37 +475,48 @@ class GarminProcessor(BaseDataProcessor):
                         logger.info(f"[GARMIN] Successfully retrieved {len(api_data)} records from Garmin API")
                     
                     # Process and store API data
-                    success = False
+                    success_count = 0
+                    failure_count = 0
+                    
                     for raw_day in api_data:
                         try:
                             # Store raw data in S3 first
                             current_date = datetime.strptime(raw_day.get('date', ''), '%Y-%m-%d').date() if isinstance(raw_day.get('date'), str) else raw_day.get('date')
                             if current_date:
                                 self.s3_utils.store_json_data(self.base_path, 
-                                                            f"{current_date.strftime('%Y-%m-%d')}_raw.json",
-                                                            raw_day)
+                                                          f"{current_date.strftime('%Y-%m-%d')}_raw.json",
+                                                          raw_day)
                           
-                                # This is the exception log that should always show
-                                logger.info(f"[GARMIN] collecting data for this day {current_date}")
-                                
-                                if DEBUG_MODE:
-                                    logger.info(f"[GARMIN] Stored raw data in S3 at {self.base_path} for {current_date}")
+                            # This is the exception log that should always show
+                            logger.info(f"[GARMIN] collecting data for this day {current_date}")
                             
+                            if DEBUG_MODE:
+                                logger.info(f"[GARMIN] Stored raw data in S3 at {self.base_path} for {current_date}")
+                        
                             # Transform and store in DB
                             transformed = GarminTransformer.transform(raw_day)
                             if transformed:
                                 store_success = self.store_processed_data(transformed)
                                 if store_success:
-                                    success = True
+                                    success_count += 1
                                     if DEBUG_MODE:
                                         logger.info(f"[GARMIN] Successfully stored API data for {raw_day.get('date')}")
+                                else:
+                                    failure_count += 1
+                                    if DEBUG_MODE:
+                                        logger.error(f"[GARMIN] Failed to store API data for {raw_day.get('date')}")
                             elif DEBUG_MODE:
+                                failure_count += 1
                                 logger.error(f"[GARMIN] Failed to transform API data for {raw_day.get('date')}")
                         except Exception as e:
+                            failure_count += 1
                             if DEBUG_MODE:
                                 logger.error(f"[GARMIN] Error processing API data for {raw_day.get('date')}: {str(e)}", exc_info=True)
                     
-                    return success
+                    # Log detailed summary
+                    logger.info(f"[GARMIN] API storage summary: {success_count} successes, {failure_count} failures out of {len(api_data)} total items")
+                    
+                    return success_count > 0
                 except Exception as e:
                     if DEBUG_MODE:
                         logger.error(f"[GARMIN] Error in API fallback: {str(e)}", exc_info=True)

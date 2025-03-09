@@ -3,7 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import {
   LineChart, Line, AreaChart, Area, BarChart, Bar,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend,
-  ResponsiveContainer, RadialBarChart, RadialBar, ComposedChart
+  ResponsiveContainer, RadialBarChart, RadialBar, ComposedChart,
+  Cell // Add Cell import here
 } from 'recharts';
 import {
   Card, Grid, Typography, Box, Button,
@@ -279,6 +280,7 @@ const BiometricsDashboard = ({ username }) => {
     setDialogContent('');
   };
 
+  // Modify the fetchData function to include source-specific debugging
   const fetchData = async () => {
     if (loading) return;
     setLoading(true);
@@ -289,10 +291,22 @@ const BiometricsDashboard = ({ username }) => {
       // Request 30 days of data by default
       const days = 30;
       console.log(`Fetching biometric data for ${days} days...`);
+      
+      // Request all sources data first (for debugging)
       const response = await axios.get(`/api/biometrics/?days=${days}`);
       console.log('Raw biometrics data:', response.data);
 
-      // Check if we have any data
+      // Add debugging for source inspection
+      const sourcesInData = [...new Set(response.data.map(item => item.source))];
+      console.log('Sources available in API response:', sourcesInData);
+      
+      // Check for Garmin data specifically
+      const garminData = response.data.filter(item => 
+        (item.source || '').toLowerCase() === 'garmin'
+      );
+      console.log(`Found ${garminData.length} Garmin entries in API response`);
+      
+      // If we have active sources but no data, try to sync first before showing error
       if (!response.data || response.data.length === 0) {
         // If we have active sources but no data, try to sync first before showing error
         if (activeSources && activeSources.length > 0) {
@@ -474,7 +488,7 @@ const BiometricsDashboard = ({ username }) => {
       }
       return value;
     };
-
+    
     return data.map(item => {
       try {
         // Convert seconds to hours and handle null/undefined values
@@ -833,19 +847,68 @@ const BiometricsDashboard = ({ username }) => {
     fetchData();
   }, []);
 
+  // Also modify the useEffect that filters data based on selectedDataSource for better debugging
   useEffect(() => {
     if (biometricData.length > 0) {
+      // More detailed debugging of source values
+      console.log("Detailed source analysis:");
+      
+      const sourceValuesMap = {};
+        biometricData.forEach(item => {
+          const source = item.source || 'unknown';
+        if (!sourceValuesMap[source]) {
+          sourceValuesMap[source] = {
+            count: 1,
+            example: { 
+              date: item.date, 
+              source: item.source,
+              sourceType: typeof item.source,
+              hasGarminFields: !!(item.steps || item.body_battery),
+              hasWhoopFields: !!(item.recovery_score || item.hrv_ms),
+              availableFields: Object.keys(item).filter(k => 
+                item[k] !== null && item[k] !== undefined && 
+                !['id', 'date', 'source'].includes(k)
+              ).slice(0, 5)
+            }
+          };
+      } else {
+          sourceValuesMap[source].count++;
+        }
+      });
+      console.log("Source values and examples:", sourceValuesMap);
+      
       // Filter data based on selected source
       let dataToUse = [];
 
       if (!selectedDataSource || selectedDataSource === 'all') {
         dataToUse = biometricData;
+        console.log('Using all data sources');
       } else {
-        dataToUse = biometricData.filter(item => item.source === selectedDataSource);
+        console.log('selectedDataSource:', selectedDataSource);
+        
+        // Try more flexible matching for debugging
+        dataToUse = biometricData.filter(dataItem => {
+          const itemSource = (dataItem.source || '').toLowerCase();
+          const targetSource = selectedDataSource.toLowerCase();
+          const isMatch = itemSource === targetSource;
+          
+          // Log each comparison for the first few items to understand mismatches
+          if (dataItem === biometricData[0] || dataItem === biometricData[1]) {
+            console.log(`Source comparison: '${itemSource}' === '${targetSource}' => ${isMatch}`, {
+              itemSourceType: typeof dataItem.source,
+              charCodes: [...(dataItem.source || '')].map(c => c.charCodeAt(0))
+            });
+          }
+          
+          return isMatch;
+        });
+        
+        console.log(`Found ${dataToUse.length} items matching source: ${selectedDataSource}`);
       }
-
+      
+      console.log('dataToUse:', dataToUse);
+      
       // For charts, we want chronological order (oldest to newest from left to right)
-      // So we need to reverse the sort order since biometricData is sorted newest first
       const orderedData = [...dataToUse].reverse();
 
       console.log('Original data order (newest first):',
@@ -856,6 +919,31 @@ const BiometricsDashboard = ({ username }) => {
       setFilteredData(orderedData);
     }
   }, [biometricData, selectedDataSource]);
+
+  // Add a function to separate data by source for better visualization
+  const getSourceSpecificData = (data, source) => {
+    if (!data || data.length === 0) return [];
+    return data.filter(item => 
+      (item.source || '').toLowerCase() === source.toLowerCase()
+    );
+  };
+
+  // Function to determine which visualization to show based on data availability
+  const shouldShowVisualization = (dataSource, requiredFields) => {
+    if (!filteredData || filteredData.length === 0) return false;
+    
+    // If specific source requested, check if we have that source data
+    const sourceData = dataSource === 'all' ? 
+      filteredData : 
+      filteredData.filter(item => (item.source || '').toLowerCase() === dataSource.toLowerCase());
+    
+    if (sourceData.length === 0) return false;
+    
+    // Check if required fields have data
+    return requiredFields.every(field => {
+      return sourceData.some(item => item[field] !== undefined && item[field] !== null);
+    });
+  };
 
   const handleChangeTab = (event, newValue) => {
     setTabValue(newValue);
@@ -977,6 +1065,59 @@ const BiometricsDashboard = ({ username }) => {
     );
   };
 
+  // Add this function near your other utility functions in BiometricsDashboard
+  const diagnoseGarminIssue = async () => {
+    console.log("Running Garmin data diagnosis...");
+    setLoading(true);
+    try {
+      // First, try a direct request for Garmin data only
+      const garminResponse = await axios.get('/api/biometrics/?days=60&source=garmin');
+      console.log('Garmin-specific request response:', garminResponse.data);
+      
+      // Then get all sources for comparison
+      const allResponse = await axios.get('/api/biometrics/?days=60');
+      
+      // Count data by source
+      const sourceCounts = {};
+      allResponse.data.forEach(item => {
+        const source = item.source || 'unknown';
+        sourceCounts[source] = (sourceCounts[source] || 0) + 1;
+      });
+      
+      console.log('All sources in response:', sourceCounts);
+      
+      // Try to directly check database info via a new endpoint (you'd need to add this)
+      try {
+        const dbInfoResponse = await axios.get('/api/biometrics/db-info/');
+        console.log('Database info:', dbInfoResponse.data);
+      } catch (error) {
+        console.log('Database info endpoint not available');
+      }
+      
+      // Show a detailed diagnostic message
+      const diagnosticMessage = `
+        Diagnosis Results:
+        - Total records: ${allResponse.data.length}
+        - Sources found: ${Object.keys(sourceCounts).join(', ')}
+        - Garmin records: ${garminResponse.data.length}
+        
+        This information suggests that ${garminResponse.data.length === 0 ? 
+          "Garmin data is NOT being stored in the database correctly." : 
+          "Garmin data IS in the database but may have filtering issues."}
+      `;
+      
+      // Display results in an alert or dialog
+      console.log(diagnosticMessage);
+      openDialog("Garmin Data Diagnosis", diagnosticMessage);
+      
+    } catch (error) {
+      console.error('Error during diagnosis:', error);
+      setError(`Diagnosis error: ${error.message}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <Box sx={{ width: '100%' }} className={`biometrics-dashboard ${darkMode ? 'dark-mode' : ''}`}>
       <Box sx={{
@@ -1084,6 +1225,16 @@ const BiometricsDashboard = ({ username }) => {
               <LogoutIcon />
               <Typography>Logout</Typography>
             </StyledMenuItem>
+
+            {devMode && (
+              <StyledMenuItem onClick={() => {
+                closeMenu();
+                diagnoseGarminIssue();
+              }}>
+                <BugReportIcon />
+                <Typography>Diagnose Garmin Issue</Typography>
+              </StyledMenuItem>
+            )}
           </StyledMenu>
         </Box>
 
@@ -1420,13 +1571,23 @@ const BiometricsDashboard = ({ username }) => {
         {tabValue === 0 && (
           <Box sx={{ mt: 3 }}>
             <Grid container spacing={3}>
-              {selectedDataSource === 'whoop' ? (
-                // WHOOP-specific visualizations
+              {filteredData.length === 0 ? (
+                <Grid item xs={12}>
+                  <Alert severity="info">
+                    No data available for the selected source: {selectedDataSource}. 
+                    Try selecting a different source or syncing more data.
+                  </Alert>
+                </Grid>
+              ) : selectedDataSource === 'whoop' ? (
+                // WHOOP-specific visualizations - keep existing code
                 <>
                   {/* Heart Rate and Recovery Score */}
                   <Grid item xs={12} md={6}>
                     <Card sx={{ p: 2, height: '100%' }}>
                       <Typography variant="h6" gutterBottom sx={{ color: colors.headings }}>Resting Heart Rate & Recovery Score</Typography>
+                      {devMode && <Typography variant="caption" sx={{ display: 'block', mb: 1, color: 'text.secondary' }}>
+                        Source: WHOOP
+                      </Typography>}
                       <ResponsiveContainer width="100%" height={300}>
                         <ComposedChart data={filteredData}>
                           <CartesianGrid strokeDasharray="3 3" />
@@ -1535,13 +1696,16 @@ const BiometricsDashboard = ({ username }) => {
                     </Card>
                   </Grid>
                 </>
-              ) : (
-                // Default Garmin visualizations
+              ) : selectedDataSource === 'garmin' ? (
+                // Garmin-specific visualizations - keep existing code but add dev mode source indicators
                 <>
                   {/* Heart Rate Trends */}
                   <Grid item xs={12} md={6}>
                     <Card sx={{ p: 2, height: '100%' }}>
                       <Typography variant="h6" gutterBottom>Heart Rate Trends</Typography>
+                      {devMode && <Typography variant="caption" sx={{ display: 'block', mb: 1, color: 'text.secondary' }}>
+                        Source: Garmin
+                      </Typography>}
                       <ResponsiveContainer width="100%" height={300}>
                         <LineChart data={filteredData}>
                           <CartesianGrid strokeDasharray="3 3" />
@@ -1646,6 +1810,126 @@ const BiometricsDashboard = ({ username }) => {
                           <Legend />
                           <Bar dataKey="total_calories" name="Total Calories" stackId="calories" fill="#3498db" />
                           <Bar dataKey="active_calories" name="Active Calories" stackId="calories" fill="#2ecc71" />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </Card>
+                  </Grid>
+                </>
+              ) : (
+                // Combined view for "all" data sources
+                <>
+                  {/* Show WHOOP visualizations if we have WHOOP data */}
+                  {shouldShowVisualization('whoop', ['recovery_score', 'hrv_ms']) && (
+                    <>
+                <Grid item xs={12}>
+                        <Typography variant="h5" sx={{ mb: 2, color: darkMode ? 'white' : colors.primary }}>
+                          WHOOP Metrics
+                    </Typography>
+                </Grid>
+                      
+                      {/* Heart Rate and Recovery Score */}
+                      <Grid item xs={12} md={6}>
+                        <Card sx={{ p: 2, height: '100%' }}>
+                          <Typography variant="h6" gutterBottom sx={{ color: colors.headings }}>
+                            Resting Heart Rate & Recovery Score
+                          </Typography>
+                          {devMode && <Typography variant="caption" sx={{ display: 'block', mb: 1, color: 'text.secondary' }}>
+                            Source: WHOOP
+                          </Typography>}
+                          <ResponsiveContainer width="100%" height={300}>
+                            <ComposedChart data={getSourceSpecificData(filteredData, 'whoop')}>
+                              <CartesianGrid strokeDasharray="3 3" />
+                              <XAxis dataKey="date" />
+                              <YAxis yAxisId="left" />
+                              <YAxis yAxisId="right" orientation="right" domain={[0, 100]} />
+                              <Tooltip />
+                              <Legend />
+                              <Bar dataKey="recovery_score" name="Recovery Score" fill="#27AE60" yAxisId="right" />
+                              <Line type="monotone" dataKey="resting_heart_rate" name="Resting HR" stroke="#e74c3c" yAxisId="left" strokeWidth={2} />
+                            </ComposedChart>
+                          </ResponsiveContainer>
+                        </Card>
+                      </Grid>
+                      
+                      {/* Add more WHOOP-specific visualizations for "all" view */}
+                    </>
+                  )}
+                  
+                  {/* Show Garmin visualizations if we have Garmin data */}
+                  {shouldShowVisualization('garmin', ['steps', 'sleep_hours']) && (
+                    <>
+                      <Grid item xs={12}>
+                        <Typography variant="h5" sx={{ mt: 4, mb: 2, color: darkMode ? 'white' : colors.primary }}>
+                          Garmin Metrics
+                        </Typography>
+                      </Grid>
+                      
+                      {/* Heart Rate Trends */}
+                      <Grid item xs={12} md={6}>
+                        <Card sx={{ p: 2, height: '100%' }}>
+                          <Typography variant="h6" gutterBottom>Heart Rate Trends</Typography>
+                          {devMode && <Typography variant="caption" sx={{ display: 'block', mb: 1, color: 'text.secondary' }}>
+                            Source: Garmin
+                          </Typography>}
+                          <ResponsiveContainer width="100%" height={300}>
+                            <LineChart data={getSourceSpecificData(filteredData, 'garmin')}>
+                              <CartesianGrid strokeDasharray="3 3" />
+                              <XAxis dataKey="date" />
+                              <YAxis />
+                              <Tooltip />
+                              <Legend />
+                              <Line type="monotone" dataKey="max_heart_rate" name="Max HR" stroke="#e74c3c" />
+                              <Line type="monotone" dataKey="resting_heart_rate" name="Resting HR" stroke="#2ecc71" />
+                              <Line type="monotone" dataKey="min_heart_rate" name="Min HR" stroke="#3498db" />
+                            </LineChart>
+                          </ResponsiveContainer>
+                        </Card>
+                      </Grid>
+                      
+                      {/* Add more Garmin-specific visualizations for "all" view */}
+                    </>
+                  )}
+                  
+                  {/* Common metrics across sources - only show if data is available */}
+                  <Grid item xs={12}>
+                    <Typography variant="h5" sx={{ mt: 4, mb: 2, color: darkMode ? 'white' : colors.primary }}>
+                      Combined Metrics
+                    </Typography>
+                  </Grid>
+                  
+                  {/* Sleep comparison across sources */}
+                  <Grid item xs={12} md={6}>
+                    <Card sx={{ p: 2, height: '100%' }}>
+                      <Typography variant="h6" gutterBottom>Sleep Duration By Source</Typography>
+                      {devMode && <Typography variant="caption" sx={{ display: 'block', mb: 1, color: 'text.secondary' }}>
+                        Sources: Combined
+                      </Typography>}
+                      <ResponsiveContainer width="100%" height={300}>
+                        <BarChart data={filteredData}>
+                          <CartesianGrid strokeDasharray="3 3" />
+                          <XAxis dataKey="date" />
+                          <YAxis />
+                          <Tooltip content={({ active, payload }) => {
+                            if (active && payload && payload.length) {
+                              return (
+                                <div style={{ backgroundColor: 'white', padding: '10px', border: '1px solid #ccc' }}>
+                                  <p>{`Date: ${payload[0].payload.date}`}</p>
+                                  <p>{`Sleep: ${payload[0].value} hrs`}</p>
+                                  <p>{`Source: ${payload[0].payload.source || 'unknown'}`}</p>
+                                </div>
+                              );
+                            }
+                            return null;
+                          }} />
+                          <Legend />
+                          <Bar dataKey="sleep_hours" name="Sleep (hrs)" fill="#8e44ad">
+                            {filteredData.map((entry, index) => (
+                              <Cell 
+                                key={`cell-${index}`} 
+                                fill={(entry.source || '').toLowerCase() === 'whoop' ? '#3498db' : '#e74c3c'} 
+                              />
+                            ))}
+                          </Bar>
                         </BarChart>
                       </ResponsiveContainer>
                     </Card>

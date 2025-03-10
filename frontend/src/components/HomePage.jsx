@@ -4,6 +4,8 @@ import '../styles/HomePage.css';
 import whoopLogo from '../assets/whoop-black-puck.png';
 import catapultLogo from '../assets/catapult-black-square.png';
 import garminLogo from '../assets/garmin-white-text.png';
+import uvaLogo from '../assets/uva-logo.jpg';
+import kateAction from '../assets/kate-galcia-playing.jpg';
 
 
 const HomePage = () => {
@@ -142,22 +144,12 @@ const HomePage = () => {
     }
   ];
   
-  // Partner universities
+  // Partner universities - updated to only include UVA
   const universities = [
     {
       name: 'University of Virginia',
-      logo: '🔶',
-      description: 'Full athletic department integration across 25 varsity sports'
-    },
-    {
-      name: 'Stanford University',
-      logo: '🌲',
-      description: 'Performance tracking for Olympic development programs'
-    },
-    {
-      name: 'University of Michigan',
-      logo: '〽️',
-      description: 'Swimming and track & field recovery optimization'
+      logo: <img src={uvaLogo} alt="UVA Logo" className="uva-logo-img" />,
+      description: 'Aspiring to partner with UVA Athletics'
     }
   ];
   
@@ -348,7 +340,7 @@ const HomePage = () => {
                 <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" fill="currentColor" viewBox="0 0 16 16">
                   <path d="M4 11a1 1 0 1 1 2 0v1a1 1 0 1 1-2 0v-1zm6-4a1 1 0 1 1 2 0v5a1 1 0 1 1-2 0V7zM7 9a1 1 0 0 1 2 0v3a1 1 0 1 1-2 0V9z"/>
                   <path d="M4 1.5H3a2 2 0 0 0-2 2V14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V3.5a2 2 0 0 0-2-2h-1v1h1a1 1 0 0 1 1 1V14a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3.5a1 1 0 0 1 1-1h1v-1z"/>
-                  <path d="M9.5 1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-3a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5h3zm-3-1A1.5 1.5 0 0 0 5 1.5v1A1.5 1.5 0 0 0 6.5 4h3A1.5 1.5 0 0 0 11 2.5v-1A1.5 1.5 0 0 0 9.5 0h-3z"/>
+                  <path d="M9.5 1a.5.5 0 0 1 .5-.5h4a.5.5 0 0 1 0 1h-4a.5.5 0 0 1-.5-.5zm.5 2.5a.5.5 0 0 0 0 1h4a.5.5 0 0 0 0-1h-4zm2 3a.5.5 0 0 0 0 1h2a.5.5 0 0 0 0-1h-2zm0 3a.5.5 0 0 0 0 1h2a.5.5 0 0 0 0-1h-2z"/>
                 </svg>
               </div>
               <h3>Performance Analytics</h3>
@@ -382,14 +374,27 @@ const HomePage = () => {
         
         <div className="section universities-section">
           <h2>University Partners</h2>
-          <div className="integrations-container">
-            {universities.map((university, index) => (
-              <div className="integration-card" key={index}>
-                <div className="integration-logo">{university.logo}</div>
-                <h3>{university.name}</h3>
-                <p>{university.description}</p>
-              </div>
-            ))}
+          <div className="uva-partnership-container">
+            <div className="uva-info">
+              <div className="uva-logo">{universities[0].logo}</div>
+              <h3>{universities[0].name}</h3>
+              <p className="uva-description">
+                Pulse Project is developed by UVA student-athletes and aims to partner with UVA Athletics to optimize athlete performance and recovery. Our platform integrates with existing performance tracking systems to provide comprehensive insights across all varsity sports.
+              </p>
+              <p className="uva-metrics">
+                <span className="uva-disclaimer-text">* While our team members are UVA student-athletes, Pulse Project is not yet an official partner of UVA Athletics.</span>
+              </p>
+              <button
+                className="meet-team-button"
+                onClick={() => navigate('/team')}
+              >
+                Meet Our Team
+                <span className="button-arrow">→</span>
+              </button>
+            </div>
+            <div className="uva-image-container">
+              <img src={kateAction} alt="UVA Women's Lacrosse in action" className="uva-action-photo" />
+            </div>
           </div>
         </div>
         

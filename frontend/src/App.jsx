@@ -9,6 +9,8 @@ import RobotsText from './components/RobotsText'
 import PrivacyPolicy from './components/PrivacyPolicy'
 import HomePage from './components/HomePage'
 import PricingPage from './components/PricingPage'
+import MeetTheTeam from './components/MeetTheTeam'
+import ContactPage from './components/ContactPage'
 import './styles/Auth.css'
 import './styles/Dashboard.css'
 
@@ -28,6 +30,12 @@ function App() {
         {/* Public route for homepage */}
         <Route path="/" element={<HomePage />} />
 
+        {/* Meet the Team page */}
+        <Route path="/team" element={<MeetTheTeam />} />
+        
+        {/* Contact page */}
+        <Route path="/contact" element={<ContactPage />} />
+        
         {/* Athlete Portal path */}
         <Route path="/athlete-portal" element={
           !hasDevAccess ? <DevelopmentGate /> : <Navigate to="/login" />

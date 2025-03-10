@@ -1,13 +1,26 @@
-import React, { useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import '../styles/PricingPage.css';
 
 function PricingPage() {
+  const [selectedPlan, setSelectedPlan] = useState(null);
   const navigate = useNavigate();
   
   useEffect(() => {
-    // Scroll to top when component mounts
+    // Using multiple methods to ensure scroll reset works across different browsers
     window.scrollTo(0, 0);
+    document.body.scrollTop = 0; // For Safari
+    document.documentElement.scrollTop = 0; // For Chrome, Firefox, IE, and Opera
+    
+    // Force browser to recognize the scroll change
+    const html = document.querySelector('html');
+    if (html) {
+      const originalOverflow = html.style.overflow;
+      html.style.overflow = 'hidden';
+      // Force a reflow
+      void html.offsetHeight;
+      html.style.overflow = originalOverflow;
+    }
   }, []);
 
   const navigateToHome = () => {
@@ -16,6 +29,14 @@ function PricingPage() {
   
   const navigateToAthletePortal = () => {
     navigate('/athlete-portal');
+  };
+
+  const navigateToContact = () => {
+    navigate('/contact');
+  };
+
+  const handlePlanSelect = (plan) => {
+    setSelectedPlan(plan);
   };
 
   const handleContactClick = () => {
@@ -124,7 +145,7 @@ function PricingPage() {
                   <span>Team onboarding and training</span>
                 </li>
               </ul>
-              <button className="pricing-cta-button featured-button" onClick={handleContactClick}>
+              <button className="pricing-cta-button featured-button" onClick={navigateToContact}>
                 Contact Us
                 <span className="button-arrow">→</span>
               </button>
@@ -158,7 +179,7 @@ function PricingPage() {
           
           <div className="hardware-cta">
             <p>All hardware bundles include setup, integration, and training</p>
-            <button className="hardware-cta-button" onClick={handleContactClick}>
+            <button className="hardware-cta-button" onClick={navigateToContact}>
               Learn More About Hardware
             </button>
           </div>
@@ -192,7 +213,7 @@ function PricingPage() {
       <div className="contact-cta-section">
         <h2>Need a custom solution?</h2>
         <p>Contact our team to discuss your specific requirements. We can create a tailored package for your organization.</p>
-        <button className="contact-cta-button" onClick={handleContactClick}>
+        <button className="contact-cta-button" onClick={navigateToContact}>
           Contact Us
           <span className="button-arrow">→</span>
         </button>

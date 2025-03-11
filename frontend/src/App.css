@@ -16,6 +16,43 @@ html, body, #root, div, main, section, article, aside, header, footer, nav {
   height: 100vh !important;
   overflow-y: auto !important;
   overflow-x: hidden !important;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+}
+
+/* Ensure content in fixed containers can be centered */
+.home-page > .content,
+.team-page > .content,
+.privacy-policy-container > .content,
+.pricing-page-container > .content {
+  max-width: 80% !important;
+  width: 100% !important;
+  margin: 0 auto !important;
+}
+
+/* Headers and footers should still span full width */
+.home-page > .header,
+.home-page > footer,
+.team-page > .header,
+.team-page > footer,
+.privacy-policy-container > .header,
+.privacy-policy-container > footer,
+.pricing-page-container > .header,
+.pricing-page-container > footer {
+  width: 100vw !important;
+  max-width: 100vw !important;
+  align-self: stretch !important;
+}
+
+/* Media query for smaller screens */
+@media (max-width: 768px) {
+  .home-page > .content,
+  .team-page > .content,
+  .privacy-policy-container > .content,
+  .pricing-page-container > .content {
+    max-width: 100% !important;
+  }
 }
 
 #root {

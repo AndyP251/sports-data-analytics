@@ -306,17 +306,18 @@ html, body {
 
 /* Specific styling for each team member's photo */
 .team-member-card:nth-child(1) .actual-photo {
-  object-position: center 55%; /* Andrew's photo - pan down further */
+  object-position: center 48%; /* Andrew's photo - pan down further */
   transform: scale(1); /* Zoom out more */
 }
 
 .team-member-card:nth-child(2) .actual-photo {
-  object-position: center 30%; /* Ben's photo - pan down further */
+  object-position: center 28%; /* Ben's photo - pan down further */
   transform: scale(1); /* Zoom out more */
 }
 
 .team-member-card:nth-child(3) .actual-photo {
-  object-position: center top; /* Kate's photo */
+  object-position: center 20%; /* Kate's photo */
+  transform: scale(1); /* Zoom out more */
 }
 
 .team-member-card:nth-child(4) .actual-photo {

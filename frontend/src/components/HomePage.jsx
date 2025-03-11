@@ -283,27 +283,27 @@ const HomePage = () => {
               </p>
               <ul className="goals-list">
                 <li>
-                  <span className="icon">🎯</span>
+                  <span className="icon">→</span>
                   <span>Transform raw data into actionable recommendations</span>
                 </li>
                 <li>
-                  <span className="icon">🔄</span>
+                  <span className="icon">→</span>
                   <span>Identify patterns across multiple data sources</span>
                 </li>
                 <li>
-                  <span className="icon">📈</span>
+                  <span className="icon">→</span>
                   <span>Provide context-aware performance insights</span>
                 </li>
                 <li>
-                  <span className="icon">⏰</span>
+                  <span className="icon">→</span>
                   <span>Optimize recovery and training schedules</span>
                 </li>
                 <li>
-                  <span className="icon">👥</span>
+                  <span className="icon">→</span>
                   <span>Enable coaches to track team-wide metrics and individual athlete progress</span>
                 </li>
                 <li>
-                  <span className="icon">🔔</span>
+                  <span className="icon">→</span>
                   <span>Alert coaching staff to potential injury risks and recovery needs</span>
                 </li>
               </ul>
@@ -318,6 +318,32 @@ const HomePage = () => {
                 <div className="data-arrow">→</div>
                 <div className="data-node highlight-node">Action</div>
               </div>
+            </div>
+          </div>
+        </div>
+        
+        <div className="section universities-section">
+          <h2>University Partners</h2>
+          <div className="uva-partnership-container">
+            <div className="uva-info">
+              <div className="uva-logo">{universities[0].logo}</div>
+              <h3>{universities[0].name}</h3>
+              <p className="uva-description">
+                Pulse Project is developed by UVA student-athletes and aims to partner with UVA Athletics to optimize athlete performance and recovery. Our platform integrates with existing performance tracking systems to provide comprehensive insights across all varsity sports.
+              </p>
+              <p className="uva-metrics">
+                <span className="uva-disclaimer-text">* While our team members are UVA student-athletes, Pulse Project is not yet an official partner of UVA Athletics.</span>
+              </p>
+              <button
+                className="meet-team-button"
+                onClick={() => navigate('/team')}
+              >
+                Meet Our Team
+                <span className="button-arrow">→</span>
+              </button>
+            </div>
+            <div className="uva-image-container">
+              <img src={kateAction} alt="UVA Women's Lacrosse in action" className="uva-action-photo" />
             </div>
           </div>
         </div>
@@ -369,32 +395,6 @@ const HomePage = () => {
                 <p>{integration.description}</p>
               </div>
             ))}
-          </div>
-        </div>
-        
-        <div className="section universities-section">
-          <h2>University Partners</h2>
-          <div className="uva-partnership-container">
-            <div className="uva-info">
-              <div className="uva-logo">{universities[0].logo}</div>
-              <h3>{universities[0].name}</h3>
-              <p className="uva-description">
-                Pulse Project is developed by UVA student-athletes and aims to partner with UVA Athletics to optimize athlete performance and recovery. Our platform integrates with existing performance tracking systems to provide comprehensive insights across all varsity sports.
-              </p>
-              <p className="uva-metrics">
-                <span className="uva-disclaimer-text">* While our team members are UVA student-athletes, Pulse Project is not yet an official partner of UVA Athletics.</span>
-              </p>
-              <button
-                className="meet-team-button"
-                onClick={() => navigate('/team')}
-              >
-                Meet Our Team
-                <span className="button-arrow">→</span>
-              </button>
-            </div>
-            <div className="uva-image-container">
-              <img src={kateAction} alt="UVA Women's Lacrosse in action" className="uva-action-photo" />
-            </div>
           </div>
         </div>
         

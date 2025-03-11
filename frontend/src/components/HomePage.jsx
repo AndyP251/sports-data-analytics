@@ -426,9 +426,6 @@ const HomePage = () => {
         <div className="footer-content">
           <div className="footer-logo">Pulse Project</div>
           <div className="footer-links">
-            <a href="#features">Features</a>
-            <a href="#integrations">Integrations</a>
-            <a href="#testimonials">Testimonials</a>
             <a onClick={navigateToPricing}>Pricing</a>
             <a onClick={navigateToCoachPortal}>Coach Portal</a>
             <a onClick={navigateToAthletePortal} className="footer-cta">Athlete Portal</a>

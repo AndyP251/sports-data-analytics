@@ -500,8 +500,14 @@ html, body {
 }
 
 .goals-list .icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
   margin-right: 1rem;
-  font-size: 1.3rem;
+  color: white;
+  font-weight: bold;
+  font-size: 1.2rem;
 }
 
 .goals-graphic {
@@ -628,7 +634,10 @@ html, body {
 
 /* Integrations Section */
 .integrations-section {
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 20px;
   margin-top: 5rem;
+  margin-bottom: 5rem;
 }
 
 .integrations-container {

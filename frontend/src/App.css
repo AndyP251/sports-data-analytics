@@ -1,8 +1,79 @@
+/* Global reset to eliminate ALL scrollbars except vertical page scrolling */
+html, body, #root, div, main, section, article, aside, header, footer, nav {
+  overflow-x: hidden !important;
+  max-width: 100vw !important;
+  box-sizing: border-box !important;
+}
+
+/* BiometricsDashboard approach - this is the key fix */
+.home-page, .team-page, .privacy-policy-container, .pricing-page-container {
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+}
+
 #root {
-  width: 100%;
+  width: 100vw;
   margin: 0;
   padding: 0;
-  box-sizing: border-box;
+  position: relative;
+}
+
+/* Complete scrolling fix - eliminate horizontal scrollbar */
+html, body {
+  width: 100% !important; 
+  height: 100% !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow-x: hidden !important;
+  box-sizing: border-box !important;
+}
+
+/* Eliminate all vertical bars */
+*::before {
+  pointer-events: none !important;
+}
+
+/* Full-width container solution */
+.header, .footer, [class*="-header"], [class*="-footer"] {
+  width: 100vw !important;
+  left: 0 !important;
+  right: 0 !important;
+  margin: 0 !important;
+  position: fixed !important;
+}
+
+/* Critical change: make header span beyond the viewport width */
+.header, [class*="-header"] {
+  left: -10px !important;
+  right: -10px !important;
+  width: calc(100vw + 20px) !important;
+  max-width: none !important;
+  padding-left: calc(2rem + 10px) !important;
+  padding-right: calc(2rem + 10px) !important;
+}
+
+/* Apply similar treatment to footer */
+.footer, [class*="-footer"] {
+  left: -10px !important;
+  right: -10px !important;
+  width: calc(100vw + 20px) !important;
+  max-width: none !important;
+  padding-left: calc(2rem + 10px) !important;
+  padding-right: calc(2rem + 10px) !important;
+}
+
+/* Completely disable horizontal scrolling */
+body {
+  overflow-x: hidden !important;
+  width: 100% !important;
+  position: relative !important;
 }
 
 .logo {

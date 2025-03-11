@@ -312,11 +312,16 @@ html, body {
 
 .team-member-card:nth-child(2) .actual-photo {
   object-position: center 30%; /* Ben's photo - pan down further */
-  transform: scale(1.25); /* Zoom out more */
+  transform: scale(1); /* Zoom out more */
 }
 
 .team-member-card:nth-child(3) .actual-photo {
   object-position: center top; /* Kate's photo */
+}
+
+.team-member-card:nth-child(4) .actual-photo {
+  object-position: center top; /* Lara's photo */
+  transform: scale(1); /* Zoom out more */
 }
 
 .team-member-card:hover .actual-photo {

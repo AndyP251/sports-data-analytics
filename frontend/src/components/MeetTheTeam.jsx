@@ -3,7 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import '../styles/MeetTheTeam.css';
 // Import the image files
 import andrewImage from '../assets/andrew-profile-2.jpg';
-import benImage from '../assets/ben-wayer-headshot.jpeg';
+import benImage from '../assets/ben-wayer-profile.jpg';
+import laraImage from '../assets/lara-kology-profile.jpg';
 import kateImage from '../assets/kate-galcia-profile.jpg';
 import uvaLogo from '../assets/uva-logo.jpg';
 
@@ -77,7 +78,7 @@ const MeetTheTeam = () => {
       name: 'Lara Kology',
       role: 'Co-Founder',
       bio: 'Lara brings a unique dual perspective as both a D1 athlete and design specialist. Her understanding of how athletes process information during training has been instrumental in creating an intuitive interface that delivers critical insights when they matter most.',
-      photo: 'placeholder', // Still using placeholder for Lara
+      photo: laraImage, // Still using placeholder for Lara
       affiliation: 'University of Virginia D1 Women\'s Lacrosse',
       linkedin: 'https://www.linkedin.com/in/lara-kology-7a68ab282/'
     }

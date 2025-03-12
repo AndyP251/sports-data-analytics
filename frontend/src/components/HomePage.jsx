@@ -15,6 +15,37 @@ const HomePage = () => {
   const [currentTestimonial, setCurrentTestimonial] = useState(0);
   const [activeInsight, setActiveInsight] = useState(0);
   const [dynamicCount, setDynamicCount] = useState(0);
+  const [dynamicCounts, setDynamicCounts] = useState([0, 0, 0, 0]);
+
+  // Add a window size hook for better responsiveness
+  const useWindowSize = () => {
+    const [windowSize, setWindowSize] = useState({
+      width: window.innerWidth,
+      height: window.innerHeight,
+    });
+  
+    useEffect(() => {
+      const handleResize = () => {
+        setWindowSize({
+          width: window.innerWidth,
+          height: window.innerHeight,
+        });
+      };
+      
+      window.addEventListener('resize', handleResize);
+      
+      // Call handler right away so state gets updated with initial window size
+      handleResize();
+      
+      return () => window.removeEventListener('resize', handleResize);
+    }, []);
+    
+    return windowSize;
+  };
+
+  const { width } = useWindowSize();
+  const isMobile = width <= 768;
+  const isSmallMobile = width <= 480;
 
   useEffect(() => {
     // Add scroll event listener for header effect
@@ -48,7 +79,7 @@ const HomePage = () => {
       setActiveInsight((prev) => (prev + 1) % insights.length);
     }, 3000);
     
-    // Dynamic counter
+    // Dynamic counter for data points
     const countInterval = setInterval(() => {
       setDynamicCount(prev => {
         // Random increment between 1-5
@@ -57,6 +88,42 @@ const HomePage = () => {
       });
     }, 2000);
     
+    // Stats counter animation
+    let animationStarted = false;
+    let animationFrame;
+    
+    const animateCounters = () => {
+      if (animateStats && !animationStarted) {
+        animationStarted = true;
+        
+        const duration = 2000; // animation duration in ms
+        const startTime = performance.now();
+        const finalValues = stats.map(stat => stat.value);
+        
+        const updateCounter = (currentTime) => {
+          const elapsedTime = currentTime - startTime;
+          const progress = Math.min(elapsedTime / duration, 1);
+          
+          // Use easeOutExpo for smoother animation near the end
+          const easeOutProgress = progress === 1 ? 1 : 1 - Math.pow(2, -10 * progress);
+          
+          const newCounts = finalValues.map(value => 
+            Math.floor(easeOutProgress * value)
+          );
+          
+          setDynamicCounts(newCounts);
+          
+          if (progress < 1) {
+            animationFrame = requestAnimationFrame(updateCounter);
+          }
+        };
+        
+        animationFrame = requestAnimationFrame(updateCounter);
+      }
+    };
+    
+    animateCounters();
+    
     // Cleanup
     return () => {
       window.removeEventListener('scroll', handleScroll);
@@ -64,8 +131,9 @@ const HomePage = () => {
       clearInterval(testimonialInterval);
       clearInterval(insightInterval);
       clearInterval(countInterval);
+      cancelAnimationFrame(animationFrame);
     };
-  }, []);
+  }, [animateStats]);
 
   const navigateToAthletePortal = () => {
     navigate('/athlete-portal');
@@ -191,84 +259,315 @@ const HomePage = () => {
 
   return (
     <div className="home-page">
-      <div className={`header ${scrolled ? 'scrolled' : ''}`}>
-        <div className="logo">Pulse Project</div>
-        <div className="nav-buttons">
-          <button 
-            className="pricing-button" 
-            onClick={navigateToPricing}
-          >
-            Pricing
-            <span className="button-arrow-hidden"></span>
-          </button>
-          <button 
-            className="coach-portal-button" 
-            onClick={navigateToCoachPortal}
-          >
-            Coach Portal
-            <span className="button-arrow">→</span>
-          </button>
-          <button 
-            className="athlete-portal-button" 
-            onClick={navigateToAthletePortal}
-          >
-            Athlete Portal
-            <span className="button-arrow">→</span>
-          </button>
+      <div className={`header ${scrolled ? 'scrolled' : ''}`} style={{ 
+        position: 'sticky',
+        top: 0,
+        display: 'flex',
+        justifyContent: 'center',
+        width: '100%',
+        zIndex: 1000,
+        boxSizing: 'border-box',
+        padding: scrolled ? (isMobile ? '0.5rem 0' : '0.75rem 0') : (isMobile ? '1rem 0' : '1.5rem 0'),
+        backgroundColor: scrolled ? 'rgba(10, 14, 23, 0.9)' : 'transparent',
+        backdropFilter: scrolled ? 'blur(8px)' : 'none',
+        transition: 'all 0.3s ease'
+      }}>
+        <div style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          width: '100%',
+          maxWidth: '1200px',
+          padding: '0 20px',
+          boxSizing: 'border-box'
+        }}>
+          <div className="logo" style={{
+            fontSize: isMobile ? '1.5rem' : '1.75rem',
+            fontWeight: 'bold',
+            background: 'linear-gradient(90deg, #6e8efb, #a777e3)',
+            WebkitBackgroundClip: 'text',
+            WebkitTextFillColor: 'transparent'
+          }}>Pulse Project</div>
+          <div className="nav-buttons" style={{
+            display: 'flex',
+            gap: isSmallMobile ? '2px' : '4px'
+          }}>
+            <button 
+              className="pricing-button" 
+              onClick={navigateToPricing}
+              style={{
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                padding: isSmallMobile ? '0.5rem 0.3rem' : '0.75rem 1.5rem',
+                fontSize: isSmallMobile ? '0.75rem' : '1rem',
+                borderRadius: '40px',
+                border: '1px solid rgba(255,255,255,0.2)',
+                background: 'transparent',
+                color: 'white',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease'
+              }}
+            >
+              Pricing
+              <span className="button-arrow-hidden"></span>
+            </button>
+            <button 
+              className="coach-portal-button" 
+              onClick={navigateToCoachPortal}
+              style={{
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                padding: isSmallMobile ? '0.5rem 0.3rem' : '0.75rem 1.5rem',
+                fontSize: isSmallMobile ? '0.75rem' : '1rem',
+                borderRadius: '40px',
+                border: '1px solid rgba(220, 80, 80, 0.5)',
+                background: 'rgba(220, 80, 80, 0.1)',
+                color: 'white',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease'
+              }}
+            >
+              Coach Portal
+              <span className="button-arrow" style={{ display: isSmallMobile ? 'none' : 'inline', marginLeft: '4px' }}>→</span>
+            </button>
+            <button 
+              className="athlete-portal-button" 
+              onClick={navigateToAthletePortal}
+              style={{
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                padding: isSmallMobile ? '0.5rem 0.3rem' : '0.75rem 1.5rem',
+                fontSize: isSmallMobile ? '0.75rem' : '1rem',
+                borderRadius: '40px',
+                border: '1px solid rgba(110, 142, 251, 0.5)',
+                background: 'rgba(110, 142, 251, 0.1)',
+                color: 'white',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease'
+              }}
+            >
+              Athlete Portal
+              <span className="button-arrow" style={{ display: isSmallMobile ? 'none' : 'inline', marginLeft: '4px' }}>→</span>
+            </button>
+          </div>
         </div>
       </div>
       
-      <div className="content">
-        <div className="hero-section">
-          <h1>Unlock Your Athletic Potential</h1>
-          <p>
+      <div className="content" style={{ 
+        width: '100%', 
+        maxWidth: '1200px', 
+        margin: '0 auto', 
+        padding: isMobile ? '0 15px' : '0 20px',
+        boxSizing: 'border-box'
+      }}>
+        <div className="hero-section" style={{
+          marginTop: isMobile ? '1rem' : '2rem',
+          marginBottom: isMobile ? '3rem' : '4rem',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          textAlign: 'center'
+        }}>
+          <h1 style={{
+            fontSize: isSmallMobile ? '2.5rem' : (isMobile ? '3rem' : '3.5rem'),
+            marginBottom: '1rem',
+            background: 'linear-gradient(90deg, #ffffff 0%, #6e8efb 100%)',
+            WebkitBackgroundClip: 'text',
+            WebkitTextFillColor: 'transparent',
+            lineHeight: '1.2'
+          }}>Unlock Your Athletic Potential</h1>
+          <p style={{ 
+            marginBottom: '1.5rem',
+            maxWidth: '700px',
+            fontSize: isMobile ? '1rem' : '1.1rem',
+            lineHeight: '1.6',
+            color: 'var(--text-secondary)'
+          }}>
             Advanced sports analytics platform that transforms your performance data 
             into actionable insights, helping you train smarter and achieve your goals faster.
           </p>
-          <button className="hero-cta-button" onClick={navigateToAthletePortal}>
+          <button className="hero-cta-button" onClick={navigateToAthletePortal} style={{
+            padding: isMobile ? '0.9rem 1.8rem' : '1rem 2rem',
+            fontSize: isMobile ? '1rem' : '1.1rem',
+            borderRadius: '30px',
+            background: 'linear-gradient(90deg, #6e8efb, #a777e3)',
+            color: 'white',
+            border: 'none',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            fontWeight: '600',
+            boxShadow: '0 4px 15px rgba(110, 142, 251, 0.4)',
+            transition: 'all 0.3s ease'
+          }}>
             Start Your Journey
-            <span className="button-arrow">→</span>
+            <span className="button-arrow" style={{
+              marginLeft: '4px',
+              fontSize: '1.1rem'
+            }}>→</span>
           </button>
         </div>
 
-        <div className="stats-container">
+        <div className="stats-container" style={{ 
+          width: '100%', 
+          display: 'grid',
+          gridTemplateColumns: isSmallMobile ? 'repeat(2, 1fr)' : (isMobile ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)'),
+          justifyContent: 'center',
+          margin: '2rem auto',
+          maxWidth: isMobile ? '100%' : '900px',
+          gap: isSmallMobile ? '1rem 0.5rem' : '1.5rem',
+          boxSizing: 'border-box',
+          overflow: 'hidden',
+          padding: isSmallMobile ? '0 5px' : '0 10px'
+        }}>
           {stats.map((stat, index) => (
-            <div className="stat-item" key={index}>
-              <div className={`stat-value ${animateStats ? 'animate' : ''}`} data-value={stat.value}>
-                {animateStats ? stat.value.toLocaleString() : '0'}
+            <div 
+              className="stat-item" 
+              key={index}
+              style={{
+                textAlign: 'center',
+                padding: '0.5rem',
+                boxSizing: 'border-box',
+                overflow: 'hidden'
+              }}
+            >
+              <div 
+                className={`stat-value ${animateStats ? 'animate' : ''}`}
+                style={{
+                  fontSize: stat.value >= 1000000 ? 
+                    (isSmallMobile ? '1.3rem' : (isMobile ? '1.8rem' : '2.2rem')) : 
+                    (isSmallMobile ? '1.6rem' : (isMobile ? '2.2rem' : '2.8rem')),
+                  fontWeight: '700',
+                  lineHeight: '1.2',
+                  marginBottom: isSmallMobile ? '0.25rem' : '0.5rem',
+                  background: 'linear-gradient(90deg, #6e8efb, #7873f5)',
+                  WebkitBackgroundClip: 'text',
+                  WebkitTextFillColor: 'transparent',
+                  display: 'block',
+                  width: '100%',
+                  overflow: 'hidden',
+                  whiteSpace: 'nowrap',
+                  textOverflow: 'ellipsis',
+                  transition: 'opacity 0.5s, transform 0.5s',
+                  opacity: animateStats ? 1 : 0,
+                  transform: animateStats ? 'translateY(0)' : 'translateY(20px)'
+                }}
+              >
+                {animateStats ? dynamicCounts[index].toLocaleString() : '0'}
                 {stat.suffix}
               </div>
-              <div className="stat-label">{stat.label}</div>
+              <div className="stat-label" style={{
+                fontSize: isSmallMobile ? '0.9rem' : '1rem',
+                color: 'var(--text-secondary)'
+              }}>{stat.label}</div>
             </div>
           ))}
         </div>
         
-        <div className="dynamic-insights-section">
-          <div className="insights-title">
-            <span className="pulse-dot"></span> LIVE INSIGHTS
-            <div className="data-counter">
+        <div className="dynamic-insights-section" style={{
+          width: '100%',
+          margin: '2rem 0',
+          padding: '1.5rem 0',
+          position: 'relative',
+          boxSizing: 'border-box',
+          overflow: 'visible'
+        }}>
+          <div className="insights-title" style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            marginBottom: '1.5rem',
+            flexWrap: 'wrap',
+            gap: '0.5rem'
+          }}>
+            <span className="pulse-dot" style={{
+              display: 'inline-block',
+              width: '10px',
+              height: '10px',
+              borderRadius: '50%',
+              background: 'var(--blue-accent)',
+              marginRight: '8px',
+              animation: 'pulse 1.5s infinite'
+            }}></span> LIVE INSIGHTS
+            <div className="data-counter" style={{
+              marginLeft: '1rem',
+              fontSize: '0.9rem',
+              color: 'var(--blue-accent)'
+            }}>
               +{dynamicCount} data points processed in real time
             </div>
           </div>
-          <div className="insights-carousel">
+          <div className="insights-carousel" style={{
+            position: 'relative',
+            height: '200px',
+            width: '100%',
+            maxWidth: '800px',
+            margin: '0 auto',
+            overflow: 'hidden'
+          }}>
             {insights.map((insight, index) => (
               <div 
                 key={index} 
                 className={`insight-card ${index === activeInsight ? 'active' : ''}`}
+                style={{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  width: '100%',
+                  height: '100%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  opacity: index === activeInsight ? 1 : 0,
+                  transform: index === activeInsight ? 'translateX(0)' : 'translateX(100%)',
+                  transition: 'transform 0.6s ease, opacity 0.6s ease',
+                  pointerEvents: index === activeInsight ? 'auto' : 'none'
+                }}
               >
-                <div className="insight-content">
-                  <div className="insight-icon">💡</div>
-                  <div className="insight-text">{insight}</div>
+                <div className="insight-content" style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  textAlign: 'center',
+                  padding: '0 1rem'
+                }}>
+                  <div className="insight-icon" style={{
+                    fontSize: '2.5rem',
+                    marginBottom: '1.5rem'
+                  }}>💡</div>
+                  <div className="insight-text" style={{
+                    fontSize: isSmallMobile ? '1.2rem' : '1.6rem',
+                    lineHeight: '1.5',
+                    fontWeight: '600',
+                    background: 'linear-gradient(90deg, #ffffff, #6e8efb)',
+                    WebkitBackgroundClip: 'text',
+                    WebkitTextFillColor: 'transparent'
+                  }}>{insight}</div>
                 </div>
               </div>
             ))}
           </div>
-          <div className="insights-dots">
+          <div className="insights-dots" style={{
+            display: 'flex',
+            justifyContent: 'center',
+            gap: '0.5rem',
+            marginTop: '1rem'
+          }}>
             {insights.map((_, index) => (
               <span 
                 key={index} 
                 className={`insight-dot ${index === activeInsight ? 'active' : ''}`}
                 onClick={() => setActiveInsight(index)}
+                style={{
+                  width: '10px',
+                  height: '10px',
+                  borderRadius: '50%',
+                  background: index === activeInsight ? 'var(--blue-accent)' : 'rgba(255, 255, 255, 0.3)',
+                  cursor: 'pointer',
+                  transition: 'background-color 0.3s ease'
+                }}
               ></span>
             ))}
           </div>

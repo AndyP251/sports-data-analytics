@@ -203,7 +203,17 @@ const Login = ({ setIsAuthenticated }) => {
   }
 
   return (
-    <div className="auth-page">
+    <div 
+      className="auth-page" 
+      style={{ 
+        position: 'absolute', 
+        top: 0, 
+        left: 0, 
+        width: '100%', 
+        height: '100vh',
+        zIndex: 1000
+      }}
+    >
       <div className="auth-container">
         <div className="auth-box">
           <div className="brand-title">Pulse Project</div>
@@ -216,7 +226,7 @@ const Login = ({ setIsAuthenticated }) => {
           </div>
           {error && <div className="error-message">{error}</div>}
           {success && <div className="success-message">{success}</div>}
-          <form onSubmit={handleSubmit} className="auth-form" style={{ marginBottom: '20px' }}>
+          <form onSubmit={handleSubmit} className="auth-form">
             <div className="form-group">
               <label>Username</label>
               <input

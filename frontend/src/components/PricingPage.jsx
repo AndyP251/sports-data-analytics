@@ -56,7 +56,7 @@ function PricingPage() {
   return (
     <div className="pricing-wrapper">
       <header className="pricing-header">
-        <div className="header-container">
+        <div className="header-container" style={{ boxSizing: 'border-box', width: '100%', maxWidth: '1200px' }}>
           <div className="logo" onClick={navigateToHome}>Pulse Project</div>
           <div className="header-right">
             <button onClick={navigateToHome} className="nav-link">Home</button>
@@ -359,7 +359,7 @@ function PricingPage() {
                   <div className="faq-question">
                     <h3>{faq.question}</h3>
                     <div className="faq-icon">
-                      <svg viewBox="0 0 24 24">
+                      <svg viewBox="0 0 24 24" width="20" height="20" style={{ display: 'block', overflow: 'hidden' }}>
                         <path d={activeFaq === index ? "M19 13H5v-2h14v2z" : "M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"} />
                       </svg>
                     </div>

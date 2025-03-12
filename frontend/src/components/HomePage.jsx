@@ -128,11 +128,14 @@ const HomePage = () => {
         src={garminLogo} 
         alt="Garmin"
         style={{
-          width: '189px', // Wider to accommodate the text
-          height: '50px', // Shorter height for proper proportions
+          width: '100%',
+          height: 'auto',
+          maxWidth: '170px',
+          maxHeight: '40px',
           objectFit: 'contain',
           filter: 'brightness(1)',
-          margin: '20px 0', // Add vertical margin to center in the space
+          display: 'block',
+          overflow: 'hidden'
         }}
       />,
       description: 'Comprehensive fitness data collection'

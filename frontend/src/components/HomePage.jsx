@@ -699,7 +699,20 @@ const HomePage = () => {
             ))}
           </div>
           <div className="integration-disclaimer">
-            <p className="integration-disclaimer-text">* Pulse Project is not officially affiliated with these platforms. Integrations are currently in development and shown for demonstration purposes only.</p>
+            <p className="integration-disclaimer-text" style={{
+              fontSize: '0.9rem',
+              color: 'var(--text-secondary)',
+              fontStyle: 'italic',
+              display: 'block',
+              lineHeight: '1.5',
+              padding: '0.75rem 1rem',
+              backgroundColor: 'rgba(0, 0, 0, 0.2)',
+              borderRadius: '8px',
+              borderLeft: '3px solid var(--blue-accent)',
+              margin: '0.5rem 0 1.5rem',
+              textAlign: 'left',
+              maxWidth: '700px'
+            }}>* Pulse Project is not officially affiliated with these platforms. Integrations are currently in development and shown for demonstration purposes only.</p>
           </div>
         </div>
         

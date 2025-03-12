@@ -337,7 +337,20 @@ function PricingPage() {
                   </div>
                   
                   <div className="hardware-disclaimer">
-                    <p className="disclaimer-text">* Pulse Project is not officially affiliated with Catapult, WHOOP, or Garmin. These integrations are in development and showcased for demonstration purposes only.</p>
+                    <p className="disclaimer-text" style={{
+                      fontSize: '0.9rem',
+                      color: 'var(--text-secondary)',
+                      fontStyle: 'italic',
+                      display: 'block',
+                      lineHeight: '1.5',
+                      padding: '0.75rem 1rem',
+                      backgroundColor: 'rgba(0, 0, 0, 0.2)',
+                      borderRadius: '8px',
+                      borderLeft: '3px solid var(--blue-accent)',
+                      margin: '0.5rem 0 1.5rem',
+                      textAlign: 'left',
+                      maxWidth: '700px'
+                    }}>* Pulse Project is not officially affiliated with Catapult, WHOOP, or Garmin. These integrations are in development and showcased for demonstration purposes only.</p>
                   </div>
                 </div>
                 <div className="glow-effect"></div>

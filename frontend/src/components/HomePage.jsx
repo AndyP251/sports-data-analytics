@@ -396,6 +396,9 @@ const HomePage = () => {
               </div>
             ))}
           </div>
+          <div className="integration-disclaimer">
+            <p className="integration-disclaimer-text">* Pulse Project is not officially affiliated with these platforms. Integrations are currently in development and shown for demonstration purposes only.</p>
+          </div>
         </div>
         
         <div className="section testimonials-section">

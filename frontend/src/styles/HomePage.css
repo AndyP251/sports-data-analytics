@@ -36,6 +36,7 @@ html, body {
   flex-direction: column;
   position: relative;
   overflow-x: hidden;
+  overflow-y: visible !important;
 }
 
 /* Animated background elements */
@@ -61,7 +62,7 @@ html, body {
   top: 0;
   left: 0;
   right: 0;
-  z-index: 100;
+  z-index: 1000;
   backdrop-filter: blur(8px);
   background: rgba(30, 30, 30, 0.7);
   box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
@@ -88,6 +89,8 @@ html, body {
   display: flex;
   gap: 1rem;
   align-items: center;
+  margin: 0 -3px;
+  padding: 3px;
 }
 
 .pricing-button {
@@ -101,7 +104,7 @@ html, body {
   cursor: pointer;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   position: relative;
-  overflow: hidden;
+  overflow: visible !important;
   display: flex;
   align-items: center;
   gap: 0.5rem;
@@ -135,7 +138,7 @@ html, body {
   cursor: pointer;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   position: relative;
-  overflow: hidden;
+  overflow: visible !important;
   display: flex;
   align-items: center;
   gap: 0.5rem;
@@ -161,8 +164,6 @@ html, body {
   transform: translateY(0);
 }
 
-
-
 .coach-portal-button {
   background: transparent;
   color: white;
@@ -174,7 +175,7 @@ html, body {
   cursor: pointer;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   position: relative;
-  overflow: hidden;
+  overflow: visible !important;
   display: flex;
   align-items: center;
   gap: 0.5rem;
@@ -212,6 +213,7 @@ html, body {
   z-index: 5;
   width: 100%;
   max-width: 100vw;
+  overflow: visible !important;
 }
 
 .hero-section {
@@ -223,6 +225,7 @@ html, body {
   align-items: center;
   max-width: 900px;
   width: 100%;
+  overflow: visible !important;
 }
 
 .content h1 {
@@ -257,6 +260,8 @@ html, body {
   display: flex;
   align-items: center;
   gap: 0.5rem;
+  position: relative;
+  overflow: visible !important;
 }
 
 .hero-cta-button:hover {
@@ -275,6 +280,8 @@ html, body {
   max-width: 1200px;
   margin: 4rem auto;
   padding: 2rem;
+  overflow: visible !important;
+  position: relative;
 }
 
 .section h2 {
@@ -347,6 +354,7 @@ html, body {
   margin: 3rem 0 5rem;
   position: relative;
   padding: 1rem 0;
+  overflow: visible !important;
 }
 
 .insights-title {
@@ -382,7 +390,7 @@ html, body {
 .insights-carousel {
   height: 200px;
   position: relative;
-  overflow: hidden;
+  overflow: visible !important;
   border-radius: 16px;
   margin-bottom: 1.5rem;
   box-shadow: 0 15px 40px rgba(0, 0, 0, 0.2);
@@ -404,11 +412,16 @@ html, body {
   opacity: 0;
   transform: translateX(100%);
   transition: transform 0.6s ease, opacity 0.6s ease;
+  overflow: visible !important;
+  z-index: 1;
+  transform-origin: center center;
+  will-change: transform;
 }
 
 .insight-card.active {
   opacity: 1;
   transform: translateX(0);
+  z-index: 2;
 }
 
 .insight-content {
@@ -524,25 +537,36 @@ html, body {
   flex-wrap: wrap;
   justify-content: center;
   gap: 1rem;
+  transform: scale(1.15);
+  margin: 1.5rem 0;
 }
 
 .data-node {
-  padding: 1rem 1.5rem;
+  padding: 1.2rem 1.8rem;
   background: var(--card-bg);
   border: 1px solid var(--card-border);
   border-radius: 12px;
   font-weight: 500;
+  font-size: 1.1rem;
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.data-node:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.2);
 }
 
 .highlight-node {
   background: rgba(110, 142, 251, 0.15);
   border-color: rgba(110, 142, 251, 0.3);
   color: white;
+  font-weight: 600;
 }
 
 .data-arrow {
   color: var(--blue-accent);
-  font-size: 1.5rem;
+  font-size: 1.8rem;
+  font-weight: bold;
 }
 
 /* Features Section */
@@ -551,6 +575,8 @@ html, body {
   border-radius: 20px;
   margin-top: 5rem;
   margin-bottom: 5rem;
+  overflow: visible !important;
+  padding: 3rem 1rem;
 }
 
 .features {
@@ -559,6 +585,8 @@ html, body {
   gap: 2rem;
   justify-content: center;
   perspective: 1000px;
+  overflow: visible !important;
+  margin: 10px;
 }
 
 .feature-card {
@@ -574,6 +602,11 @@ html, body {
   animation: cardEntrance 0.6s ease-out forwards;
   animation-delay: calc(var(--index) * 0.1s);
   opacity: 0;
+  overflow: visible !important;
+  z-index: 1;
+  margin: 5px;
+  transform-origin: center center;
+  will-change: transform;
 }
 
 .feature-card:nth-child(1) {
@@ -603,6 +636,7 @@ html, body {
   transform: translateY(-15px) rotateX(5deg);
   box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
   border-color: rgba(110, 142, 251, 0.3);
+  z-index: 10;
 }
 
 .feature-card h3 {
@@ -638,6 +672,8 @@ html, body {
   border-radius: 20px;
   margin-top: 5rem;
   margin-bottom: 5rem;
+  overflow: visible !important;
+  padding: 3rem 1rem;
 }
 
 .integrations-container {
@@ -645,6 +681,8 @@ html, body {
   flex-wrap: wrap;
   gap: 1.5rem;
   justify-content: center;
+  overflow: visible !important;
+  margin: 10px;
 }
 
 .integration-card {
@@ -655,12 +693,20 @@ html, body {
   border: 1px solid var(--card-border);
   transition: all 0.3s ease;
   text-align: center;
+  overflow: visible !important;
+  transform-origin: center center;
+  will-change: transform;
+  position: relative;
+  z-index: 1;
+  margin: 5px;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
 }
 
 .integration-card:hover {
   transform: translateY(-10px);
   box-shadow: 0 15px 30px rgba(0, 0, 0, 0.2);
   border-color: rgba(110, 142, 251, 0.3);
+  z-index: 10;
 }
 
 .integration-logo {
@@ -693,11 +739,15 @@ html, body {
 .testimonials-section {
   margin-top: 5rem;
   margin-bottom: 5rem;
+  overflow: visible !important;
+  padding: 1rem;
 }
 
 .testimonials-container {
   display: flex;
   justify-content: center;
+  overflow: visible !important;
+  margin: 10px;
 }
 
 .testimonial-card {
@@ -708,6 +758,17 @@ html, body {
   position: relative;
   border: 1px solid var(--card-border);
   box-shadow: 0 15px 40px rgba(0, 0, 0, 0.15);
+  overflow: visible !important;
+  transform-origin: center center;
+  will-change: transform;
+  transition: all 0.3s ease;
+  z-index: 1;
+}
+
+.testimonial-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.2);
+  z-index: 5;
 }
 
 .quote-marks {
@@ -1125,7 +1186,7 @@ footer {
   margin: 0 auto;
   background: rgba(30, 30, 30, 0.7);
   border-radius: 20px;
-  overflow: hidden;
+  overflow: visible !important;
   box-shadow: 0 15px 40px rgba(0, 0, 0, 0.2);
   border: 1px solid var(--card-border);
   backdrop-filter: blur(5px);
@@ -1332,4 +1393,200 @@ footer {
   border-left: 3px solid var(--blue-accent);
   margin: 0.5rem 0 1.5rem;
   text-align: left;
+}
+
+/* Center the main content on larger screens */
+.home-page .content {
+  max-width: 80%;
+  margin: 0 auto;
+  padding: 0 20px;
+}
+
+/* Keep the header and footer full width */
+.home-page .header, 
+.home-page footer {
+  width: 100vw !important;
+  max-width: 100vw !important;
+  left: 0 !important;
+  right: 0 !important;
+}
+
+/* Center the footer content to match main content width */
+.home-page .footer-content {
+  max-width: 80%;
+  margin: 0 auto;
+}
+
+/* Ensure the header navigation is properly spaced */
+.home-page .header .logo {
+  margin-left: max(10vw - 10px, 20px);
+}
+
+.home-page .header .nav-buttons {
+  margin-right: max(10vw - 10px, 20px);
+}
+
+/* Adjust specific section widths to ensure they respect the 80% container */
+.home-page .hero-section,
+.home-page .stats-container,
+.home-page .dynamic-insights-section,
+.home-page .goals-section,
+.home-page .features-section,
+.home-page .universities-section,
+.home-page .integrations-section,
+.home-page .testimonials-section {
+  width: 100%;
+  max-width: 100%;
+}
+
+/* Responsive adjustment for smaller screens */
+@media (max-width: 768px) {
+  .home-page .content {
+    max-width: 100%;
+  }
+  
+  .home-page .header .logo {
+    margin-left: 10px;
+  }
+  
+  .home-page .header .nav-buttons {
+    margin-right: 10px;
+  }
+  
+  .home-page .footer-content {
+    max-width: 100%;
+  }
+}
+
+/* Fix for elements that have hover effects */
+.button-arrow,
+.button-arrow-hidden,
+.nav-buttons button,
+.feature-card,
+.integration-card,
+.hero-cta-button,
+.meet-team-button,
+.goals-list li,
+.testimonial-dot,
+.footer-links a,
+.insight-dot {
+  transform-origin: center center;
+  will-change: transform;
+  z-index: 1;
+  position: relative;
+  overflow: visible !important;
+}
+
+.button-arrow:hover,
+.nav-buttons button:hover,
+.feature-card:hover,
+.integration-card:hover,
+.hero-cta-button:hover,
+.meet-team-button:hover,
+.goals-list li:hover,
+.testimonial-dot:hover,
+.footer-links a:hover,
+.insight-dot:hover {
+  z-index: 5;
+}
+
+/* Ensure content sections have room for hover effects */
+.content, 
+.section, 
+.hero-section, 
+.features-section, 
+.goals-section, 
+.testimonials-section, 
+.integrations-section, 
+.universities-section {
+  overflow: visible !important;
+  position: relative;
+}
+
+/* Ensure nav buttons have room to grow on hover */
+.coach-portal-button,
+.athlete-portal-button,
+.pricing-button {
+  margin: 3px;
+  overflow: visible !important;
+}
+
+/* Allow testimonial card to expand on hover */
+.testimonial-card {
+  overflow: visible !important;
+}
+
+/* Add margin to the nav-buttons container to prevent cutoff */
+.nav-buttons {
+  margin: 0 -3px;
+  padding: 3px;
+}
+
+/* Fix for dynamic insights carousel */
+.insights-carousel {
+  overflow: visible !important;
+  position: relative;
+}
+
+/* Create room for insight cards */
+.insight-card {
+  overflow: visible !important;
+}
+
+/* Force header to remain above all elements */
+.header {
+  z-index: 1000;
+}
+
+/* Additional fixes for hover effects */
+.content, .section, .feature-card, .integration-card {
+  overflow: visible !important;
+}
+
+.data-node, .feature-card, .integration-card, .testimonial-card, 
+.pricing-button, .athlete-portal-button, .coach-portal-button, 
+.hero-cta-button, .meet-team-button {
+  margin: 5px;
+  transform-origin: center center;
+  will-change: transform;
+  z-index: 1;
+  position: relative;
+  overflow: visible !important;
+}
+
+.data-node:hover, .feature-card:hover, .integration-card:hover, .testimonial-card:hover,
+.pricing-button:hover, .athlete-portal-button:hover, .coach-portal-button:hover,
+.hero-cta-button:hover, .meet-team-button:hover {
+  z-index: 10;
+}
+
+.features-section, .integrations-section, .goals-section, .universities-section {
+  position: relative;
+  padding: 2rem 0;
+  margin: 2rem 0;
+  overflow: visible !important;
+}
+
+.header {
+  z-index: 1000;
+}
+
+.home-page {
+  overflow-x: hidden;
+  overflow-y: visible !important;
+}
+
+.integration-disclaimer {
+  text-align: center;
+  margin-top: 20px;
+  padding: 0 20px;
+}
+
+.integration-disclaimer-text {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  opacity: 0.8;
+  font-style: italic;
+  max-width: 700px;
+  margin: 0 auto;
 }

@@ -396,6 +396,9 @@ const HomePage = () => {
               </div>
             ))}
           </div>
+          <div className="integration-disclaimer">
+            <p className="integration-disclaimer-text">* Pulse Project is not officially affiliated with these platforms. Integrations are currently in development and shown for demonstration purposes only.</p>
+          </div>
         </div>
         
         <div className="section testimonials-section">
@@ -426,9 +429,6 @@ const HomePage = () => {
         <div className="footer-content">
           <div className="footer-logo">Pulse Project</div>
           <div className="footer-links">
-            <a href="#features">Features</a>
-            <a href="#integrations">Integrations</a>
-            <a href="#testimonials">Testimonials</a>
             <a onClick={navigateToPricing}>Pricing</a>
             <a onClick={navigateToCoachPortal}>Coach Portal</a>
             <a onClick={navigateToAthletePortal} className="footer-cta">Athlete Portal</a>

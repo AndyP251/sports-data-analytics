@@ -1856,7 +1856,8 @@ const BiometricsDashboard = ({ username }) => {
               <Card sx={{ 
                 p: 2, 
                 height: '100%',
-                position: 'relative' 
+                position: 'relative',
+                overflow: 'hidden' // Add this to prevent scrollbars
               }}>
                 {/* Module header with title and action menu */}
                 <Box sx={{ 
@@ -1888,9 +1889,11 @@ const BiometricsDashboard = ({ username }) => {
                 </Box>
                 
                 {/* Module visualization */}
-                <ResponsiveContainer width="100%" height={module.height || 300}>
-                  {module.render(moduleData)}
-                </ResponsiveContainer>
+                <Box sx={{ overflow: 'hidden' }}> {/* Add this wrapper with overflow hidden */}
+                  <ResponsiveContainer width="100%" height={module.height || 300} style={{ overflow: 'visible', maxHeight: '100%' }}>
+                    {module.render(moduleData)}
+                  </ResponsiveContainer>
+                </Box>
               </Card>
             </Grid>
           );
@@ -2187,6 +2190,139 @@ const BiometricsDashboard = ({ username }) => {
   const handleInsightTabChange = (event, newValue) => {
     setInsightTabValue(newValue);
   };
+
+  // Add a style rule for all ResponsiveContainer instances
+  useEffect(() => {
+    // Add a style tag to the document
+    const styleTag = document.createElement('style');
+    styleTag.innerHTML = `
+      /* Target all possible scroll containers */
+      .recharts-wrapper {
+        overflow: visible !important;
+      }
+      .recharts-surface {
+        overflow: visible !important;
+      }
+      /* Target the ResponsiveContainer */
+      .recharts-responsive-container {
+        overflow: visible !important;
+      }
+      /* Target any potential chart containers */
+      .MuiCard-root .recharts-wrapper,
+      .MuiCard-root .recharts-responsive-container,
+      .MuiCardContent-root .recharts-wrapper,
+      .MuiCardContent-root .recharts-responsive-container {
+        overflow: visible !important;
+      }
+      /* Ensure no scrollbars on card content */
+      .MuiCardContent-root {
+        overflow: hidden !important;
+      }
+      /* Target any chart parent containers */
+      [class*="chart-container"],
+      [class*="chart"] {
+        overflow: hidden !important;
+      }
+      /* Hide scrollbars but allow mouse wheel scrolling for the page itself */
+      ::-webkit-scrollbar {
+        width: 0px;
+        height: 0px;
+        background: transparent;
+      }
+      /* Completely hide all scrollbars in charts */
+      .recharts-wrapper::-webkit-scrollbar,
+      .recharts-surface::-webkit-scrollbar,
+      .recharts-responsive-container::-webkit-scrollbar,
+      .MuiCardContent-root::-webkit-scrollbar {
+        display: none;
+        width: 0;
+        height: 0;
+      }
+      
+      /* Firefox scrollbar hiding */
+      .recharts-wrapper, .recharts-surface, .recharts-responsive-container, .MuiCardContent-root {
+        scrollbar-width: none;
+      }
+      
+      /* IE scrollbar hiding */
+      .recharts-wrapper, .recharts-surface, .recharts-responsive-container, .MuiCardContent-root {
+        -ms-overflow-style: none;
+      }
+      /* Fix for dark mode text in charts */
+      .recharts-text {
+        fill: ${darkMode ? 'rgba(255, 255, 255, 0.85)' : 'rgba(0, 0, 0, 0.85)'};
+      }
+      .recharts-cartesian-axis-tick-value tspan {
+        fill: ${darkMode ? 'rgba(255, 255, 255, 0.65)' : 'rgba(0, 0, 0, 0.65)'};
+      }
+      /* Fix for tooltip in dark mode */
+      .recharts-tooltip-wrapper {
+        filter: ${darkMode ? 'invert(0.85) hue-rotate(180deg)' : 'none'};
+      }
+    `;
+    document.head.appendChild(styleTag);
+    
+    // Clean up the style tag when the component unmounts
+    return () => {
+      document.head.removeChild(styleTag);
+    };
+  }, [darkMode]);
+
+  useEffect(() => {
+    // Add specific fixes for individual charts right after mount
+    const fixChartScrollbars = () => {
+      // Target specific chart containers by their titles/headers
+      const allHeadings = document.querySelectorAll('div[role="heading"], h1, h2, h3, h4, h5, h6, .MuiTypography-root');
+      const sleepCharts = [];
+      const respirationCharts = [];
+      
+      // Find headings with the specific text
+      allHeadings.forEach(heading => {
+        if (heading.textContent && heading.textContent.includes('Sleep Duration')) {
+          sleepCharts.push(heading);
+        }
+        if (heading.textContent && heading.textContent.includes('Respiration Range')) {
+          respirationCharts.push(heading);
+        }
+      });
+      
+      // Function to find and fix parent containers
+      const fixParentContainer = (element) => {
+        if (!element) return;
+        // Navigate up to find chart container
+        let parent = element.parentElement;
+        for (let i = 0; i < 5; i++) { // Look up to 5 levels up
+          if (parent) {
+            // Apply styles to any overflow containers
+            const containers = parent.querySelectorAll('div');
+            containers.forEach(container => {
+              const style = window.getComputedStyle(container);
+              if (style.overflow === 'auto' || style.overflow === 'scroll' || 
+                  style.overflowX === 'auto' || style.overflowX === 'scroll' ||
+                  style.overflowY === 'auto' || style.overflowY === 'scroll') {
+                container.style.overflow = 'hidden';
+              }
+            });
+            parent = parent.parentElement;
+          }
+        }
+      };
+      
+      // Apply fixes
+      sleepCharts.forEach(fixParentContainer);
+      respirationCharts.forEach(fixParentContainer);
+    };
+    
+    // Run initial fix
+    setTimeout(fixChartScrollbars, 1000);
+    
+    // Run fix again if window is resized
+    window.addEventListener('resize', fixChartScrollbars);
+    
+    return () => {
+      window.removeEventListener('resize', fixChartScrollbars);
+    };
+  }, []);
 
   return (
     <Box sx={{ width: '100%' }} className={`biometrics-dashboard ${darkMode ? 'dark-mode' : ''}`}>
@@ -3224,6 +3360,7 @@ const BiometricsDashboard = ({ username }) => {
                                     overflow: 'hidden',
                                     WebkitBoxOrient: 'vertical',
                                     WebkitLineClamp: 1,
+                                    color: theme => theme.palette.mode === 'dark' ? 'rgba(255, 255, 255, 0.7)' : 'rgba(0, 0, 0, 0.6)' // Add this for dark/light mode compatibility
                                   }}>
                                     {insight.content}
                                   </Typography>
@@ -3232,30 +3369,43 @@ const BiometricsDashboard = ({ username }) => {
                               
                               <AccordionDetails>
                                 <Box sx={{ mb: 2 }}>
-                                  <Typography variant="body1" paragraph>
+                                  <Typography variant="body1" paragraph sx={{
+                                    color: theme => theme.palette.mode === 'dark' ? 'rgba(255, 255, 255, 0.9)' : 'rgba(0, 0, 0, 0.8)' // Add this for dark/light mode compatibility
+                                  }}>
                                     {insight.content}
                                   </Typography>
                                   
-                                  <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1 }}>
+                                  <Typography variant="subtitle2" sx={{ 
+                                    fontWeight: 600, 
+                                    mb: 1,
+                                    color: theme => theme.palette.mode === 'dark' ? 'rgba(255, 255, 255, 0.9)' : 'rgba(0, 0, 0, 0.8)' // Add this for dark/light mode compatibility
+                                  }}>
                                     Recommendation:
                                   </Typography>
-                                  <Typography variant="body2" sx={{ mb: 2 }}>
+                                  <Typography variant="body2" sx={{ 
+                                    mb: 2,
+                                    color: theme => theme.palette.mode === 'dark' ? 'rgba(255, 255, 255, 0.7)' : 'rgba(0, 0, 0, 0.7)' // Add this for dark/light mode compatibility
+                                  }}>
                                     {insight.recommendation}
                                   </Typography>
                                   
                                   {/* Visualization when data_points are available */}
                                   {insight.data_points && insight.data_points.length > 0 && (
-                                    <Box sx={{ height: 200, mb: 2 }}>
-                                      <Typography variant="caption" sx={{ mb: 1, display: 'block', color: 'text.secondary' }}>
+                                    <Box sx={{ height: 200, mb: 2, overflow: 'hidden' }}>
+                                      <Typography variant="caption" sx={{ 
+                                        mb: 1, 
+                                        display: 'block', 
+                                        color: theme => theme.palette.mode === 'dark' ? 'rgba(255, 255, 255, 0.5)' : 'rgba(0, 0, 0, 0.5)' // Update for dark/light mode
+                                      }}>
                                         {insight.visualization === 'line' && 'Line chart showing your trend over time'}
                                         {insight.visualization === 'bar' && 'Bar chart showing your values over time'}
                                         {insight.visualization === 'area' && 'Area chart showing your trend over time'}
                                         {insight.visualization === 'gauge' && 'Gauge showing your current level'}
                                       </Typography>
                                       
-                                      <ResponsiveContainer width="100%" height="100%">
+                                      <ResponsiveContainer width="100%" height="100%" style={{ overflow: 'visible', maxHeight: '100%' }}>
                                         {insight.visualization === 'line' && (
-                                          <LineChart data={insight.data_points.map((val, idx) => ({ date: idx, value: val }))}>
+                                          <LineChart data={insight.data_points.map((val, idx) => ({ date: idx, value: val }))} style={{overflow: 'hidden'}}> {/* Add style here */}
                                             <CartesianGrid strokeDasharray="3 3" />
                                             <XAxis dataKey="date" />
                                             <YAxis />
@@ -3265,7 +3415,7 @@ const BiometricsDashboard = ({ username }) => {
                                         )}
                                         
                                         {insight.visualization === 'bar' && (
-                                          <BarChart data={insight.data_points.map((val, idx) => ({ date: idx, value: val }))}>
+                                          <BarChart data={insight.data_points.map((val, idx) => ({ date: idx, value: val }))} style={{overflow: 'hidden'}}> {/* Add style here */}
                                             <CartesianGrid strokeDasharray="3 3" />
                                             <XAxis dataKey="date" />
                                             <YAxis />
@@ -3275,7 +3425,7 @@ const BiometricsDashboard = ({ username }) => {
                                         )}
                                         
                                         {insight.visualization === 'area' && (
-                                          <AreaChart data={insight.data_points.map((val, idx) => ({ date: idx, value: val }))}>
+                                          <AreaChart data={insight.data_points.map((val, idx) => ({ date: idx, value: val }))} style={{overflow: 'hidden'}}> {/* Add style here */}
                                             <CartesianGrid strokeDasharray="3 3" />
                                             <XAxis dataKey="date" />
                                             <YAxis />
@@ -3291,6 +3441,7 @@ const BiometricsDashboard = ({ username }) => {
                                             data={[{value: insight.data_points[insight.data_points.length-1], fill: categoryInfo.color}]} 
                                             startAngle={180} 
                                             endAngle={0}
+                                            style={{overflow: 'hidden'}} /* Add style here */
                                           >
                                             <RadialBar background dataKey="value" />
                                             <text x="50%" y="50%" textAnchor="middle" dominantBaseline="middle" className="progress-label">

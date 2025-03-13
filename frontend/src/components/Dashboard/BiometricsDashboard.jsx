@@ -110,35 +110,26 @@ const StyledMenu = styled((props) => (
     }}
     {...props}
   />
-))(({ theme }) => ({
+))(() => ({
   '& .MuiPaper-root': {
-    borderRadius: 6,
-    marginTop: theme.spacing(1),
-    minWidth: 180,
-    backgroundColor: '#2C3E50',
-    color: '#fff',
-    boxShadow: 'rgb(255, 255, 255) 0px 0px 15px -10px',
-    '& .MuiMenu-list': {
-      padding: '4px 0',
-    },
+    borderRadius: 12,
+    marginTop: 8,
+    minWidth: 200,
   },
 }));
 
-const StyledMenuItem = styled(MenuItem)(({ theme }) => ({
-  padding: '10px 20px',
+const StyledMenuItem = styled(MenuItem)(() => ({
   margin: '4px 8px',
-  borderRadius: '4px',
+  borderRadius: '8px',
   display: 'flex',
   alignItems: 'center',
   gap: '12px',
   transition: 'all 0.2s ease-in-out',
   '&:hover': {
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
     transform: 'translateX(5px)',
   },
   '& .MuiSvgIcon-root': {
     fontSize: 20,
-    color: 'inherit',
   },
   '& .MuiTypography-root': {
     fontSize: '0.95rem',
@@ -266,11 +257,31 @@ const BiometricsDashboard = ({ username }) => {
   const [insightsError, setInsightsError] = useState(null);
   const [insightTabValue, setInsightTabValue] = useState(0);
   const [expandedInsightId, setExpandedInsightId] = useState(null);
+  // Add this near the beginning of the component where other state variables are defined
+  const [scrolled, setScrolled] = useState(false);
 
   // Update localStorage when dark mode changes
   useEffect(() => {
     localStorage.setItem('biometricsDarkMode', darkMode);
   }, [darkMode]);
+
+  // Add this effect to handle scrolling
+  useEffect(() => {
+    const handleScroll = () => {
+      if (window.scrollY > 30) {
+        setScrolled(true);
+      } else {
+        setScrolled(false);
+      }
+    };
+
+    window.addEventListener('scroll', handleScroll);
+    
+    // Clean up
+    return () => {
+      window.removeEventListener('scroll', handleScroll);
+    };
+  }, []);
 
   // Table styles based on dark mode
   const thStyle = {
@@ -2325,167 +2336,41 @@ const BiometricsDashboard = ({ username }) => {
   }, []);
 
   return (
-    <Box sx={{ width: '100%' }} className={`biometrics-dashboard ${darkMode ? 'dark-mode' : ''}`}>
-      <Box sx={{
-        position: 'absolute',
-        top: 0,
-        left: 0,
-        right: 0,
-        height: '250px',
-        zIndex: -1
-      }} className="header-gradient" />
-      <Box sx={{
-        display: 'flex',
-        alignItems: 'center',
-        p: 2
-      }} className="header-content">
-        {/* Left section with menu and title */}
-        <Box sx={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 2
-        }}>
+    <Box sx={{ width: '100%' }} className={`biometrics-dashboard ${darkMode ? '' : 'light-mode'}`}>
+      <Box className={`header-gradient ${scrolled ? 'scrolled' : ''}`}>
+        <Box className="header-content">
           <IconButton
             color="inherit"
             onClick={openMenu}
             sx={{
-              color: 'white',
-              transition: 'all 0.4s cubic-bezier(0.2, 0.8, 0.2, 1.2)',
-              padding: 0,
+              color: darkMode ? 'white' : '#2C3E50',
+              transition: 'all 0.3s ease',
               '&:hover': {
-                transform: 'scale(1.25) rotate(5deg)',
-                backgroundColor: 'transparent',
-                color: '#c3e6ff',
-                filter: 'drop-shadow(0 0 5px rgba(110, 142, 251, 0.7))',
-              },
-              '&:active': {
-                transform: 'scale(0.9) rotate(-5deg)',
-              },
-              '& .MuiTouchRipple-root': {
-                display: 'none',
+                transform: 'scale(1.1)',
               },
             }}
+            className="menu-button-animated"
           >
-            <MenuIcon fontSize="large" />
+            <MenuIcon />
           </IconButton>
 
-          <Typography variant="h4" sx={{
-            fontWeight: 600,
-            fontFamily: '"Poppins", sans-serif',
-            color: 'white',
-            whiteSpace: 'nowrap',
-            minWidth: '400px'
-          }}>
-            {username.charAt(0).toUpperCase() + username.slice(1)}'s Pulse Insights
-          </Typography>
-
-          <StyledMenu
-            anchorEl={anchorEl}
-            open={Boolean(anchorEl)}
-            onClose={closeMenu}
-          >
-            <StyledMenuItem onClick={() => setShowSourceMenu(true)}>
-              <SyncIcon />
-              <Typography>Activate Data Source</Typography>
-            </StyledMenuItem>
-
-            <StyledMenuItem onClick={() => {
-              closeMenu();
-              setTabValue(1);
-            }}>
-              <TableChartIcon />
-              <Typography>View Data Table</Typography>
-            </StyledMenuItem>
-
-            <StyledMenuItem onClick={() => {
-              closeMenu();
-              // Use the same approach as in renderFooter
-              if (typeof fetchRawData === 'function') {
-                fetchRawData();
-              } else {
-                console.error('fetchRawData function is not available');
-                // Simplified fallback - will just trigger the download button which has its own fallback
-                const downloadButton = document.querySelector('.footer button');
-                if (downloadButton) {
-                  downloadButton.click();
-                } else {
-                  addSyncMessage('Could not initiate download. Please try the Download Raw Data button at the bottom of the page.', 'error');
-                }
-              }
-            }}>
-              <BarChartIcon />
-              <Typography>Download Raw Data</Typography>
-            </StyledMenuItem>
-
-            <StyledMenuItem onClick={() => {
-              closeMenu();
-              openDialog('Errors', error || 'No errors');
-            }}>
-              <BugReportIcon />
-              <Typography>View Errors</Typography>
-            </StyledMenuItem>
-
-            <Box sx={{ my: 1, borderTop: '1px solid rgba(255,255,255,0.1)' }} />
-
-            <StyledMenuItem onClick={handleLogout}>
-              <LogoutIcon />
-              <Typography>Logout</Typography>
-            </StyledMenuItem>
-
-            {devMode && (
-              <StyledMenuItem onClick={() => {
-                closeMenu();
-                diagnoseGarminIssue();
-              }}>
-                <BugReportIcon />
-                <Typography>Diagnose Garmin Issue</Typography>
-              </StyledMenuItem>
-            )}
-          </StyledMenu>
+          <h1 className="header-title">
+            {username.charAt(0).toUpperCase() + username.slice(1)}'s Pulse Dashboard
+          </h1>
         </Box>
 
-        {/* Spacer to push toggles to right */}
-        <Box sx={{ flexGrow: 1 }} />
-
         {/* Right section with toggles */}
-        <Box sx={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 2
-        }}>
+        <Box className="header-controls">
           {/* Dark Mode Toggle */}
           <MuiTooltip title={darkMode ? "Switch to Light Mode" : "Switch to Dark Mode"}>
             <Box sx={{
               display: 'flex',
               alignItems: 'center',
-              backgroundColor: 'rgba(255, 255, 255, 0.1)',
-              padding: '4px 12px',
-              borderRadius: '4px',
+              gap: '8px',
               cursor: 'pointer'
-            }}>
-              <Brightness4Icon sx={{ mr: 1, color: 'white' }} />
-              <Switch
-                checked={darkMode}
-                onChange={(e) => setDarkMode(e.target.checked)}
-                sx={{
-                  '& .MuiSwitch-switchBase': {
-                    color: 'white',
-                    '&.Mui-checked': {
-                      color: 'white',
-                      '& + .MuiSwitch-track': {
-                        backgroundColor: 'rgba(255, 255, 255, 0.5)',
-                      },
-                    },
-                  },
-                  '& .MuiSwitch-track': {
-                    backgroundColor: 'rgba(255, 255, 255, 0.3)',
-                    opacity: 1,
-                  },
-                  '& .MuiSwitch-thumb': {
-                    backgroundColor: 'white',
-                  },
-                }}
-              />
+            }} onClick={() => setDarkMode(!darkMode)}>
+              <Brightness4Icon sx={{ color: darkMode ? 'white' : '#2C3E50' }} />
+              <div className={`toggle-switch ${darkMode ? 'active' : ''}`}></div>
             </Box>
           </MuiTooltip>
 
@@ -2494,38 +2379,82 @@ const BiometricsDashboard = ({ username }) => {
             <Box sx={{
               display: 'flex',
               alignItems: 'center',
-              backgroundColor: 'rgba(255, 255, 255, 0.1)',
-              padding: '4px 12px',
-              borderRadius: '4px',
+              gap: '8px',
               cursor: 'pointer'
-            }}>
-              <DeveloperModeIcon sx={{ mr: 1, color: 'white' }} />
-              <Switch
-                checked={devMode}
-                onChange={(e) => setDevMode(e.target.checked)}
-                sx={{
-                  '& .MuiSwitch-switchBase': {
-                    color: 'white',
-                    '&.Mui-checked': {
-                      color: 'white',
-                      '& + .MuiSwitch-track': {
-                        backgroundColor: 'rgba(255, 255, 255, 0.5)',
-                      },
-                    },
-                  },
-                  '& .MuiSwitch-track': {
-                    backgroundColor: 'rgba(255, 255, 255, 0.3)',
-                    opacity: 1,
-                  },
-                  '& .MuiSwitch-thumb': {
-                    backgroundColor: 'white',
-                  },
-                }}
-              />
+            }} onClick={() => setDevMode(!devMode)}>
+              <DeveloperModeIcon sx={{ color: devMode ? (darkMode ? 'white' : '#2C3E50') : (darkMode ? 'rgba(255, 255, 255, 0.7)' : 'rgba(44, 62, 80, 0.7)') }} />
+              <div className={`toggle-switch ${devMode ? 'active' : ''}`}></div>
             </Box>
           </MuiTooltip>
         </Box>
       </Box>
+
+      <StyledMenu
+        id="customized-menu"
+        anchorEl={anchorEl}
+        keepMounted
+        open={Boolean(anchorEl)}
+        onClose={closeMenu}
+      >
+        <StyledMenuItem onClick={() => setShowSourceMenu(true)}>
+          <SyncIcon />
+          <Typography>Activate Data Source</Typography>
+        </StyledMenuItem>
+
+        <StyledMenuItem onClick={() => {
+          closeMenu();
+          setTabValue(1);
+        }}>
+          <TableChartIcon />
+          <Typography>View Data Table</Typography>
+        </StyledMenuItem>
+
+        <StyledMenuItem onClick={() => {
+          closeMenu();
+          // Use the same approach as in renderFooter
+          if (typeof fetchRawData === 'function') {
+            fetchRawData();
+          } else {
+            console.error('fetchRawData function is not available');
+            // Simplified fallback - will just trigger the download button which has its own fallback
+            const downloadButton = document.querySelector('.footer button');
+            if (downloadButton) {
+              downloadButton.click();
+            } else {
+              addSyncMessage('Could not initiate download. Please try the Download Raw Data button at the bottom of the page.', 'error');
+            }
+          }
+        }}>
+          <BarChartIcon />
+          <Typography>Download Raw Data</Typography>
+        </StyledMenuItem>
+
+        <StyledMenuItem onClick={() => {
+          closeMenu();
+          openDialog('Errors', error || 'No errors');
+        }}>
+          <BugReportIcon />
+          <Typography>View Errors</Typography>
+        </StyledMenuItem>
+
+        <Box sx={{ my: 1, borderTop: '1px solid rgba(255,255,255,0.1)' }} />
+
+        <StyledMenuItem onClick={handleLogout}>
+          <LogoutIcon />
+          <Typography>Logout</Typography>
+        </StyledMenuItem>
+
+        {devMode && (
+          <StyledMenuItem onClick={() => {
+            closeMenu();
+            diagnoseGarminIssue();
+          }}>
+            <BugReportIcon />
+            <Typography>Diagnose Garmin Issue</Typography>
+          </StyledMenuItem>
+        )}
+      </StyledMenu>
+
       <Box sx={{ px: 3 }}>
         {/* Dialog for showing raw data or error logs */}
         <Dialog open={showDialog} onClose={closeDialog} maxWidth="md" fullWidth>
@@ -2745,6 +2674,7 @@ const BiometricsDashboard = ({ username }) => {
               color="secondary"
               onClick={syncData}
               disabled={loading}
+              className="sync-button"
             >
               Sync Data
             </Button>

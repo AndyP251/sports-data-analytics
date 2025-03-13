@@ -404,8 +404,13 @@ const BiometricsDashboard = ({ username }) => {
       const days = 30;
       console.log(`Fetching biometric data for ${days} days...`);
       
-      // Request all sources data first (for debugging)
-      const response = await axios.get(`/api/biometrics/?days=${days}`);
+      // Add source parameter if a specific source is selected
+      const sourceParam = selectedDataSource && selectedDataSource !== 'all' 
+        ? `&source=${selectedDataSource}` 
+        : '';
+      
+      // Request data with optional source filter
+      const response = await axios.get(`/api/biometrics/?days=${days}${sourceParam}`);
       console.log('Raw biometrics data:', response.data);
 
       // Add debugging for source inspection
@@ -426,7 +431,7 @@ const BiometricsDashboard = ({ username }) => {
           await syncData();
 
           // Try fetching data again after sync
-          const retryResponse = await axios.get(`/api/biometrics/?days=${days}`);
+          const retryResponse = await axios.get(`/api/biometrics/?days=${days}${sourceParam}`);
           console.log('Raw biometrics data after sync:', retryResponse.data);
 
           if (!retryResponse.data || retryResponse.data.length === 0) {
@@ -509,19 +514,38 @@ const BiometricsDashboard = ({ username }) => {
     }
   };
 
-  const syncData = async () => {
-    if (activeSource === null) {
+  const syncData = async (specificSource = null) => {
+    // Safely validate the specificSource parameter
+    const isValidSource = specificSource && 
+                         (typeof specificSource === 'string' || 
+                          (typeof specificSource === 'object' && specificSource.id));
+    
+    // Only proceed if we have an active source or a valid specific source
+    if (activeSource === null && !isValidSource) {
+      console.log('No active source or valid specific source to sync');
+      addSyncMessage('Please select a valid data source to sync', 'warning');
       return;
     }
+    
     setLoading(true);
     clearSyncMessages(); // Clear existing messages before sync
     try {
+      // Create request body with specific source if provided, ensuring it's a valid string
+      const sourceToSync = isValidSource ? 
+                         (typeof specificSource === 'string' ? specificSource : specificSource.id) :
+                         null;
+      
+      const requestBody = sourceToSync ? { source: sourceToSync } : {};
+      
+      console.log('Syncing with request body:', requestBody);
+      
       const response = await fetch('/api/biometrics/sync/', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'X-CSRF-TOKEN': document.cookie.split('csrftoken=')[1]?.split(';')[0],
         },
+        body: JSON.stringify(requestBody),
         credentials: 'include',
       });
 
@@ -2702,6 +2726,88 @@ const BiometricsDashboard = ({ username }) => {
                     Detailed Analytics
                   </Typography>
                   
+                  {/* Add current source display */}
+                  <Box sx={{ mb: 1 }}>
+                    <Typography variant="subtitle1" color="textSecondary">
+                      {selectedDataSource && selectedDataSource !== 'all' 
+                        ? `Viewing data from: ${
+                            typeof selectedDataSource === 'string'
+                              ? selectedDataSource.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')
+                              : String(selectedDataSource)
+                          }`
+                        : 'Viewing data from all connected sources'}
+                    </Typography>
+                  </Box>
+                  
+                  {/* Add source selector dropdown */}
+                  <Box sx={{ 
+                    display: 'flex', 
+                    justifyContent: 'space-between', 
+                    alignItems: 'center', 
+                    mb: 2,
+                    flexWrap: 'wrap',
+                    gap: 2
+                  }}>
+                    <FormControl variant="outlined" size="small" sx={{ minWidth: 200 }}>
+                      <Select
+                        value={selectedDataSource || 'all'}
+                        onChange={(e) => setSelectedDataSource(e.target.value)}
+                        displayEmpty
+                        sx={{ borderRadius: '8px' }}
+                      >
+                        <MenuItem value="all">All Sources</MenuItem>
+                        {activeSources && Array.isArray(activeSources) && activeSources.map((source) => {
+                          // Safely handle the source object or string
+                          const sourceId = source && (source.id || source);
+                          // Safely create a display name ensuring it's a string
+                          let displayName = 'Unknown Source';
+                          
+                          if (source) {
+                            if (source.name) {
+                              displayName = source.name;
+                            } else if (typeof source === 'string') {
+                              displayName = source.split('_')
+                                .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+                                .join(' ');
+                            } else if (typeof sourceId === 'string') {
+                              displayName = sourceId.split('_')
+                                .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+                                .join(' ');
+                            }
+                          }
+                          
+                          // Only render MenuItem if we have a valid sourceId
+                          return sourceId ? (
+                            <MenuItem 
+                              key={sourceId} 
+                              value={sourceId}
+                            >
+                              {displayName}
+                            </MenuItem>
+                          ) : null;
+                        })}
+                      </Select>
+                    </FormControl>
+                    
+                    {loading && (
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <CircularProgress size={20} />
+                        <Typography variant="body2" color="textSecondary">Loading data...</Typography>
+                      </Box>
+                    )}
+                    
+                    <Button
+                      variant="outlined"
+                      size="small"
+                      startIcon={<SyncIcon />}
+                      onClick={() => syncData(selectedDataSource)}
+                      disabled={loading}
+                      sx={{ borderRadius: '8px' }}
+                    >
+                      Refresh Data
+                    </Button>
+                  </Box>
+                  
                   <Box sx={{ 
                     borderRadius: '12px', 
                     overflow: 'hidden',
@@ -3265,74 +3371,97 @@ const BiometricsDashboard = ({ username }) => {
             
             {activeSources && activeSources.length > 0 ? (
               <Grid container spacing={3} sx={{ mb: 4 }}>
-                {activeSources.map((source) => (
-                  <Grid item xs={12} sm={6} md={4} key={source.id || source}>
-                    <Card sx={{ 
-                      borderRadius: '12px',
-                      transition: 'transform 0.3s ease-in-out, box-shadow 0.3s ease-in-out',
-                      '&:hover': {
-                        transform: 'translateY(-5px)',
-                        boxShadow: '0 10px 20px rgba(0,0,0,0.2)'
-                      }
-                    }}>
-                      <CardContent sx={{ p: 3 }}>
-                        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                            <DevicesOutlinedIcon sx={{ color: '#3498DB' }} />
-                            <Typography variant="h6">
-                              {source.name || source.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}
-                            </Typography>
+                {activeSources.map((source) => {
+                  // Skip rendering if source is invalid
+                  if (!source) return null;
+                  
+                  // Safely get the source ID or use the source itself if it's a string
+                  const sourceId = typeof source === 'object' ? source.id : source;
+                  
+                  // Skip rendering if we can't determine a valid key
+                  if (!sourceId) return null;
+                  
+                  // Safely determine the display name
+                  let displayName;
+                  if (typeof source === 'object' && source.name) {
+                    displayName = source.name;
+                  } else if (typeof source === 'string') {
+                    displayName = source.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
+                  } else if (typeof sourceId === 'string') {
+                    displayName = sourceId.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
+                  } else {
+                    displayName = 'Unknown Source';
+                  }
+                  
+                  return (
+                    <Grid item xs={12} sm={6} md={4} key={sourceId}>
+                      <Card sx={{ 
+                        borderRadius: '12px',
+                        transition: 'transform 0.3s ease-in-out, box-shadow 0.3s ease-in-out',
+                        '&:hover': {
+                          transform: 'translateY(-5px)',
+                          boxShadow: '0 10px 20px rgba(0,0,0,0.2)'
+                        }
+                      }}>
+                        <CardContent sx={{ p: 3 }}>
+                          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                              <DevicesOutlinedIcon sx={{ color: '#3498DB' }} />
+                              <Typography variant="h6">
+                                {displayName}
+                              </Typography>
+                            </Box>
+                            <Chip 
+                              label="Active" 
+                              color="success" 
+                              size="small" 
+                              sx={{ 
+                                height: '24px',
+                                fontSize: '0.75rem',
+                                fontWeight: 'bold'
+                              }} 
+                            />
                           </Box>
-                          <Chip 
-                            label="Active" 
-                            color="success" 
-                            size="small" 
-                            sx={{ 
-                              height: '24px',
-                              fontSize: '0.75rem',
-                              fontWeight: 'bold'
-                            }} 
-                          />
-                        </Box>
-                        
-                        {source.profile_type && (
-                          <Typography variant="body2" color="textSecondary" sx={{ mb: 2 }}>
-                            Profile: {source.profile_type}
-                          </Typography>
-                        )}
-                        
-                        <Box sx={{ mt: 3, display: 'flex', justifyContent: 'space-between' }}>
-                          <Button
-                            startIcon={<SyncIcon />}
-                            variant="outlined"
-                            size="small"
-                            onClick={() => syncData(source.id || source)}
-                            sx={{ 
-                              borderRadius: '20px',
-                              fontSize: '0.75rem'
-                            }}
-                          >
-                            Sync
-                          </Button>
                           
-                          <Button
-                            startIcon={<DeleteOutlineIcon />}
-                            variant="outlined"
-                            color="error"
-                            size="small"
-                            onClick={() => removeDataSource(source.id || source)}
-                            sx={{ 
-                              borderRadius: '20px',
-                              fontSize: '0.75rem'
-                            }}
-                          >
-                            Disconnect
-                          </Button>
-                        </Box>
-                      </CardContent>
-                    </Card>
-                  </Grid>
-                ))}
+                          {source.profile_type && (
+                            <Typography variant="body2" color="textSecondary" sx={{ mb: 2 }}>
+                              Profile: {source.profile_type}
+                            </Typography>
+                          )}
+                          
+                          <Box sx={{ mt: 3, display: 'flex', justifyContent: 'space-between' }}>
+                            <Button
+                              startIcon={<SyncIcon />}
+                              variant="outlined"
+                              size="small"
+                              onClick={() => syncData(source.id || source)}
+                              sx={{ 
+                                borderRadius: '20px',
+                                fontSize: '0.75rem'
+                              }}
+                            >
+                              Sync
+                            </Button>
+                            
+                            <Button
+                              startIcon={<DeleteOutlineIcon />}
+                              variant="outlined"
+                              color="error"
+                              size="small"
+                              onClick={() => removeDataSource(source.id || source)}
+                              sx={{ 
+                                borderRadius: '20px',
+                                fontSize: '0.75rem'
+                              }}
+                            >
+                              Disconnect
+                            </Button>
+                          </Box>
+                        </CardContent>
+                      </Card>
+                    </Grid>
+                  );
+                })}
               </Grid>
             ) : (
               <Alert 

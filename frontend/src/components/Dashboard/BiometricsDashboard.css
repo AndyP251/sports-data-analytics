@@ -65,7 +65,7 @@
   background: linear-gradient(90deg, #6e8efb, #a777e3);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
-  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3); /* Enhanced shadow for better visibility */
   position: relative;
 }
 
@@ -97,15 +97,15 @@
 }
 
 .biometrics-dashboard .MuiMenuItem-root:hover {
-  background-color: rgba(255, 255, 255, 0.1) !important;
+  background-color: rgba(110, 142, 251, 0.15) !important; /* Blue-tinted hover state */
 }
 
 .biometrics-dashboard.light-mode .MuiMenuItem-root:hover {
-  background-color: rgba(0, 0, 0, 0.05) !important;
+  background-color: rgba(110, 142, 251, 0.08) !important; /* Lighter blue tint for light mode */
 }
 
 .biometrics-dashboard .MuiMenuItem-root .MuiSvgIcon-root {
-  color: rgba(255, 255, 255, 0.8);
+  color: rgba(255, 255, 255, 0.9); /* Increased icon contrast */
   margin-right: 12px;
 }
 
@@ -162,10 +162,12 @@
 .biometrics-dashboard .active-integrations-card h6 {
   font-size: 1.1rem;
   margin-bottom: 15px;
+  color: white !important; /* Ensure heading is always visible */
 }
 
 .biometrics-dashboard .active-integrations-card:hover {
   border-color: rgba(255, 255, 255, 0.2);
+  box-shadow: 0 0 15px rgba(110, 142, 251, 0.2); /* Subtle blue glow on hover */
 }
 
 .biometrics-dashboard .active-integrations-card .MuiMenuItem-root {
@@ -216,19 +218,23 @@
   font-weight: 500;
   padding: 12px 16px;
   transition: all 0.2s ease-in-out;
+  color: rgba(255, 255, 255, 0.7); /* Improved contrast for unselected tabs */
 }
 
 .biometrics-dashboard .MuiTab-root:hover {
   background-color: rgba(110, 142, 251, 0.05);
+  color: white; /* Full white on hover */
 }
 
 .biometrics-dashboard .MuiTab-root.Mui-selected {
   font-weight: 600;
+  color: white; /* Ensure selected tab is visible */
 }
 
 .biometrics-dashboard .MuiTabs-indicator {
   height: 3px;
   border-radius: 3px;
+  background: linear-gradient(90deg, #6e8efb, #a777e3); /* Gradient indicator */
 }
 
 .biometrics-dashboard.light-mode .MuiTab-root {
@@ -263,22 +269,29 @@
   color: var(--light-text-secondary);
 }
 
-/* Card styles with glassmorphism effect */
+/* Card styles with glassmorphism effect and improved contrast */
 .biometrics-dashboard .MuiCard-root {
-  background-color: rgba(255, 255, 255, 0.05);
+  background-color: rgba(25, 35, 50, 0.7); /* Darker, more visible card background */
   color: white;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
   border-radius: 12px;
   overflow: hidden;
   transition: transform 0.3s ease-in-out, box-shadow 0.3s ease-in-out;
   backdrop-filter: blur(10px);
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(110, 142, 251, 0.1); /* Subtle blue border */
 }
 
 /* Make sure text is white for specific elements */
-.biometrics-dashboard .MuiCard-root h6 {
+.biometrics-dashboard .MuiCard-root h6,
+.biometrics-dashboard .MuiCard-root .MuiTypography-subtitle1,
+.biometrics-dashboard .MuiCard-root .MuiTypography-body1 {
   color: white !important;
   font-weight: 600;
+}
+
+.biometrics-dashboard .MuiCard-root .MuiTypography-body2,
+.biometrics-dashboard .MuiCard-root .MuiTypography-caption {
+  color: rgba(255, 255, 255, 0.8) !important; /* Better visibility for secondary text */
 }
 
 /* Style for Active Integrations title and data selection */
@@ -288,11 +301,11 @@
 }
 
 .biometrics-dashboard .MuiCard-root .MuiOutlinedInput-notchedOutline {
-  border-color: rgba(255, 255, 255, 0.2) !important;
+  border-color: rgba(110, 142, 251, 0.3) !important; /* Blue-tinted borders */
 }
 
 .biometrics-dashboard .MuiCard-root .MuiFormControl-root:hover .MuiOutlinedInput-notchedOutline {
-  border-color: rgba(255, 255, 255, 0.3) !important;
+  border-color: rgba(110, 142, 251, 0.5) !important;
 }
 
 .biometrics-dashboard .MuiCard-root .MuiFormControl-root.Mui-focused .MuiOutlinedInput-notchedOutline {
@@ -301,7 +314,8 @@
 
 .biometrics-dashboard .MuiCard-root:hover {
   transform: translateY(-5px);
-  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.25);
+  border-color: rgba(110, 142, 251, 0.3); /* Enhanced blue border on hover */
 }
 
 /* Light mode styles */
@@ -344,12 +358,17 @@
   background-color: white;
   color: #2C3E50;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
-  border: 1px solid rgba(0, 0, 0, 0.05);
+  border: 1px solid rgba(110, 142, 251, 0.1); /* Maintain the subtle blue border in light mode */
 }
 
 /* Override text colors back to black in light mode */
 .biometrics-dashboard.light-mode .MuiCard-root h6 {
   color: #2C3E50 !important;
+}
+
+.biometrics-dashboard.light-mode .MuiCard-root .MuiTypography-body2,
+.biometrics-dashboard.light-mode .MuiCard-root .MuiTypography-caption {
+  color: rgba(44, 62, 80, 0.7) !important;
 }
 
 .biometrics-dashboard.light-mode .MuiCard-root .MuiFormControl-root .MuiSelect-select,
@@ -358,11 +377,11 @@
 }
 
 .biometrics-dashboard.light-mode .MuiCard-root .MuiOutlinedInput-notchedOutline {
-  border-color: rgba(0, 0, 0, 0.2) !important;
+  border-color: rgba(110, 142, 251, 0.2) !important;
 }
 
 .biometrics-dashboard.light-mode .MuiCard-root .MuiFormControl-root:hover .MuiOutlinedInput-notchedOutline {
-  border-color: rgba(0, 0, 0, 0.3) !important;
+  border-color: rgba(110, 142, 251, 0.4) !important;
 }
 
 .biometrics-dashboard.light-mode .MuiCard-root .MuiFormControl-root.Mui-focused .MuiOutlinedInput-notchedOutline {
@@ -370,17 +389,18 @@
 }
 
 .biometrics-dashboard.light-mode .MuiCard-root:hover {
-  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 8px 20px rgba(110, 142, 251, 0.15); /* Blue-tinted shadow in light mode */
 }
 
 .biometrics-dashboard.light-mode .active-integrations-card {
   background: white;
-  border: 1px solid rgba(0, 0, 0, 0.08);
+  border: 1px solid rgba(110, 142, 251, 0.1);
   box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
 }
 
 .biometrics-dashboard.light-mode .active-integrations-card:hover {
-  border-color: rgba(0, 0, 0, 0.15);
+  border-color: rgba(110, 142, 251, 0.3);
+  box-shadow: 0 8px 20px rgba(110, 142, 251, 0.1);
 }
 
 .biometrics-dashboard.light-mode .recharts-surface {
@@ -452,11 +472,14 @@
 .biometrics-dashboard .MuiDialog-paper {
   background-color: #1a2430;
   color: white;
+  border: 1px solid rgba(110, 142, 251, 0.2); /* Blue-tinted border */
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
 }
 
 .biometrics-dashboard.light-mode .MuiDialog-paper {
   background-color: white;
   color: #2C3E50;
+  border: 1px solid rgba(110, 142, 251, 0.15);
 }
 
 .biometrics-dashboard .MuiDialogTitle-root {
@@ -589,6 +612,13 @@
   color: #2C3E50;
 }
 
+/* Add a secondary light text color for dark mode subtitles and captions */
+.biometrics-dashboard .MuiTypography-subtitle2,
+.biometrics-dashboard .MuiTypography-caption,
+.biometrics-dashboard .MuiTypography-body2 {
+  color: rgba(255, 255, 255, 0.7) !important;
+}
+
 /* Add pulse animation for active elements */
 @keyframes pulse {
   0% {
@@ -672,7 +702,7 @@
 
 /* Add back the chart styling that was accidentally removed */
 .biometrics-dashboard .recharts-surface {
-  background-color: rgba(255, 255, 255, 0.02);
+  background-color: rgba(255, 255, 255, 0.05);
   border-radius: 8px;
 }
 
@@ -683,24 +713,25 @@
 
 .biometrics-dashboard .recharts-tooltip-wrapper .recharts-default-tooltip {
   background-color: rgba(18, 24, 36, 0.9) !important;
-  border-color: rgba(255, 255, 255, 0.1) !important;
+  border-color: rgba(110, 142, 251, 0.3) !important; /* Blue-tinted border */
   border-radius: 10px !important;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3) !important;
   backdrop-filter: blur(8px);
+  color: white !important; /* Ensure tooltip text is visible */
 }
 
 .biometrics-dashboard .recharts-text {
-  fill: rgba(255, 255, 255, 0.7);
+  fill: rgba(255, 255, 255, 0.8); /* More visible chart text */
 }
 
 /* Chart line and area customizations */
 .biometrics-dashboard .recharts-line-curve {
   stroke-width: 3;
-  filter: drop-shadow(0 0 6px rgba(110, 142, 251, 0.5));
+  filter: drop-shadow(0 0 6px rgba(110, 142, 251, 0.6)); /* Enhanced glow effect */
 }
 
 .biometrics-dashboard .recharts-area-area {
-  opacity: 0.4;
+  opacity: 0.5; /* Slightly more visible */
 }
 
 .biometrics-dashboard .recharts-bar-rectangle {
@@ -737,7 +768,7 @@
 
 .biometrics-dashboard .rounded-button:hover {
   transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(52, 152, 219, 0.3);
+  box-shadow: 0 6px 20px rgba(110, 142, 251, 0.4); /* Blue-tinted shadow */
 }
 
 /* Chip improvements */
@@ -772,4 +803,26 @@
 .biometrics-dashboard .dashboard-content {
   margin-top: 24px;
   min-height: calc(100vh - 160px);
+}
+
+/* Add blue gradient outline to cards when in dark mode */
+.biometrics-dashboard .MuiCard-root {
+  position: relative;
+}
+
+.biometrics-dashboard .MuiCard-root::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  pointer-events: none;
+  border-radius: 12px;
+  box-shadow: 0 0 0 1px rgba(110, 142, 251, 0.2); /* Subtle blue outline */
+  transition: box-shadow 0.3s ease;
+}
+
+.biometrics-dashboard .MuiCard-root:hover::after {
+  box-shadow: 0 0 0 2px rgba(110, 142, 251, 0.4), 0 0 20px rgba(110, 142, 251, 0.2); /* Enhanced blue outline on hover */
 } 

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   LineChart, Line, AreaChart, Area, BarChart, Bar,
@@ -12,7 +12,7 @@ import {
   CircularProgress, Alert, useTheme,
   AppBar, Toolbar, IconButton, Menu, MenuItem, Dialog, DialogTitle, DialogContent,
   Tabs, Tab, styled, Select, FormControl, Switch, Tooltip as MuiTooltip,
-  ListItemIcon, ListItemText, Chip
+  ListItemIcon, ListItemText, Chip, CardContent, List, ListItem, ListItemSecondaryAction
 } from '@mui/material';
 import { format } from 'date-fns';
 import SyncIcon from '@mui/icons-material/Sync';
@@ -51,8 +51,6 @@ import FilterAltIcon from '@mui/icons-material/FilterAlt';
 import Accordion from '@mui/material/Accordion';
 import AccordionSummary from '@mui/material/AccordionSummary';
 import AccordionDetails from '@mui/material/AccordionDetails';
-import List from '@mui/material/List';
-import ListItem from '@mui/material/ListItem';
 import ButtonGroup from '@mui/material/ButtonGroup';
 import Divider from '@mui/material/Divider';
 import Radio from '@mui/material/Radio';
@@ -62,8 +60,20 @@ import FormLabel from '@mui/material/FormLabel';
 import HeartRateMetrics from '../HeartRateMetrics';
 import axios from 'axios';
 import WhoopConnect from '../WhoopConnect';
-
+import HomeOutlinedIcon from '@mui/icons-material/HomeOutlined';
+import DevicesOutlinedIcon from '@mui/icons-material/DevicesOutlined';
 import './BiometricsDashboard.css';
+import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
+import Brightness7Icon from '@mui/icons-material/Brightness7';
+import ArrowRightAltIcon from '@mui/icons-material/ArrowRightAlt';
+import NightsStayIcon from '@mui/icons-material/NightsStay';
+import SpeedIcon from '@mui/icons-material/Speed';
+import AccessTimeIcon from '@mui/icons-material/AccessTime';
+import DataArrayIcon from '@mui/icons-material/DataArray';
+import LightbulbIcon from '@mui/icons-material/Lightbulb';
+import ChevronRightIcon from '@mui/icons-material/ChevronRight';
+import AccountCircleIcon from '@mui/icons-material/AccountCircle';
+import AddIcon from '@mui/icons-material/Add';
 
 // Modern, professional color palette
 const colors = {
@@ -110,35 +120,26 @@ const StyledMenu = styled((props) => (
     }}
     {...props}
   />
-))(({ theme }) => ({
+))(() => ({
   '& .MuiPaper-root': {
-    borderRadius: 6,
-    marginTop: theme.spacing(1),
-    minWidth: 180,
-    backgroundColor: '#2C3E50',
-    color: '#fff',
-    boxShadow: 'rgb(255, 255, 255) 0px 0px 15px -10px',
-    '& .MuiMenu-list': {
-      padding: '4px 0',
-    },
+    borderRadius: 12,
+    marginTop: 8,
+    minWidth: 200,
   },
 }));
 
-const StyledMenuItem = styled(MenuItem)(({ theme }) => ({
-  padding: '10px 20px',
+const StyledMenuItem = styled(MenuItem)(() => ({
   margin: '4px 8px',
-  borderRadius: '4px',
+  borderRadius: '8px',
   display: 'flex',
   alignItems: 'center',
   gap: '12px',
   transition: 'all 0.2s ease-in-out',
   '&:hover': {
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
     transform: 'translateX(5px)',
   },
   '& .MuiSvgIcon-root': {
     fontSize: 20,
-    color: 'inherit',
   },
   '& .MuiTypography-root': {
     fontSize: '0.95rem',
@@ -160,6 +161,27 @@ const StyledTitle = styled(Typography)(({ theme }) => ({
   WebkitTextFillColor: 'transparent',
   textShadow: '2px 2px 4px rgba(0,0,0,0.1)',
 }));
+
+// Add TabPanel component
+function TabPanel(props) {
+  const { children, value, index, ...other } = props;
+
+  return (
+    <div
+      role="tabpanel"
+      hidden={value !== index}
+      id={`dashboard-tabpanel-${index}`}
+      aria-labelledby={`dashboard-tab-${index}`}
+      {...other}
+    >
+      {value === index && (
+        <Box sx={{ p: 2 }}>
+          {children}
+        </Box>
+      )}
+    </div>
+  );
+}
 
 function a11yProps(index) {
   return {
@@ -220,6 +242,24 @@ const formatCellValue = (value, fieldName) => {
   return value;
 };
 
+// Add this helper function before the BiometricsDashboard component
+const getSourceDescription = (source) => {
+  switch(source) {
+    case 'garmin':
+      return 'Connect to your Garmin Connect account to sync activity, sleep, and health data.';
+    case 'whoop':
+      return 'Track recovery, strain, and sleep metrics with your WHOOP membership.';
+    case 'fitbit':
+      return 'Sync steps, exercise, sleep, and heart rate data from your Fitbit device.';
+    case 'oura':
+      return 'Access sleep, readiness, and activity metrics from your Oura Ring.';
+    case 'apple_health':
+      return 'Import comprehensive health and fitness data from your Apple Health app.';
+    default:
+      return 'Connect to sync your biometric data.';
+  }
+};
+
 const BiometricsDashboard = ({ username }) => {
   const navigate = useNavigate();
   const theme = useTheme();
@@ -266,11 +306,32 @@ const BiometricsDashboard = ({ username }) => {
   const [insightsError, setInsightsError] = useState(null);
   const [insightTabValue, setInsightTabValue] = useState(0);
   const [expandedInsightId, setExpandedInsightId] = useState(null);
+  // Add this near the beginning of the component where other state variables are defined
+  const [scrolled, setScrolled] = useState(false);
+  const [dashboardTab, setDashboardTab] = useState(0); // New state for dashboard tabs
 
   // Update localStorage when dark mode changes
   useEffect(() => {
     localStorage.setItem('biometricsDarkMode', darkMode);
   }, [darkMode]);
+
+  // Add this effect to handle scrolling
+  useEffect(() => {
+    const handleScroll = () => {
+      if (window.scrollY > 30) {
+        setScrolled(true);
+      } else {
+        setScrolled(false);
+      }
+    };
+
+    window.addEventListener('scroll', handleScroll);
+    
+    // Clean up
+    return () => {
+      window.removeEventListener('scroll', handleScroll);
+    };
+  }, []);
 
   // Table styles based on dark mode
   const thStyle = {
@@ -343,8 +404,13 @@ const BiometricsDashboard = ({ username }) => {
       const days = 30;
       console.log(`Fetching biometric data for ${days} days...`);
       
-      // Request all sources data first (for debugging)
-      const response = await axios.get(`/api/biometrics/?days=${days}`);
+      // Add source parameter if a specific source is selected
+      const sourceParam = selectedDataSource && selectedDataSource !== 'all' 
+        ? `&source=${selectedDataSource}` 
+        : '';
+      
+      // Request data with optional source filter
+      const response = await axios.get(`/api/biometrics/?days=${days}${sourceParam}`);
       console.log('Raw biometrics data:', response.data);
 
       // Add debugging for source inspection
@@ -365,7 +431,7 @@ const BiometricsDashboard = ({ username }) => {
           await syncData();
 
           // Try fetching data again after sync
-          const retryResponse = await axios.get(`/api/biometrics/?days=${days}`);
+          const retryResponse = await axios.get(`/api/biometrics/?days=${days}${sourceParam}`);
           console.log('Raw biometrics data after sync:', retryResponse.data);
 
           if (!retryResponse.data || retryResponse.data.length === 0) {
@@ -448,19 +514,38 @@ const BiometricsDashboard = ({ username }) => {
     }
   };
 
-  const syncData = async () => {
-    if (activeSource === null) {
+  const syncData = async (specificSource = null) => {
+    // Safely validate the specificSource parameter
+    const isValidSource = specificSource && 
+                         (typeof specificSource === 'string' || 
+                          (typeof specificSource === 'object' && specificSource.id));
+    
+    // Only proceed if we have an active source or a valid specific source
+    if (activeSource === null && !isValidSource) {
+      console.log('No active source or valid specific source to sync');
+      addSyncMessage('Please select a valid data source to sync', 'warning');
       return;
     }
+    
     setLoading(true);
     clearSyncMessages(); // Clear existing messages before sync
     try {
+      // Create request body with specific source if provided, ensuring it's a valid string
+      const sourceToSync = isValidSource ? 
+                         (typeof specificSource === 'string' ? specificSource : specificSource.id) :
+                         null;
+      
+      const requestBody = sourceToSync ? { source: sourceToSync } : {};
+      
+      console.log('Syncing with request body:', requestBody);
+      
       const response = await fetch('/api/biometrics/sync/', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'X-CSRF-TOKEN': document.cookie.split('csrftoken=')[1]?.split(';')[0],
         },
+        body: JSON.stringify(requestBody),
         credentials: 'include',
       });
 
@@ -869,9 +954,18 @@ const BiometricsDashboard = ({ username }) => {
 
   useEffect(() => {
     if (biometricData.length === 0 && !loading) {
-      setHasActiveSources(false);
+      // Only set to false if we don't have active sources
+      if (!activeSources || activeSources.length === 0) {
+        setHasActiveSources(false);
+      } else {
+        // Make sure active sources is true if we have sources
+        setHasActiveSources(true);
+      }
+    } else if (biometricData.length > 0) {
+      // If we have data, we definitely have active sources
+      setHasActiveSources(true);
     }
-  }, [biometricData, loading]);
+  }, [biometricData, loading, activeSources]);
 
   useEffect(() => {
     const fetchGarminProfiles = async () => {
@@ -1856,7 +1950,8 @@ const BiometricsDashboard = ({ username }) => {
               <Card sx={{ 
                 p: 2, 
                 height: '100%',
-                position: 'relative' 
+                position: 'relative',
+                overflow: 'hidden' // Add this to prevent scrollbars
               }}>
                 {/* Module header with title and action menu */}
                 <Box sx={{ 
@@ -1888,9 +1983,11 @@ const BiometricsDashboard = ({ username }) => {
                 </Box>
                 
                 {/* Module visualization */}
-                <ResponsiveContainer width="100%" height={module.height || 300}>
-                  {module.render(moduleData)}
-                </ResponsiveContainer>
+                <Box sx={{ overflow: 'hidden' }}> {/* Add this wrapper with overflow hidden */}
+                  <ResponsiveContainer width="100%" height={module.height || 300} style={{ overflow: 'visible', maxHeight: '100%' }}>
+                    {module.render(moduleData)}
+                  </ResponsiveContainer>
+                </Box>
               </Card>
             </Grid>
           );
@@ -2188,1404 +2285,1336 @@ const BiometricsDashboard = ({ username }) => {
     setInsightTabValue(newValue);
   };
 
+  // Add a style rule for all ResponsiveContainer instances
+  useEffect(() => {
+    // Add a style tag to the document
+    const styleTag = document.createElement('style');
+    styleTag.innerHTML = `
+      /* Target all possible scroll containers */
+      .recharts-wrapper {
+        overflow: visible !important;
+      }
+      .recharts-surface {
+        overflow: visible !important;
+      }
+      /* Target the ResponsiveContainer */
+      .recharts-responsive-container {
+        overflow: visible !important;
+      }
+      /* Target any potential chart containers */
+      .MuiCard-root .recharts-wrapper,
+      .MuiCard-root .recharts-responsive-container,
+      .MuiCardContent-root .recharts-wrapper,
+      .MuiCardContent-root .recharts-responsive-container {
+        overflow: visible !important;
+      }
+      /* Ensure no scrollbars on card content */
+      .MuiCardContent-root {
+        overflow: hidden !important;
+      }
+      /* Target any chart parent containers */
+      [class*="chart-container"],
+      [class*="chart"] {
+        overflow: hidden !important;
+      }
+      /* Hide scrollbars but allow mouse wheel scrolling for the page itself */
+      ::-webkit-scrollbar {
+        width: 0px;
+        height: 0px;
+        background: transparent;
+      }
+      /* Completely hide all scrollbars in charts */
+      .recharts-wrapper::-webkit-scrollbar,
+      .recharts-surface::-webkit-scrollbar,
+      .recharts-responsive-container::-webkit-scrollbar,
+      .MuiCardContent-root::-webkit-scrollbar {
+        display: none;
+        width: 0;
+        height: 0;
+      }
+      
+      /* Firefox scrollbar hiding */
+      .recharts-wrapper, .recharts-surface, .recharts-responsive-container, .MuiCardContent-root {
+        scrollbar-width: none;
+      }
+      
+      /* IE scrollbar hiding */
+      .recharts-wrapper, .recharts-surface, .recharts-responsive-container, .MuiCardContent-root {
+        -ms-overflow-style: none;
+      }
+      /* Fix for dark mode text in charts */
+      .recharts-text {
+        fill: ${darkMode ? 'rgba(255, 255, 255, 0.85)' : 'rgba(0, 0, 0, 0.85)'};
+      }
+      .recharts-cartesian-axis-tick-value tspan {
+        fill: ${darkMode ? 'rgba(255, 255, 255, 0.65)' : 'rgba(0, 0, 0, 0.65)'};
+      }
+      /* Fix for tooltip in dark mode */
+      .recharts-tooltip-wrapper {
+        filter: ${darkMode ? 'invert(0.85) hue-rotate(180deg)' : 'none'};
+      }
+    `;
+    document.head.appendChild(styleTag);
+    
+    // Clean up the style tag when the component unmounts
+    return () => {
+      document.head.removeChild(styleTag);
+    };
+  }, [darkMode]);
+
+  useEffect(() => {
+    // Add specific fixes for individual charts right after mount
+    const fixChartScrollbars = () => {
+      // Target specific chart containers by their titles/headers
+      const allHeadings = document.querySelectorAll('div[role="heading"], h1, h2, h3, h4, h5, h6, .MuiTypography-root');
+      const sleepCharts = [];
+      const respirationCharts = [];
+      
+      // Find headings with the specific text
+      allHeadings.forEach(heading => {
+        if (heading.textContent && heading.textContent.includes('Sleep Duration')) {
+          sleepCharts.push(heading);
+        }
+        if (heading.textContent && heading.textContent.includes('Respiration Range')) {
+          respirationCharts.push(heading);
+        }
+      });
+      
+      // Function to find and fix parent containers
+      const fixParentContainer = (element) => {
+        if (!element) return;
+        // Navigate up to find chart container
+        let parent = element.parentElement;
+        for (let i = 0; i < 5; i++) { // Look up to 5 levels up
+          if (parent) {
+            // Apply styles to any overflow containers
+            const containers = parent.querySelectorAll('div');
+            containers.forEach(container => {
+              const style = window.getComputedStyle(container);
+              if (style.overflow === 'auto' || style.overflow === 'scroll' || 
+                  style.overflowX === 'auto' || style.overflowX === 'scroll' ||
+                  style.overflowY === 'auto' || style.overflowY === 'scroll') {
+                container.style.overflow = 'hidden';
+              }
+            });
+            parent = parent.parentElement;
+          }
+        }
+      };
+      
+      // Apply fixes
+      sleepCharts.forEach(fixParentContainer);
+      respirationCharts.forEach(fixParentContainer);
+    };
+    
+    // Run initial fix
+    setTimeout(fixChartScrollbars, 1000);
+    
+    // Run fix again if window is resized
+    window.addEventListener('resize', fixChartScrollbars);
+    
+    return () => {
+      window.removeEventListener('resize', fixChartScrollbars);
+    };
+  }, []);
+
+  // Handle dashboard tab change
+  const handleDashboardTabChange = (event, newValue) => {
+    setDashboardTab(newValue);
+  };
+
   return (
-    <Box sx={{ width: '100%' }} className={`biometrics-dashboard ${darkMode ? 'dark-mode' : ''}`}>
-      <Box sx={{
-        position: 'absolute',
-        top: 0,
-        left: 0,
-        right: 0,
-        height: '250px',
-        zIndex: -1
-      }} className="header-gradient" />
-      <Box sx={{
-        display: 'flex',
-        alignItems: 'center',
-        p: 2
-      }} className="header-content">
-        {/* Left section with menu and title */}
-        <Box sx={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 2
-        }}>
+    <Box className={`biometrics-dashboard ${darkMode ? '' : 'light-mode'}`}>
+      {/* Updated header and navigation */}
+      <Box 
+        className={`header-gradient ${scrolled ? 'scrolled' : ''}`}
+        sx={{ 
+          display: 'flex', 
+          justifyContent: 'space-between',
+          alignItems: 'center'
+        }}
+      >
+        <Box className="header-content">
           <IconButton
             color="inherit"
             onClick={openMenu}
+            className="menu-button-animated"
+            sx={{ mr: 2 }}
+          >
+            <MenuIcon />
+          </IconButton>
+          
+          <Typography variant="h5" className="header-title" sx={{ fontWeight: 600 }}>
+            Pulse
+            <Box component="span" sx={{ 
+              fontWeight: 300, 
+              opacity: 0.8,
+              ml: 1,
+              fontSize: '0.8em',
+              background: 'none',
+              WebkitTextFillColor: darkMode ? 'white' : '#2C3E50'
+            }}>
+              Dashboard
+            </Box>
+          </Typography>
+        </Box>
+
+        {/* Header controls */}
+        <Box className="header-controls">
+          {/* Dark mode toggle */}
+          <Box 
             sx={{
-              color: 'white',
-              transition: 'all 0.4s cubic-bezier(0.2, 0.8, 0.2, 1.2)',
-              padding: 0,
-              '&:hover': {
-                transform: 'scale(1.25) rotate(5deg)',
-                backgroundColor: 'transparent',
-                color: '#c3e6ff',
-                filter: 'drop-shadow(0 0 5px rgba(110, 142, 251, 0.7))',
-              },
-              '&:active': {
-                transform: 'scale(0.9) rotate(-5deg)',
-              },
-              '& .MuiTouchRipple-root': {
-                display: 'none',
-              },
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
             }}
           >
-            <MenuIcon fontSize="large" />
-          </IconButton>
+            <Brightness4Icon 
+              sx={{ 
+                color: darkMode ? 'white' : '#2C3E50', 
+                fontSize: '1.2rem',
+                opacity: darkMode ? 1 : 0.5
+              }} 
+            />
+            <Box 
+              className={`toggle-switch ${darkMode ? 'active' : ''}`}
+              onClick={() => setDarkMode(!darkMode)}
+              sx={{ cursor: 'pointer' }}
+            ></Box>
+            <Brightness7Icon 
+              sx={{ 
+                color: darkMode ? 'white' : '#2C3E50', 
+                fontSize: '1.2rem',
+                opacity: darkMode ? 0.5 : 1
+              }} 
+            />
+          </Box>
 
-          <Typography variant="h4" sx={{
-            fontWeight: 600,
-            fontFamily: '"Poppins", sans-serif',
-            color: 'white',
-            whiteSpace: 'nowrap',
-            minWidth: '400px'
-          }}>
-            {username.charAt(0).toUpperCase() + username.slice(1)}'s Pulse Insights
-          </Typography>
-
-          <StyledMenu
-            anchorEl={anchorEl}
-            open={Boolean(anchorEl)}
-            onClose={closeMenu}
-          >
-            <StyledMenuItem onClick={() => setShowSourceMenu(true)}>
-              <SyncIcon />
-              <Typography>Activate Data Source</Typography>
-            </StyledMenuItem>
-
-            <StyledMenuItem onClick={() => {
-              closeMenu();
-              setTabValue(1);
-            }}>
-              <TableChartIcon />
-              <Typography>View Data Table</Typography>
-            </StyledMenuItem>
-
-            <StyledMenuItem onClick={() => {
-              closeMenu();
-              // Use the same approach as in renderFooter
-              if (typeof fetchRawData === 'function') {
-                fetchRawData();
-              } else {
-                console.error('fetchRawData function is not available');
-                // Simplified fallback - will just trigger the download button which has its own fallback
-                const downloadButton = document.querySelector('.footer button');
-                if (downloadButton) {
-                  downloadButton.click();
-                } else {
-                  addSyncMessage('Could not initiate download. Please try the Download Raw Data button at the bottom of the page.', 'error');
-                }
-              }
-            }}>
-              <BarChartIcon />
-              <Typography>Download Raw Data</Typography>
-            </StyledMenuItem>
-
-            <StyledMenuItem onClick={() => {
-              closeMenu();
-              openDialog('Errors', error || 'No errors');
-            }}>
-              <BugReportIcon />
-              <Typography>View Errors</Typography>
-            </StyledMenuItem>
-
-            <Box sx={{ my: 1, borderTop: '1px solid rgba(255,255,255,0.1)' }} />
-
-            <StyledMenuItem onClick={handleLogout}>
-              <LogoutIcon />
-              <Typography>Logout</Typography>
-            </StyledMenuItem>
-
-            {devMode && (
-              <StyledMenuItem onClick={() => {
-                closeMenu();
-                diagnoseGarminIssue();
-              }}>
-                <BugReportIcon />
-                <Typography>Diagnose Garmin Issue</Typography>
-              </StyledMenuItem>
-            )}
-          </StyledMenu>
-        </Box>
-
-        {/* Spacer to push toggles to right */}
-        <Box sx={{ flexGrow: 1 }} />
-
-        {/* Right section with toggles */}
-        <Box sx={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 2
-        }}>
-          {/* Dark Mode Toggle */}
-          <MuiTooltip title={darkMode ? "Switch to Light Mode" : "Switch to Dark Mode"}>
-            <Box sx={{
-              display: 'flex',
-              alignItems: 'center',
-              backgroundColor: 'rgba(255, 255, 255, 0.1)',
-              padding: '4px 12px',
-              borderRadius: '4px',
-              cursor: 'pointer'
-            }}>
-              <Brightness4Icon sx={{ mr: 1, color: 'white' }} />
-              <Switch
-                checked={darkMode}
-                onChange={(e) => setDarkMode(e.target.checked)}
-                sx={{
-                  '& .MuiSwitch-switchBase': {
-                    color: 'white',
-                    '&.Mui-checked': {
-                      color: 'white',
-                      '& + .MuiSwitch-track': {
-                        backgroundColor: 'rgba(255, 255, 255, 0.5)',
-                      },
-                    },
-                  },
-                  '& .MuiSwitch-track': {
-                    backgroundColor: 'rgba(255, 255, 255, 0.3)',
-                    opacity: 1,
-                  },
-                  '& .MuiSwitch-thumb': {
-                    backgroundColor: 'white',
-                  },
-                }}
-              />
-            </Box>
-          </MuiTooltip>
-
-          {/* Dev Mode Toggle */}
-          <MuiTooltip title={devMode ? "Disable Developer Mode" : "Enable Developer Mode"}>
-            <Box sx={{
-              display: 'flex',
-              alignItems: 'center',
-              backgroundColor: 'rgba(255, 255, 255, 0.1)',
-              padding: '4px 12px',
-              borderRadius: '4px',
-              cursor: 'pointer'
-            }}>
-              <DeveloperModeIcon sx={{ mr: 1, color: 'white' }} />
-              <Switch
-                checked={devMode}
-                onChange={(e) => setDevMode(e.target.checked)}
-                sx={{
-                  '& .MuiSwitch-switchBase': {
-                    color: 'white',
-                    '&.Mui-checked': {
-                      color: 'white',
-                      '& + .MuiSwitch-track': {
-                        backgroundColor: 'rgba(255, 255, 255, 0.5)',
-                      },
-                    },
-                  },
-                  '& .MuiSwitch-track': {
-                    backgroundColor: 'rgba(255, 255, 255, 0.3)',
-                    opacity: 1,
-                  },
-                  '& .MuiSwitch-thumb': {
-                    backgroundColor: 'white',
-                  },
-                }}
-              />
-            </Box>
-          </MuiTooltip>
+          {/* Dev Mode indicator */}
+          {devMode && (
+            <Chip 
+              size="small"
+              label="Dev Mode" 
+              color="secondary"
+              variant="outlined"
+              sx={{ ml: 1 }}
+            />
+          )}
         </Box>
       </Box>
-      <Box sx={{ px: 3 }}>
-        {/* Dialog for showing raw data or error logs */}
-        <Dialog open={showDialog} onClose={closeDialog} maxWidth="md" fullWidth>
-          <DialogTitle>{dialogTitle}</DialogTitle>
-          <DialogContent>
-            <pre style={{ whiteSpace: 'pre-wrap' }}>
-              {dialogContent}
-            </pre>
-          </DialogContent>
-        </Dialog>
 
-        {/* Source Selection Dialog */}
-        <Dialog
-          open={showSourceMenu}
-          onClose={() => setShowSourceMenu(false)}
-          PaperProps={{
-            sx: {
-              width: '300px',
-              backgroundColor: '#2C3E50',
-              color: 'white'
-            }
-          }}
+      {/* Dashboard tabs */}
+      <Box sx={{ 
+        borderBottom: 1, 
+        borderColor: 'divider', 
+        mt: 1,
+        background: darkMode ? 'rgba(10, 14, 23, 0.6)' : 'rgba(255, 255, 255, 0.6)',
+      }}>
+        <Tabs 
+          value={dashboardTab} 
+          onChange={handleDashboardTabChange} 
+          aria-label="dashboard tabs"
+          centered
+          sx={{ minHeight: '48px' }}
         >
-          <DialogTitle>Select Data Source</DialogTitle>
-          <DialogContent>
-            {sources.map(source => (
-              <StyledMenuItem
-                key={source.id}
-                onClick={() => {
-                  if (source.id === 'whoop') {
-                    setShowSourceMenu(false);
-                    setShowWhoopConnect(true);
-                  } else {
-                    setSelectedSource(source.id);
-                    setShowSourceMenu(false);
-                    setShowCredentialsMenu(true);
-                  }
-                }}
-              >
-                <Typography>{source.name}</Typography>
-              </StyledMenuItem>
-            ))}
-          </DialogContent>
-        </Dialog>
+          <Tab icon={<HomeOutlinedIcon />} label="Dashboard" sx={{ minHeight: '48px' }} />
+          <Tab icon={<DevicesOutlinedIcon />} label="Active Integrations" sx={{ minHeight: '48px' }} />
+        </Tabs>
+      </Box>
 
-        {/* Credentials Selection Dialog */}
-        <Dialog
-          open={showCredentialsMenu}
-          onClose={() => setShowCredentialsMenu(false)}
-          PaperProps={{
-            sx: {
-              width: '300px',
-              backgroundColor: '#2C3E50',
-              color: 'white'
-            }
-          }}
-        >
-          <DialogTitle>Select Credentials</DialogTitle>
-          <DialogContent>
-            {garminProfiles.map(profile => (
-              <StyledMenuItem
-                key={profile.id}
-                onClick={() => {
-                  handleSourceActivation(selectedSource, profile.id);
-                  setShowCredentialsMenu(false);
-                }}
-              >
-                <Typography>{profile.name}</Typography>
-              </StyledMenuItem>
-            ))}
-          </DialogContent>
-        </Dialog>
+      {/* Main content container */}
+      <Box className="dashboard-content" p={3}>
+        {/* Dashboard home view */}
+        {dashboardTab === 0 && (
+          <>
+            {/* Show info alert for sync status if any */}
+            {syncMessage && syncMessage.length > 0 ? (
+              <Box sx={{ mb: 3 }}>
+                {syncMessage.map((message, index) => (
+                  <Alert
+                    key={index}
+                    severity={message.type}
+                    sx={{ 
+                      mb: 1,
+                      borderRadius: '10px',
+                      boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)'
+                    }}
+                    onClose={() => {
+                      const newMessages = [...syncMessage];
+                      newMessages.splice(index, 1);
+                      setSyncMessage(newMessages);
+                    }}
+                  >
+                    {message.text}
+                  </Alert>
+                ))}
+              </Box>
+            ) : null}
 
-        {/* WHOOP Connect Dialog */}
-        <Dialog
-          open={showWhoopConnect}
-          onClose={() => setShowWhoopConnect(false)}
-          PaperProps={{
-            sx: {
-              width: '300px',
-              backgroundColor: '#2C3E50',
-              color: 'white'
-            }
-          }}
-        >
-          <DialogTitle>Connect WHOOP Account</DialogTitle>
-          <DialogContent>
-            <Typography sx={{ mb: 2 }}>
-              Connect your WHOOP account to sync your biometric data.
-            </Typography>
-            <WhoopConnect />
-          </DialogContent>
-        </Dialog>
-
-        {loading ? (
-          <Alert severity="info">Loading...</Alert>
-        ) : error ? (
-          <Alert severity="error">{error}</Alert>
-        ) : !activeSource ? (
-          <Alert
-            severity="info"
-            sx={{ mb: 3 }}
-            action={
-              <Button
-                color="inherit"
-                size="small"
-                onClick={() => setShowSourceMenu(true)}
-              >
-                ACTIVATE SOURCE
-              </Button>
-            }
-          >
-            No active data sources found. Please activate Garmin or another data source to see your biometric data.
-          </Alert>
-        ) : syncMessage && syncMessage.map((msg, index) => (
-          <Alert key={index} severity={msg.type} sx={{ mb: 1 }}>
-            {msg.text}
-          </Alert>
-        ))}
-
-        {/* Active Sources Panel */}
-        <Card
-          sx={{
-            mb: 3,
-            p: 2,
-            backgroundColor: darkMode ? colors.primary : 'white',
-            color: darkMode ? 'white' : '#000',
-            boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)'
-          }}
-          className="active-integrations-card"
-        >
-          <Box sx={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            mb: 2
-          }}>
-            <Typography variant="h6" sx={{
-              fontWeight: 600,
-              color: darkMode ? 'white' : '#000'
-            }}>
-              Active Integrations
-            </Typography>
-            {activeSources.length > 0 && (
-              <FormControl sx={{ minWidth: 200 }}>
-                <Select
-                  value={selectedDataSource || 'all'}
-                  onChange={(e) => setSelectedDataSource(e.target.value)}
-                  sx={{
-                    color: darkMode ? 'white' : '#000',
-                    '.MuiOutlinedInput-notchedOutline': {
-                      borderColor: darkMode ? 'rgba(255, 255, 255, 0.3)' : 'rgba(0, 0, 0, 0.3)',
-                    },
-                    '&:hover .MuiOutlinedInput-notchedOutline': {
-                      borderColor: darkMode ? 'rgba(255, 255, 255, 0.5)' : 'rgba(0, 0, 0, 0.5)',
-                    },
-                    '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
-                      borderColor: darkMode ? 'white' : '#000',
-                    },
-                    '.MuiSvgIcon-root': {
-                      color: darkMode ? 'white' : '#000',
-                    },
+            {/* Main content */}
+            {hasActiveSources ? (
+              <>
+                {/* Hero section with welcome and actions */}
+                <Box 
+                  sx={{ 
+                    mb: 4, 
+                    p: 3, 
+                    borderRadius: '16px',
+                    background: darkMode 
+                      ? 'linear-gradient(135deg, rgba(44, 62, 80, 0.8) 0%, rgba(52, 152, 219, 0.8) 100%)' 
+                      : 'linear-gradient(135deg, rgba(236, 240, 241, 0.8) 0%, rgba(52, 152, 219, 0.2) 100%)',
+                    boxShadow: '0 10px 30px rgba(0, 0, 0, 0.15)',
+                    position: 'relative',
+                    overflow: 'hidden'
                   }}
                 >
-                  <MenuItem value="all">All Data</MenuItem>
-                  {activeSources.map((source) => (
-                    <MenuItem key={source.id} value={source.id}>
-                      {source.name}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-            )}
-          </Box>
-          <Box sx={{
-            display: 'flex',
-            gap: 2,
-            flexWrap: 'wrap'
-          }}>
-            {activeSources && activeSources.map((source) => (
-              <Box
-                key={source.id}
-                sx={{
-                  backgroundColor: darkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.05)',
-                  padding: '8px 16px',
-                  borderRadius: '4px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 1,
-                  transition: 'transform 0.2s ease',
-                  '&:hover': {
-                    transform: 'translateY(-2px)',
-                    backgroundColor: darkMode ? 'rgba(255, 255, 255, 0.15)' : 'rgba(0, 0, 0, 0.1)',
-                  }
-                }}
-              >
-                <SyncIcon sx={{ fontSize: 20, color: darkMode ? 'white' : '#000' }} />
-                <Typography sx={{
-                  fontWeight: 500,
-                  letterSpacing: '0.5px',
-                  textTransform: 'uppercase',
-                  color: darkMode ? 'white' : '#000'
-                }}>
-                  {source.name}
-                  {source.profile_type && ` - ${source.profile_type}`}
-                </Typography>
-              </Box>
-            ))}
-          </Box>
-        </Card>
-
-        <Box sx={{ mb: 2 }}>
-          <Box sx={{ mb: 2 }}>
-            <Button
-              variant="contained"
-              startIcon={<SyncIcon />}
-              color="secondary"
-              onClick={syncData}
-              disabled={loading}
-            >
-              Sync Data
-            </Button>
-          </Box>
-        </Box>
-
-        <Tabs
-          value={tabValue}
-          onChange={handleChangeTab}
-          aria-label="dashboard tabs"
-          sx={{
-            '& .MuiTab-root': {
-              color: darkMode ? 'white' : '#000',
-              fontWeight: 500,
-            },
-            '& .Mui-selected': {
-              color: darkMode ? '#6e8efb' : '#6e8efb',
-              fontWeight: 600,
-            },
-            '& .MuiTabs-indicator': {
-              backgroundColor: '#6e8efb',
-            }
-          }}
-        >
-          <Tab label="Analytics" {...a11yProps(0)} />
-          <Tab label="Data Table" {...a11yProps(1)} />
-          <Tab label="Insights" {...a11yProps(2)} />
-        </Tabs>
-
-        {tabValue === 0 && (
-          <Box sx={{ mt: 3 }}>
-            <Grid container spacing={3}>
-              {selectedDataSource === 'whoop' ? (
-                // WHOOP-specific visualizations - keep existing code
-                <>
-                  {/* Heart Rate and Recovery Score */}
-                  <Grid item xs={12} md={6}>
-                    <Card sx={{ p: 2, height: '100%' }}>
-                      <Typography variant="h6" gutterBottom sx={{ color: colors.headings }}>Resting Heart Rate & Recovery Score</Typography>
-                      {devMode && <Typography variant="caption" sx={{ display: 'block', mb: 1, color: 'text.secondary' }}>
-                        Source: WHOOP
-                      </Typography>}
-                      <ResponsiveContainer width="100%" height={300}>
-                        <ComposedChart data={filteredData}>
-                          <CartesianGrid strokeDasharray="3 3" />
-                          <XAxis dataKey="date" />
-                          <YAxis yAxisId="left" />
-                          <YAxis yAxisId="right" orientation="right" domain={[0, 100]} />
-                          <Tooltip />
-                          <Legend />
-                          <Bar dataKey="recovery_score" name="Recovery Score" fill="#27AE60" yAxisId="right" />
-                          <Line type="monotone" dataKey="resting_heart_rate" name="Resting HR" stroke="#e74c3c" yAxisId="left" strokeWidth={2} />
-                        </ComposedChart>
-                      </ResponsiveContainer>
-                    </Card>
-                  </Grid>
-
-                  {/* HRV and Strain */}
-                  <Grid item xs={12} md={6}>
-                    <Card sx={{ p: 2, height: '100%' }}>
-                      <Typography variant="h6" gutterBottom>HRV & Strain</Typography>
-                      <ResponsiveContainer width="100%" height={300}>
-                        <ComposedChart data={filteredData}>
-                          <CartesianGrid strokeDasharray="3 3" />
-                          <XAxis dataKey="date" />
-                          <YAxis yAxisId="left" />
-                          <YAxis yAxisId="right" orientation="right" />
-                          <Tooltip />
-                          <Legend />
-                          <Bar dataKey="hrv_ms" name="HRV (ms)" fill="#3498DB" yAxisId="left" />
-                          <Line type="monotone" dataKey="strain" name="Strain" stroke="#E74C3C" yAxisId="right" />
-                        </ComposedChart>
-                      </ResponsiveContainer>
-                    </Card>
-                  </Grid>
-
-                  {/* SPO2 and Body Temperature */}
-                  <Grid item xs={12} md={6}>
-                    <Card sx={{ p: 2, height: '100%' }}>
-                      <Typography variant="h6" gutterBottom>SPO2 & Skin Temperature</Typography>
-                      <ResponsiveContainer width="100%" height={300}>
-                        <ComposedChart data={filteredData}>
-                          <CartesianGrid strokeDasharray="3 3" />
-                          <XAxis dataKey="date" />
-                          <YAxis yAxisId="left" domain={[90, 100]} />
-                          <YAxis yAxisId="right" orientation="right" domain={[32, 38]} />
-                          <Tooltip />
-                          <Legend />
-                          <Bar dataKey="spo2_percentage" name="SPO2 %" fill="#3498DB" yAxisId="left" />
-                          <Line type="monotone" dataKey="skin_temp_celsius" name="Skin Temp (°C)" stroke="#F1C40F" yAxisId="right" />
-                        </ComposedChart>
-                      </ResponsiveContainer>
-                    </Card>
-                  </Grid>
-
-                  {/* Respiratory Rate */}
-                  <Grid item xs={12} md={6}>
-                    <Card sx={{ p: 2, height: '100%' }}>
-                      <Typography variant="h6" gutterBottom>Respiratory Rate</Typography>
-                      <ResponsiveContainer width="100%" height={300}>
-                        <LineChart data={filteredData}>
-                          <CartesianGrid strokeDasharray="3 3" />
-                          <XAxis dataKey="date" />
-                          <YAxis domain={['dataMin - 2', 'dataMax + 2']} />
-                          <Tooltip />
-                          <Legend />
-                          <Line type="monotone" dataKey="respiratory_rate" name="Resp. Rate" stroke="#27AE60" strokeWidth={2} />
-                        </LineChart>
-                      </ResponsiveContainer>
-                    </Card>
-                  </Grid>
-
-                  {/* Sleep Metrics */}
-                  <Grid item xs={12} md={6}>
-                    <Card sx={{ p: 2, height: '100%' }}>
-                      <Typography variant="h6" gutterBottom>Sleep Quality Metrics</Typography>
-                      <ResponsiveContainer width="100%" height={300}>
-                        <ComposedChart data={filteredData}>
-                          <CartesianGrid strokeDasharray="3 3" />
-                          <XAxis dataKey="date" />
-                          <YAxis domain={[0, 100]} />
-                          <Tooltip />
-                          <Legend />
-                          <Bar dataKey="sleep_efficiency" name="Sleep Efficiency" fill="#3498DB" />
-                          <Bar dataKey="sleep_consistency" name="Sleep Consistency" fill="#F1C40F" />
-                          <Bar dataKey="sleep_performance" name="Sleep Performance" fill="#27AE60" />
-                        </ComposedChart>
-                      </ResponsiveContainer>
-                    </Card>
-                  </Grid>
-
-                  {/* Sleep Disturbances and Cycles */}
-                  <Grid item xs={12} md={6}>
-                    <Card sx={{ p: 2, height: '100%' }}>
-                      <Typography variant="h6" gutterBottom>Sleep Disturbances & Cycles</Typography>
-                      <ResponsiveContainer width="100%" height={300}>
-                        <ComposedChart data={filteredData}>
-                          <CartesianGrid strokeDasharray="3 3" />
-                          <XAxis dataKey="date" />
-                          <YAxis yAxisId="left" />
-                          <YAxis yAxisId="right" orientation="right" domain={[0, 10]} />
-                          <Tooltip />
-                          <Legend />
-                          <Bar dataKey="sleep_disturbances" name="Disturbances" fill="#E74C3C" yAxisId="left" />
-                          <Line type="monotone" dataKey="sleep_cycle_count" name="Sleep Cycles" stroke="#3498DB" strokeWidth={2} yAxisId="right" />
-                        </ComposedChart>
-                      </ResponsiveContainer>
-                    </Card>
-                  </Grid>
-                </>
-              ) : selectedDataSource === 'garmin' ? (
-                // Garmin-specific visualizations - keep existing code but add dev mode source indicators
-                <>
-                  {/* Heart Rate Trends */}
-                  <Grid item xs={12} md={6}>
-                    <Card sx={{ p: 2, height: '100%' }}>
-                      <Typography variant="h6" gutterBottom>Heart Rate Trends</Typography>
-                      {devMode && <Typography variant="caption" sx={{ display: 'block', mb: 1, color: 'text.secondary' }}>
-                        Source: Garmin
-                      </Typography>}
-                      <ResponsiveContainer width="100%" height={300}>
-                        <LineChart data={filteredData}>
-                          <CartesianGrid strokeDasharray="3 3" />
-                          <XAxis dataKey="date" />
-                          <YAxis />
-                          <Tooltip />
-                          <Legend />
-                          <Line type="monotone" dataKey="max_heart_rate" name="Max HR" stroke="#e74c3c" />
-                          <Line type="monotone" dataKey="resting_heart_rate" name="Resting HR" stroke="#2ecc71" />
-                          <Line type="monotone" dataKey="min_heart_rate" name="Min HR" stroke="#3498db" />
-                        </LineChart>
-                      </ResponsiveContainer>
-                    </Card>
-                  </Grid>
-
-                  {/* Sleep Duration */}
-                  <Grid item xs={12} md={6}>
-                    <Card sx={{ p: 2, height: '100%' }}>
-                      <Typography variant="h6" gutterBottom>Sleep Duration</Typography>
-                      <ResponsiveContainer width="100%" height={300}>
-                        <BarChart data={filteredData}>
-                          <CartesianGrid strokeDasharray="3 3" />
-                          <XAxis dataKey="date" />
-                          <YAxis />
-                          <Tooltip />
-                          <Legend />
-                          <Bar dataKey="sleep_hours" name="Sleep (hrs)" fill="#8e44ad" />
-                        </BarChart>
-                      </ResponsiveContainer>
-                    </Card>
-                  </Grid>
-
-                  {/* Daily Activity */}
-                  <Grid item xs={12} md={6}>
-                    <Card sx={{ p: 2, height: '100%' }}>
-                      <Typography variant="h6" gutterBottom>Daily Activity</Typography>
-                      <ResponsiveContainer width="100%" height={300}>
-                        <ComposedChart data={filteredData}>
-                          <CartesianGrid strokeDasharray="3 3" />
-                          <XAxis dataKey="date" />
-                          <YAxis yAxisId="left" />
-                          <YAxis yAxisId="right" orientation="right" />
-                          <Tooltip />
-                          <Legend />
-                          <Bar dataKey="steps" name="Steps" fill="#3498db" yAxisId="left" />
-                          <Line type="monotone" dataKey="active_calories" name="Active Calories" stroke="#e74c3c" yAxisId="right" />
-                        </ComposedChart>
-                      </ResponsiveContainer>
-                    </Card>
-                  </Grid>
-
-                  {/* Respiration Metrics */}
-                  <Grid item xs={12} md={6}>
-                    <Card sx={{ p: 2, height: '100%' }}>
-                      <Typography variant="h6" gutterBottom>Respiration Range</Typography>
-                      <ResponsiveContainer width="100%" height={300}>
-                        <AreaChart data={filteredData}>
-                          <CartesianGrid strokeDasharray="3 3" />
-                          <XAxis dataKey="date" />
-                          <YAxis />
-                          <Tooltip />
-                          <Legend />
-                          <Area
-                            type="monotone"
-                            dataKey="max_respiration"
-                            name="Max Resp"
-                            stroke="#e74c3c"
-                            fill="#e74c3c"
-                            fillOpacity={0.2}
-                          />
-                          <Area
-                            type="monotone"
-                            dataKey="average_respiration"
-                            name="Avg Resp"
-                            stroke="#2ecc71"
-                            fill="#2ecc71"
-                            fillOpacity={0.2}
-                          />
-                          <Area
-                            type="monotone"
-                            dataKey="lowest_respiration"
-                            name="Min Resp"
-                            stroke="#3498db"
-                            fill="#3498db"
-                            fillOpacity={0.2}
-                          />
-                        </AreaChart>
-                      </ResponsiveContainer>
-                    </Card>
-                  </Grid>
-
-                  {/* Calorie Breakdown */}
-                  <Grid item xs={12}>
-                    <Card sx={{ p: 2 }}>
-                      <Typography variant="h6" gutterBottom>Daily Calorie Breakdown</Typography>
-                      <ResponsiveContainer width="100%" height={300}>
-                        <BarChart data={filteredData}>
-                          <CartesianGrid strokeDasharray="3 3" />
-                          <XAxis dataKey="date" />
-                          <YAxis />
-                          <Tooltip />
-                          <Legend />
-                          <Bar dataKey="total_calories" name="Total Calories" stackId="calories" fill="#3498db" />
-                          <Bar dataKey="active_calories" name="Active Calories" stackId="calories" fill="#2ecc71" />
-                        </BarChart>
-                      </ResponsiveContainer>
-                    </Card>
-                  </Grid>
-                </>
-              ) : (
-                // For the 'all' source, use our new modular approach
-                renderModuleVisualizations(filteredData)
-              )}
-            </Grid>
-          </Box>
-        )}
-
-        {tabValue === 1 && (
-          <Box sx={{ mt: 3 }}>
-            {biometricData.length === 0 && !loading ? (
-              <Typography variant="body1" color="textSecondary">
-                No data to display in table.
-              </Typography>
-            ) : (
-              <Box sx={{ overflowX: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                  <thead>
-                    <tr>
-                      {getDataColumns(biometricData, devMode).map(column => (
-                        <th key={column.id} style={thStyle}>
-                          {column.label}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {biometricData.map((item, idx) => (
-                      <tr key={idx} style={{ borderBottom: '1px solid #ccc' }}>
-                        {getDataColumns(biometricData, devMode).map(column => (
-                          <td key={column.id} style={tdStyle}>
-                            {formatCellValue(item[column.id], column.id)}
-                          </td>
-                        ))}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </Box>
-            )}
-            {devMode && (
-              <Typography
-                variant="caption"
-                className="dev-mode-text"
-                sx={{
-                  display: 'block',
-                  mt: 2,
-                  fontStyle: 'italic'
-                }}
-              >
-                Developer mode is active - showing all fields including system fields
-              </Typography>
-            )}
-          </Box>
-        )}
-
-        {tabValue === 2 && (
-          <Box sx={{ mt: 3 }}>
-            <Box sx={{ 
-              display: 'flex', 
-              justifyContent: 'space-between', 
-              alignItems: 'center',
-              flexWrap: 'wrap',
-              gap: 2,
-              mb: 3
-            }}>
-              <Typography variant="h5" sx={{
-                color: darkMode ? 'white' : colors.primary,
-                fontWeight: 600
-              }}>
-                Your Personal Health Insights
-              </Typography>
-              
-              <Box sx={{ 
-                display: 'flex',
-                alignItems: 'center',
-                gap: 2
-              }}>
-                {/* Source selector specifically for insights */}
-                <FormControl variant="outlined" size="small" sx={{ minWidth: 150 }}>
-                  <Select
-                    value={selectedDataSource}
-                    onChange={(e) => {
-                      setSelectedDataSource(e.target.value);
-                      // Refresh insights with new source
-                      fetchInsights(e.target.value);
-                    }}
-                    displayEmpty
-                    sx={{
-                      backgroundColor: darkMode ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.02)',
-                      '& .MuiSelect-select': {
-                        display: 'flex',
-                        alignItems: 'center',
-                      }
-                    }}
-                  >
-                    <MenuItem value="all">All Sources</MenuItem>
-                    {activeSources.map(source => (
-                      <MenuItem 
-                        key={source.id} 
-                        value={source.id}
-                        sx={{
-                          display: 'flex',
-                          alignItems: 'center',
-                        }}
-                      >
-                        {source.id === 'whoop' ? (
-                          <img 
-                            src="/static/images/whoop_logo.png" 
-                            alt="WHOOP" 
-                            style={{ 
-                              height: 20, 
-                              marginRight: 8,
-                              filter: darkMode ? 'brightness(1.5)' : 'none'
-                            }} 
-                          />
-                        ) : source.id === 'garmin' ? (
-                          <img 
-                            src="/static/images/garmin_logo.png" 
-                            alt="Garmin" 
-                            style={{ 
-                              height: 20, 
-                              marginRight: 8,
-                              filter: darkMode ? 'brightness(1.5)' : 'none'
-                            }} 
-                          />
-                        ) : null}
-                        {source.name}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-                
-                <Button
-                  variant="outlined"
-                  startIcon={<RestoreIcon />}
-                  onClick={() => fetchInsights()}
-                  disabled={insightsFetching}
-                >
-                  Refresh
-                </Button>
-              </Box>
-            </Box>
-            
-            {insightsFetching && (
-              <Box sx={{ display: 'flex', justifyContent: 'center', my: 4 }}>
-                <CircularProgress />
-              </Box>
-            )}
-            
-            {insightsError && (
-              <Alert severity="error" sx={{ mb: 3 }}>
-                {insightsError}
-              </Alert>
-            )}
-            
-            {!insightsFetching && !insightsError && insights.length === 0 && (
-              <Alert severity="info" sx={{ mb: 3 }}>
-                No insights available. Please sync more data or try a different data source.
-              </Alert>
-            )}
-            
-            {!insightsFetching && insights.length > 0 && (
-              <>
-                {/* Insights navigation tabs */}
-                <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 3 }}>
-                  <Tabs 
-                    value={insightTabValue} 
-                    onChange={handleInsightTabChange}
-                    aria-label="insights tabs"
-                  >
-                    <Tab label="All Insights" />
-                    <Tab label="Recommendations" />
-                    <Tab label="Trends" />
-                  </Tabs>
-                </Box>
-                
-                {/* All Insights Tab */}
-                {insightTabValue === 0 && (
-                  <>
-                    {/* Filters */}
-                    <Box sx={{ 
-                      display: 'flex', 
-                      flexWrap: 'wrap', 
-                      gap: 2, 
-                      mb: 3,
-                      alignItems: 'center'
-                    }}>
-                      <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                        <FilterAltIcon sx={{ mr: 1, color: 'text.secondary' }} />
-                        <Typography variant="body2" sx={{ mr: 2, color: 'text.secondary' }}>
-                          Filter by:
-                        </Typography>
-                      </Box>
-                      
-                      {/* Category Filter */}
-                      <Box>
-                        <FormControl component="fieldset" size="small">
-                          <FormLabel component="legend" sx={{ fontSize: '0.75rem' }}>Category</FormLabel>
-                          <RadioGroup 
-                            row 
-                            value={selectedInsightCategory} 
-                            onChange={(e) => setSelectedInsightCategory(e.target.value)}
-                          >
-                            <FormControlLabel value="all" control={<Radio size="small" />} label="All" />
-                            {insightCategories.map(category => (
-                              <FormControlLabel 
-                                key={category.id} 
-                                value={category.id} 
-                                control={<Radio size="small" />} 
-                                label={category.name} 
-                              />
-                            ))}
-                          </RadioGroup>
-                        </FormControl>
-                      </Box>
-                      
-                      {/* Priority Filter */}
-                      <Box>
-                        <FormControl component="fieldset" size="small">
-                          <FormLabel component="legend" sx={{ fontSize: '0.75rem' }}>Priority</FormLabel>
-                          <RadioGroup 
-                            row 
-                            value={insightPriorityFilter} 
-                            onChange={(e) => setInsightPriorityFilter(e.target.value)}
-                          >
-                            <FormControlLabel value="all" control={<Radio size="small" />} label="All" />
-                            <FormControlLabel value="high" control={<Radio size="small" />} label="High" />
-                            <FormControlLabel value="medium" control={<Radio size="small" />} label="Medium" />
-                            <FormControlLabel value="low" control={<Radio size="small" />} label="Low" />
-                          </RadioGroup>
-                        </FormControl>
-                      </Box>
-                    </Box>
-                    
-                    {/* Insights List */}
-                    <Box>
-                      {getFilteredInsights().length === 0 ? (
-                        <Alert severity="info">
-                          No insights match your current filters. Try adjusting your filters or refreshing.
-                        </Alert>
-                      ) : (
-                        getFilteredInsights().map((insight) => {
-                          // Find the category info
-                          const categoryInfo = insightCategories.find(c => c.id === insight.category) || {
-                            color: '#95a5a6',
-                            icon: 'InfoIcon'
-                          };
-                          
-                          return (
-                            <Accordion 
-                              key={insight.id}
-                              expanded={expandedInsightId === insight.id}
-                              onChange={handleInsightAccordionChange(insight.id)}
-                              sx={{ 
-                                mb: 2,
-                                boxShadow: '0 2px 10px rgba(0,0,0,0.08)',
-                                borderLeft: `4px solid ${categoryInfo.color}`,
-                                '&:before': {
-                                  display: 'none',
-                                }
-                              }}
-                            >
-                              <AccordionSummary
-                                expandIcon={<ExpandMoreIcon />}
-                                aria-controls={`panel-${insight.id}-content`}
-                                id={`panel-${insight.id}-header`}
-                                sx={{
-                                  '& .MuiAccordionSummary-content': {
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                  }
-                                }}
-                              >
-                                <Box sx={{ 
-                                  mr: 2, 
-                                  display: 'flex', 
-                                  alignItems: 'center', 
-                                  justifyContent: 'center',
-                                  width: 40,
-                                  height: 40,
-                                  borderRadius: '50%',
-                                  backgroundColor: `${categoryInfo.color}20`
-                                }}>
-                                  {getIconByName(categoryInfo.icon)}
-                                </Box>
-                                
-                                {/* Add source indicator */}
-                                {devMode && insight.source && (
-                                  <Chip
-                                    size="small"
-                                    label={insight.source === 'multiple' ? 'Multiple Sources' : 
-                                           insight.source === 'garmin' ? 'Garmin' : 
-                                           insight.source === 'whoop' ? 'WHOOP' : 
-                                           insight.source}
-                                    sx={{ 
-                                      mr: 2, 
-                                      height: 24,
-                                      backgroundColor: insight.source === 'garmin' ? 'rgba(0, 169, 224, 0.1)' : 
-                                                       insight.source === 'whoop' ? 'rgba(0, 0, 0, 0.1)' : 
-                                                       'rgba(0, 0, 0, 0.05)',
-                                      borderColor: insight.source === 'garmin' ? '#00A9E0' : 
-                                                   insight.source === 'whoop' ? '#000000' : 
-                                                   'rgba(0, 0, 0, 0.2)',
-                                      '& .MuiChip-label': {
-                                        fontSize: '0.7rem',
-                                        fontWeight: 600
-                                      }
-                                    }}
-                                    variant="outlined"
-                                  />
-                                )}
-                                
-                                <Box sx={{ flexGrow: 1 }}>
-                                  <Box sx={{ display: 'flex', alignItems: 'center', mb: 0.5 }}>
-                                    <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
-                                      {insight.title}
-                                    </Typography>
-                                    
-                                    {insight.trend && (
-                                      <Box sx={{ display: 'flex', alignItems: 'center', ml: 2 }}>
-                                        {getTrendIcon(insight.trend)}
-                                        <Typography variant="caption" sx={{ ml: 0.5 }}>
-                                          {insight.trend}
-                                        </Typography>
-                                      </Box>
-                                    )}
-                                    
-                                    <Box sx={{ flexGrow: 1 }} />
-                                    
-                                    <Chip 
-                                      label={insight.priority.toUpperCase()} 
-                                      size="small"
-                                      color={
-                                        insight.priority === 'high' ? 'error' :
-                                        insight.priority === 'medium' ? 'warning' : 'success'
-                                      }
-                                      sx={{ ml: 1, height: 24 }}
-                                    />
-                                  </Box>
-                                  
-                                  <Typography variant="body2" color="text.secondary" sx={{ 
-                                    display: '-webkit-box',
-                                    overflow: 'hidden',
-                                    WebkitBoxOrient: 'vertical',
-                                    WebkitLineClamp: 1,
-                                  }}>
-                                    {insight.content}
-                                  </Typography>
-                                </Box>
-                              </AccordionSummary>
-                              
-                              <AccordionDetails>
-                                <Box sx={{ mb: 2 }}>
-                                  <Typography variant="body1" paragraph>
-                                    {insight.content}
-                                  </Typography>
-                                  
-                                  <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1 }}>
-                                    Recommendation:
-                                  </Typography>
-                                  <Typography variant="body2" sx={{ mb: 2 }}>
-                                    {insight.recommendation}
-                                  </Typography>
-                                  
-                                  {/* Visualization when data_points are available */}
-                                  {insight.data_points && insight.data_points.length > 0 && (
-                                    <Box sx={{ height: 200, mb: 2 }}>
-                                      <Typography variant="caption" sx={{ mb: 1, display: 'block', color: 'text.secondary' }}>
-                                        {insight.visualization === 'line' && 'Line chart showing your trend over time'}
-                                        {insight.visualization === 'bar' && 'Bar chart showing your values over time'}
-                                        {insight.visualization === 'area' && 'Area chart showing your trend over time'}
-                                        {insight.visualization === 'gauge' && 'Gauge showing your current level'}
-                                      </Typography>
-                                      
-                                      <ResponsiveContainer width="100%" height="100%">
-                                        {insight.visualization === 'line' && (
-                                          <LineChart data={insight.data_points.map((val, idx) => ({ date: idx, value: val }))}>
-                                            <CartesianGrid strokeDasharray="3 3" />
-                                            <XAxis dataKey="date" />
-                                            <YAxis />
-                                            <Tooltip />
-                                            <Line type="monotone" dataKey="value" stroke={categoryInfo.color} strokeWidth={2} />
-                                          </LineChart>
-                                        )}
-                                        
-                                        {insight.visualization === 'bar' && (
-                                          <BarChart data={insight.data_points.map((val, idx) => ({ date: idx, value: val }))}>
-                                            <CartesianGrid strokeDasharray="3 3" />
-                                            <XAxis dataKey="date" />
-                                            <YAxis />
-                                            <Tooltip />
-                                            <Bar dataKey="value" fill={categoryInfo.color} />
-                                          </BarChart>
-                                        )}
-                                        
-                                        {insight.visualization === 'area' && (
-                                          <AreaChart data={insight.data_points.map((val, idx) => ({ date: idx, value: val }))}>
-                                            <CartesianGrid strokeDasharray="3 3" />
-                                            <XAxis dataKey="date" />
-                                            <YAxis />
-                                            <Tooltip />
-                                            <Area type="monotone" dataKey="value" fill={`${categoryInfo.color}50`} stroke={categoryInfo.color} />
-                                          </AreaChart>
-                                        )}
-                                        
-                                        {insight.visualization === 'gauge' && (
-                                          <RadialBarChart 
-                                            innerRadius="60%" 
-                                            outerRadius="100%" 
-                                            data={[{value: insight.data_points[insight.data_points.length-1], fill: categoryInfo.color}]} 
-                                            startAngle={180} 
-                                            endAngle={0}
-                                          >
-                                            <RadialBar background dataKey="value" />
-                                            <text x="50%" y="50%" textAnchor="middle" dominantBaseline="middle" className="progress-label">
-                                              {Math.round(insight.data_points[insight.data_points.length-1])}%
-                                            </text>
-                                          </RadialBarChart>
-                                        )}
-                                      </ResponsiveContainer>
-                                    </Box>
-                                  )}
-                                  
-                                  <Divider sx={{ my: 2 }} />
-                                  
-                                  {/* Feedback buttons */}
-                                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                    <Typography variant="caption" color="text.secondary">
-                                      Was this insight helpful?
-                                    </Typography>
-                                    
-                                    <ButtonGroup size="small" aria-label="feedback buttons">
-                                      <Button 
-                                        startIcon={<ThumbUpIcon />}
-                                        onClick={() => submitInsightFeedback(insight.id, 'helpful')}
-                                      >
-                                        Yes
-                                      </Button>
-                                      <Button 
-                                        startIcon={<ThumbDownIcon />}
-                                        onClick={() => submitInsightFeedback(insight.id, 'not_helpful')}
-                                      >
-                                        No
-                                      </Button>
-                                    </ButtonGroup>
-                                  </Box>
-                                </Box>
-                              </AccordionDetails>
-                            </Accordion>
-                          );
-                        })
-                      )}
-                    </Box>
-                  </>
-                )}
-                
-                {/* Recommendations Tab */}
-                {insightTabValue === 1 && (
-                  <Box>
-                    <Typography variant="h6" sx={{ mb: 3 }}>
-                      Actionable Recommendations
+                  <Box sx={{ position: 'relative', zIndex: 1 }}>
+                    <Typography variant="h4" sx={{ mb: 2, fontWeight: 600 }}>
+                      Welcome, {username.charAt(0).toUpperCase() + username.slice(1)}
                     </Typography>
                     
-                    {recommendations.length === 0 ? (
-                      <Alert severity="info">
-                        No recommendations available at this time.
-                      </Alert>
-                    ) : (
-                      <List>
-                        {recommendations.map((rec) => {
-                          // Find the category info
-                          const categoryInfo = insightCategories.find(c => c.id === rec.category) || {
-                            color: '#95a5a6',
-                            icon: 'InfoIcon'
-                          };
+                    <Typography variant="body1" sx={{ mb: 3, opacity: 0.9, maxWidth: '700px' }}>
+                      Your personal biometrics dashboard provides a comprehensive view of your health and fitness data, 
+                      allowing you to track trends and gain insights into your well-being.
+                    </Typography>
+                    
+                    {/* Action buttons */}
+                    <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
+                      <Button
+                        variant="contained"
+                        color="primary"
+                        onClick={syncData}
+                        disabled={loading}
+                        startIcon={<SyncIcon />}
+                        className="sync-button"
+                        sx={{ borderRadius: '30px' }}
+                      >
+                        Sync Latest Data
+                      </Button>
+                      
+                      <Button
+                        variant="outlined"
+                        onClick={() => setDashboardTab(1)}
+                        endIcon={<ArrowRightAltIcon />}
+                        sx={{ 
+                          borderRadius: '30px',
+                          borderColor: darkMode ? 'rgba(255,255,255,0.5)' : '#3498DB',
+                          color: darkMode ? 'white' : '#3498DB'
+                        }}
+                      >
+                        Manage Sources
+                      </Button>
+                    </Box>
+                  </Box>
+                </Box>
+                            
+                {/* Stats overview cards */}
+                <Typography variant="h5" sx={{ mb: 2, fontWeight: 600 }}>
+                  Your Health Snapshot
+                </Typography>
+                
+                <Grid container spacing={3} sx={{ mb: 4 }}>
+                  {/* Heart Rate Card */}
+                  <Grid item xs={12} sm={6} md={3}>
+                    <Card sx={{ 
+                      height: '100%', 
+                      borderRadius: '12px',
+                      transition: 'transform 0.3s ease-in-out, box-shadow 0.3s ease-in-out',
+                      '&:hover': {
+                        transform: 'translateY(-5px)',
+                        boxShadow: '0 10px 20px rgba(0,0,0,0.2)'
+                      }
+                    }}>
+                      <CardContent sx={{ p: 3 }}>
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
+                          <Typography variant="subtitle1" color="textSecondary">Resting Heart Rate</Typography>
+                          <MonitorHeartIcon sx={{ color: '#E74C3C' }} />
+                        </Box>
+                        <Typography variant="h3" sx={{ mb: 0, fontWeight: 700 }}>
+                          {filteredData.length > 0 ? filteredData[filteredData.length - 1].resting_heart_rate || '—' : '—'}
+                        </Typography>
+                        <Typography variant="body2" color="textSecondary">
+                          BPM
+                        </Typography>
+                      </CardContent>
+                    </Card>
+                  </Grid>
+                  
+                  {/* Recovery Score Card */}
+                  <Grid item xs={12} sm={6} md={3}>
+                    <Card sx={{ 
+                      height: '100%', 
+                      borderRadius: '12px',
+                      transition: 'transform 0.3s ease-in-out, box-shadow 0.3s ease-in-out',
+                      '&:hover': {
+                        transform: 'translateY(-5px)',
+                        boxShadow: '0 10px 20px rgba(0,0,0,0.2)'
+                      }
+                    }}>
+                      <CardContent sx={{ p: 3 }}>
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
+                          <Typography variant="subtitle1" color="textSecondary">Recovery Score</Typography>
+                          <SpeedIcon sx={{ color: '#2ECC71' }} />
+                        </Box>
+                        <Typography variant="h3" sx={{ mb: 0, fontWeight: 700 }}>
+                          {filteredData.length > 0 ? filteredData[filteredData.length - 1].recovery_score || '—' : '—'}
+                        </Typography>
+                        <Typography variant="body2" color="textSecondary">
+                          out of 100
+                        </Typography>
+                      </CardContent>
+                    </Card>
+                  </Grid>
+                  
+                  {/* Sleep Card */}
+                  <Grid item xs={12} sm={6} md={3}>
+                    <Card sx={{ 
+                      height: '100%', 
+                      borderRadius: '12px',
+                      transition: 'transform 0.3s ease-in-out, box-shadow 0.3s ease-in-out',
+                      '&:hover': {
+                        transform: 'translateY(-5px)',
+                        boxShadow: '0 10px 20px rgba(0,0,0,0.2)'
+                      }
+                    }}>
+                      <CardContent sx={{ p: 3 }}>
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
+                          <Typography variant="subtitle1" color="textSecondary">Sleep Duration</Typography>
+                          <NightsStayIcon sx={{ color: '#9B59B6' }} />
+                        </Box>
+                        <Typography variant="h3" sx={{ mb: 0, fontWeight: 700 }}>
+                          {filteredData.length > 0 ? filteredData[filteredData.length - 1].sleep_hours || '—' : '—'}
+                        </Typography>
+                        <Typography variant="body2" color="textSecondary">
+                          hours
+                        </Typography>
+                      </CardContent>
+                    </Card>
+                  </Grid>
+                  
+                  {/* Activity Card */}
+                  <Grid item xs={12} sm={6} md={3}>
+                    <Card sx={{ 
+                      height: '100%', 
+                      borderRadius: '12px',
+                      transition: 'transform 0.3s ease-in-out, box-shadow 0.3s ease-in-out',
+                      '&:hover': {
+                        transform: 'translateY(-5px)',
+                        boxShadow: '0 10px 20px rgba(0,0,0,0.2)'
+                      }
+                    }}>
+                      <CardContent sx={{ p: 3 }}>
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
+                          <Typography variant="subtitle1" color="textSecondary">Daily Steps</Typography>
+                          <DirectionsRunIcon sx={{ color: '#3498DB' }} />
+                        </Box>
+                        <Typography variant="h3" sx={{ mb: 0, fontWeight: 700 }}>
+                          {filteredData.length > 0 && filteredData[filteredData.length - 1].steps ? 
+                            new Intl.NumberFormat().format(filteredData[filteredData.length - 1].steps) : '—'}
+                        </Typography>
+                        <Typography variant="body2" color="textSecondary">
+                          steps
+                        </Typography>
+                      </CardContent>
+                    </Card>
+                  </Grid>
+                </Grid>
+                
+                {/* Data Tabs - keep existing tabValue structure */}
+                <Box sx={{ width: '100%', mb: 3 }}>
+                  <Typography variant="h5" sx={{ mb: 2, fontWeight: 600 }}>
+                    Detailed Analytics
+                  </Typography>
+                  
+                  {/* Add current source display */}
+                  <Box sx={{ mb: 1 }}>
+                    <Typography variant="subtitle1" color="textSecondary">
+                      {selectedDataSource && selectedDataSource !== 'all' 
+                        ? `Viewing data from: ${
+                            typeof selectedDataSource === 'string'
+                              ? selectedDataSource.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')
+                              : String(selectedDataSource)
+                          }`
+                        : 'Viewing data from all connected sources'}
+                    </Typography>
+                  </Box>
+                  
+                  {/* Add source selector dropdown */}
+                  <Box sx={{ 
+                    display: 'flex', 
+                    justifyContent: 'space-between', 
+                    alignItems: 'center', 
+                    mb: 2,
+                    flexWrap: 'wrap',
+                    gap: 2
+                  }}>
+                    <FormControl variant="outlined" size="small" sx={{ minWidth: 200 }}>
+                      <Select
+                        value={selectedDataSource || 'all'}
+                        onChange={(e) => setSelectedDataSource(e.target.value)}
+                        displayEmpty
+                        sx={{ borderRadius: '8px' }}
+                      >
+                        <MenuItem value="all">All Sources</MenuItem>
+                        {activeSources && Array.isArray(activeSources) && activeSources.map((source) => {
+                          // Safely handle the source object or string
+                          const sourceId = source && (source.id || source);
+                          // Safely create a display name ensuring it's a string
+                          let displayName = 'Unknown Source';
                           
-                          return (
-                            <ListItem 
-                              key={rec.id}
-                              sx={{ 
-                                mb: 2, 
-                                backgroundColor: darkMode ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.02)',
-                                borderRadius: 1,
-                                borderLeft: `4px solid ${
-                                  rec.priority === 'high' ? '#e74c3c' :
-                                  rec.priority === 'medium' ? '#f39c12' : '#2ecc71'
-                                }`
-                              }}
+                          if (source) {
+                            if (source.name) {
+                              displayName = source.name;
+                            } else if (typeof source === 'string') {
+                              displayName = source.split('_')
+                                .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+                                .join(' ');
+                            } else if (typeof sourceId === 'string') {
+                              displayName = sourceId.split('_')
+                                .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+                                .join(' ');
+                            }
+                          }
+                          
+                          // Only render MenuItem if we have a valid sourceId
+                          return sourceId ? (
+                            <MenuItem 
+                              key={sourceId} 
+                              value={sourceId}
                             >
-                              <ListItemIcon>
-                                <Box sx={{ 
-                                  display: 'flex', 
-                                  alignItems: 'center', 
-                                  justifyContent: 'center',
-                                  width: 40,
-                                  height: 40,
-                                  borderRadius: '50%',
-                                  backgroundColor: `${categoryInfo.color}20`
-                                }}>
-                                  {getIconByName(categoryInfo.icon)}
+                              {displayName}
+                            </MenuItem>
+                          ) : null;
+                        })}
+                      </Select>
+                    </FormControl>
+                    
+                    {loading && (
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <CircularProgress size={20} />
+                        <Typography variant="body2" color="textSecondary">Loading data...</Typography>
+                      </Box>
+                    )}
+                    
+                    <Button
+                      variant="outlined"
+                      size="small"
+                      startIcon={<SyncIcon />}
+                      onClick={() => syncData(selectedDataSource)}
+                      disabled={loading}
+                      sx={{ borderRadius: '8px' }}
+                    >
+                      Refresh Data
+                    </Button>
+                  </Box>
+                  
+                  <Box sx={{ 
+                    borderRadius: '12px', 
+                    overflow: 'hidden',
+                    boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
+                    backgroundColor: darkMode ? 'rgba(255, 255, 255, 0.05)' : 'white',
+                    border: darkMode ? '1px solid rgba(255, 255, 255, 0.1)' : '1px solid rgba(0, 0, 0, 0.05)'
+                  }}>
+                    <Tabs
+                      value={tabValue}
+                      onChange={handleChangeTab}
+                      variant="scrollable"
+                      scrollButtons="auto"
+                      aria-label="data category tabs"
+                      sx={{ 
+                        minHeight: '48px',
+                        borderBottom: darkMode ? '1px solid rgba(255, 255, 255, 0.1)' : '1px solid rgba(0, 0, 0, 0.1)',
+                      }}
+                    >
+                      <Tab label="Overview" {...a11yProps(0)} />
+                      <Tab label="Sleep" {...a11yProps(1)} />
+                      <Tab label="Activity" {...a11yProps(2)} />
+                      <Tab label="Health Score" {...a11yProps(3)} />
+                      <Tab label="Raw Data" {...a11yProps(4)} />
+                      <Tab label="Insights" {...a11yProps(5)} />
+                    </Tabs>
+                    
+                    <Box sx={{ p: 3 }}>
+                      {/* Overview Tab */}
+                      <TabPanel value={tabValue} index={0}>
+                        <Grid container spacing={3}>
+                          {renderModuleVisualizations(filteredData)}
+                        </Grid>
+                      </TabPanel>
+                      
+                      {/* Sleep Tab */}
+                      <TabPanel value={tabValue} index={1}>
+                        <Grid container spacing={3}>
+                          {shouldShowVisualization('whoop', ['sleep_efficiency', 'sleep_consistency', 'sleep_performance']) && (
+                            <Grid item xs={12}>
+                              <Card sx={{ p: 2 }}>
+                                <Typography variant="h6" gutterBottom>Sleep Quality Metrics</Typography>
+                                <ResponsiveContainer width="100%" height={300}>
+                                  <BarChart data={filteredData}>
+                                    <CartesianGrid strokeDasharray="3 3" />
+                                    <XAxis dataKey="date" />
+                                    <YAxis domain={[0, 100]} />
+                                    <Tooltip />
+                                    <Legend />
+                                    <Bar dataKey="sleep_efficiency" name="Sleep Efficiency" fill="#3498DB" />
+                                    <Bar dataKey="sleep_consistency" name="Sleep Consistency" fill="#F1C40F" />
+                                    <Bar dataKey="sleep_performance" name="Sleep Performance" fill="#27AE60" />
+                                  </BarChart>
+                                </ResponsiveContainer>
+                              </Card>
+                            </Grid>
+                          )}
+                          
+                          <Grid item xs={12}>
+                            <Card sx={{ p: 2 }}>
+                              <Typography variant="h6" gutterBottom>Sleep Duration</Typography>
+                              <ResponsiveContainer width="100%" height={300}>
+                                <BarChart data={filteredData}>
+                                  <CartesianGrid strokeDasharray="3 3" />
+                                  <XAxis dataKey="date" />
+                                  <YAxis />
+                                  <Tooltip />
+                                  <Legend />
+                                  <Bar dataKey="sleep_hours" name="Total Sleep" fill="#8e44ad" />
+                                  <Bar dataKey="deep_sleep" name="Deep Sleep" fill="#2c3e50" />
+                                  <Bar dataKey="rem_sleep" name="REM Sleep" fill="#3498db" />
+                                </BarChart>
+                              </ResponsiveContainer>
+                            </Card>
+                          </Grid>
+                        </Grid>
+                      </TabPanel>
+                      
+                      {/* Activity Tab */}
+                      <TabPanel value={tabValue} index={2}>
+                        <Grid container spacing={3}>
+                          <Grid item xs={12}>
+                            <Card sx={{ p: 2 }}>
+                              <Typography variant="h6" gutterBottom>Steps & Distance</Typography>
+                              <ResponsiveContainer width="100%" height={300}>
+                                <ComposedChart data={filteredData}>
+                                  <CartesianGrid strokeDasharray="3 3" />
+                                  <XAxis dataKey="date" />
+                                  <YAxis yAxisId="left" />
+                                  <YAxis yAxisId="right" orientation="right" />
+                                  <Tooltip />
+                                  <Legend />
+                                  <Bar yAxisId="left" dataKey="steps" name="Steps" fill="#3498DB" />
+                                  <Line yAxisId="right" type="monotone" dataKey="distance" name="Distance (km)" stroke="#E74C3C" />
+                                </ComposedChart>
+                              </ResponsiveContainer>
+                            </Card>
+                          </Grid>
+                          
+                          <Grid item xs={12} md={6}>
+                            <Card sx={{ p: 2 }}>
+                              <Typography variant="h6" gutterBottom>Heart Rate</Typography>
+                              <ResponsiveContainer width="100%" height={300}>
+                                <LineChart data={filteredData}>
+                                  <CartesianGrid strokeDasharray="3 3" />
+                                  <XAxis dataKey="date" />
+                                  <YAxis />
+                                  <Tooltip />
+                                  <Legend />
+                                  <Line type="monotone" dataKey="resting_heart_rate" name="Resting HR" stroke="#E74C3C" strokeWidth={2} />
+                                  <Line type="monotone" dataKey="max_heart_rate" name="Max HR" stroke="#F39C12" strokeWidth={2} />
+                                </LineChart>
+                              </ResponsiveContainer>
+                            </Card>
+                          </Grid>
+                          
+                          <Grid item xs={12} md={6}>
+                            <Card sx={{ p: 2 }}>
+                              <Typography variant="h6" gutterBottom>Calories</Typography>
+                              <ResponsiveContainer width="100%" height={300}>
+                                <AreaChart data={filteredData}>
+                                  <CartesianGrid strokeDasharray="3 3" />
+                                  <XAxis dataKey="date" />
+                                  <YAxis />
+                                  <Tooltip />
+                                  <Legend />
+                                  <Area type="monotone" dataKey="total_calories" name="Total Calories" stroke="#27AE60" fill="#27AE60" fillOpacity={0.3} />
+                                  <Area type="monotone" dataKey="active_calories" name="Active Calories" stroke="#3498DB" fill="#3498DB" fillOpacity={0.3} />
+                                </AreaChart>
+                              </ResponsiveContainer>
+                            </Card>
+                          </Grid>
+                        </Grid>
+                      </TabPanel>
+                      
+                      {/* Health Score Tab */}
+                      <TabPanel value={tabValue} index={3}>
+                        <Grid container spacing={3}>
+                          <Grid item xs={12}>
+                            <Card sx={{ p: 2 }}>
+                              <Typography variant="h6" gutterBottom>Health Score</Typography>
+                              <Box sx={{ display: 'flex', flexDirection: { xs: 'column', md: 'row' } }}>
+                                <Box sx={{ flex: 1, minHeight: '300px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                  <ResponsiveContainer width="100%" height={300}>
+                                    <RadialBarChart 
+                                      innerRadius="60%" 
+                                      outerRadius="90%" 
+                                      data={[{ name: 'Health Score', value: calculateHealthScore(filteredData) }]} 
+                                      startAngle={180} 
+                                      endAngle={0}
+                                    >
+                                      <RadialBar
+                                        background
+                                        dataKey="value"
+                                        angleAxisId={0}
+                                        fill="#27AE60"
+                                      />
+                                      <text
+                                        x="50%"
+                                        y="50%"
+                                        textAnchor="middle"
+                                        dominantBaseline="middle"
+                                        className="progress-label"
+                                        fontSize="36"
+                                        fontWeight="bold"
+                                      >
+                                        {calculateHealthScore(filteredData)}
+                                      </text>
+                                    </RadialBarChart>
+                                  </ResponsiveContainer>
                                 </Box>
-                              </ListItemIcon>
-                              <ListItemText 
-                                primary={rec.title}
-                                secondary={
-                                  <>
-                                    <Typography variant="body2" sx={{ mb: 1 }}>
-                                      {rec.content}
-                                    </Typography>
-                                    <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
-                                      <ButtonGroup size="small" aria-label="feedback buttons">
+                                <Box sx={{ flex: 1, p: 2 }}>
+                                  <Typography variant="h4" gutterBottom>Health Score Analysis</Typography>
+                                  <Typography variant="body1" paragraph>
+                                    Your health score is calculated based on multiple factors including sleep quality, 
+                                    activity levels, heart rate variability, and recovery metrics.
+                                  </Typography>
+                                  <List>
+                                    <ListItem>
+                                      <ListItemIcon><FavoriteIcon color="error" /></ListItemIcon>
+                                      <ListItemText 
+                                        primary="Heart Health" 
+                                        secondary="Based on resting heart rate and heart rate variability" 
+                                      />
+                                    </ListItem>
+                                    <ListItem>
+                                      <ListItemIcon><BedtimeIcon color="primary" /></ListItemIcon>
+                                      <ListItemText 
+                                        primary="Sleep Quality" 
+                                        secondary="Based on sleep duration and composition" 
+                                      />
+                                    </ListItem>
+                                    <ListItem>
+                                      <ListItemIcon><DirectionsRunIcon color="success" /></ListItemIcon>
+                                      <ListItemText 
+                                        primary="Activity Level" 
+                                        secondary="Based on step count and activity minutes" 
+                                      />
+                                    </ListItem>
+                                  </List>
+                                </Box>
+                              </Box>
+                            </Card>
+                          </Grid>
+                        </Grid>
+                      </TabPanel>
+                      
+                      {/* Raw Data Tab */}
+                      <TabPanel value={tabValue} index={4}>
+                        <Card sx={{ p: 2, mb: 3 }}>
+                          <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2 }}>
+                            <Typography variant="h6">Raw Biometric Data</Typography>
+                            <FormControlLabel
+                              control={<Switch checked={devMode} onChange={(e) => setDevMode(e.target.checked)} />}
+                              label="Developer Mode"
+                            />
+                          </Box>
+                          
+                          <Box sx={{ overflow: 'auto' }}>
+                            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                              <thead>
+                                <tr>
+                                  {getDataColumns(biometricData, devMode).map(column => (
+                                    <th key={column.id} style={thStyle}>{column.label}</th>
+                                  ))}
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {biometricData.map((row, index) => (
+                                  <tr key={index}>
+                                    {getDataColumns(biometricData, devMode).map(column => (
+                                      <td key={column.id} style={tdStyle}>
+                                        {formatCellValue(row[column.id], column.id)}
+                                      </td>
+                                    ))}
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </Box>
+                          
+                          <Button
+                            variant="outlined"
+                            color="primary"
+                            onClick={() => fetchRawData()}
+                            sx={{ mt: 2 }}
+                            startIcon={<DataArrayIcon />}
+                          >
+                            Download Raw JSON Data
+                          </Button>
+                        </Card>
+                      </TabPanel>
+                      
+                      {/* Insights Tab */}
+                      <TabPanel value={tabValue} index={5}>
+                        <Box sx={{ mb: 3 }}>
+                          <Tabs
+                            value={insightTabValue}
+                            onChange={handleInsightTabChange}
+                            variant="fullWidth"
+                            aria-label="insight tabs"
+                          >
+                            <Tab label="Insights" />
+                            <Tab label="Recommendations" />
+                            <Tab label="Trends" />
+                          </Tabs>
+                          
+                          {/* Insights */}
+                          {insightTabValue === 0 && (
+                            <Box sx={{ mt: 3 }}>
+                              <Box sx={{ display: 'flex', gap: 2, mb: 3 }}>
+                                <FormControl variant="outlined" size="small" sx={{ minWidth: 200 }}>
+                                  <Select
+                                    value={selectedInsightCategory}
+                                    onChange={(e) => setSelectedInsightCategory(e.target.value)}
+                                    displayEmpty
+                                  >
+                                    <MenuItem value="all">All Categories</MenuItem>
+                                    {insightCategories.map(category => (
+                                      <MenuItem key={category} value={category}>{category}</MenuItem>
+                                    ))}
+                                  </Select>
+                                </FormControl>
+                                
+                                <FormControl variant="outlined" size="small" sx={{ minWidth: 150 }}>
+                                  <Select
+                                    value={insightPriorityFilter}
+                                    onChange={(e) => setInsightPriorityFilter(e.target.value)}
+                                    displayEmpty
+                                  >
+                                    <MenuItem value="all">All Priorities</MenuItem>
+                                    <MenuItem value="high">High Priority</MenuItem>
+                                    <MenuItem value="medium">Medium Priority</MenuItem>
+                                    <MenuItem value="low">Low Priority</MenuItem>
+                                  </Select>
+                                </FormControl>
+                              </Box>
+                              
+                              {getFilteredInsights().length > 0 ? (
+                                getFilteredInsights().map(insight => (
+                                  <Accordion 
+                                    key={insight.id}
+                                    expanded={expandedInsightId === insight.id}
+                                    onChange={handleInsightAccordionChange(insight.id)}
+                                    sx={{ mb: 2 }}
+                                  >
+                                    <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                                      <Box sx={{ display: 'flex', alignItems: 'center', width: '100%' }}>
+                                        <Box sx={{ mr: 2 }}>
+                                          {getIconByName(insight.icon)}
+                                        </Box>
+                                        <Box sx={{ flex: 1 }}>
+                                          <Typography variant="subtitle1">{insight.title}</Typography>
+                                          <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+                                            <Chip 
+                                              label={insight.category} 
+                                              size="small" 
+                                              color={
+                                                insight.category === 'Sleep' ? 'secondary' :
+                                                insight.category === 'Activity' ? 'success' :
+                                                insight.category === 'Recovery' ? 'info' :
+                                                'default'
+                                              }
+                                              variant="outlined"
+                                            />
+                                            <Chip 
+                                              label={insight.priority} 
+                                              size="small" 
+                                              color={
+                                                insight.priority === 'high' ? 'error' :
+                                                insight.priority === 'medium' ? 'warning' :
+                                                'default'
+                                              }
+                                              variant="outlined"
+                                            />
+                                          </Box>
+                                        </Box>
+                                      </Box>
+                                    </AccordionSummary>
+                                    <AccordionDetails>
+                                      <Typography variant="body1" paragraph>
+                                        {insight.description}
+                                      </Typography>
+                                      <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1 }}>
                                         <Button 
-                                          startIcon={<ThumbUpIcon />}
-                                          onClick={() => submitInsightFeedback(rec.id, 'helpful')}
+                                          startIcon={<ThumbUpIcon />} 
+                                          size="small"
+                                          onClick={() => submitInsightFeedback(insight.id, 'like')}
                                         >
                                           Helpful
                                         </Button>
                                         <Button 
-                                          startIcon={<ThumbDownIcon />}
-                                          onClick={() => submitInsightFeedback(rec.id, 'not_helpful')}
+                                          startIcon={<ThumbDownIcon />} 
+                                          size="small"
+                                          onClick={() => submitInsightFeedback(insight.id, 'dislike')}
                                         >
                                           Not Helpful
                                         </Button>
-                                      </ButtonGroup>
-                                    </Box>
-                                  </>
-                                }
-                              />
-                            </ListItem>
-                          );
-                        })}
-                      </List>
-                    )}
-                  </Box>
-                )}
-                
-                {/* Trends Tab */}
-                {insightTabValue === 2 && (
-                  <Box>
-                    <Typography variant="h6" sx={{ mb: 3 }}>
-                      Key Metric Trends
-                    </Typography>
-                    
-                    {Object.keys(insightTrends).length === 0 ? (
-                      <Alert severity="info">
-                        No trend data available at this time.
-                      </Alert>
-                    ) : (
-                      <Grid container spacing={3}>
-                        {Object.entries(insightTrends)
-                          // Filter out metrics that don't have meaningful data (all zeros or empty)
-                          .filter(([metric, data]) => {
-                            // Check if we have any non-zero values
-                            const hasNonZeroValues = data.data_points && 
-                              data.data_points.some(val => val > 0);
-                            
-                            // Skip metrics with all zeros or no data points
-                            return hasNonZeroValues && data.data_points && data.data_points.length > 0;
-                          })
-                          .map(([metric, data]) => {
-                            // Format the metric name for display
-                            const formattedMetric = metric
-                              .replace(/_/g, ' ')
-                              .split(' ')
-                              .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-                              .join(' ');
-                            
-                            // Get min and max for proper Y-axis scaling
-                            const values = data.data_points.filter(val => val !== null && val !== undefined);
-                            const minValue = Math.max(0, Math.min(...values) - (Math.min(...values) * 0.1));
-                            const maxValue = Math.max(...values) + (Math.max(...values) * 0.1);
-                              
-                            return (
-                              <Grid item xs={12} md={6} key={metric}>
-                                <Card sx={{ p: 2 }}>
-                                  <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                                    <Typography variant="h6" sx={{ flexGrow: 1 }}>
-                                      {formattedMetric}
-                                    </Typography>
-                                    
-                                    <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                                      {getTrendIcon(data.trend)}
-                                      <Typography variant="body2" sx={{ ml: 0.5 }}>
-                                        {data.trend}
-                                      </Typography>
-                                    </Box>
-                                  </Box>
-                                  
-                                  <Typography variant="body2" sx={{ mb: 2 }}>
-                                    Recent average: <strong>{data.recent_average.toFixed(1)}</strong>
-                                    {metric === 'resting_heart_rate' && ' bpm'}
-                                    {metric === 'hrv_ms' && ' ms'}
-                                    {metric === 'sleep_hours' && ' hours'}
-                                    {metric === 'recovery_score' && '%'}
-                                    {metric === 'sleep_efficiency' && '%'}
-                                    {metric === 'steps' && ' steps'}
-                                  </Typography>
-                                  
-                                  <Box sx={{ height: 200 }}>
-                                    <ResponsiveContainer width="100%" height="100%">
-                                      <LineChart data={data.data_points.map((val, idx) => ({ 
-                                        date: idx, 
-                                        value: val,
-                                        // Add formatted date if available in original data
-                                        label: idx.toString()
-                                      }))}>
-                                        <CartesianGrid strokeDasharray="3 3" />
-                                        <XAxis 
-                                          dataKey="label"
-                                          tickFormatter={(value, index) => {
-                                            // Show fewer x-axis labels for clarity
-                                            return index % Math.ceil(data.data_points.length / 5) === 0 ? value : '';
-                                          }}
-                                        />
-                                        <YAxis 
-                                          domain={[minValue, maxValue]}
-                                          tickFormatter={(value) => {
-                                            // Format large numbers (like steps) for better display
-                                            return value >= 1000 ? `${Math.round(value/1000)}k` : value;
-                                          }}
-                                        />
-                                        <Tooltip 
-                                          formatter={(value) => {
-                                            // Format the value in the tooltip
-                                            if (metric === 'steps' && value >= 1000) {
-                                              return [`${value.toLocaleString()} steps`, formattedMetric];
+                                      </Box>
+                                    </AccordionDetails>
+                                  </Accordion>
+                                ))
+                              ) : (
+                                <Alert severity="info">
+                                  No insights available for the selected filters. Try a different category or sync more data.
+                                </Alert>
+                              )}
+                            </Box>
+                          )}
+                          
+                          {/* Recommendations */}
+                          {insightTabValue === 1 && (
+                            <Box sx={{ mt: 3 }}>
+                              {recommendations.length > 0 ? (
+                                <Grid container spacing={3}>
+                                  {recommendations.map((recommendation, index) => (
+                                    <Grid item xs={12} md={6} key={index}>
+                                      <Card sx={{ 
+                                        p: 2,
+                                        height: '100%',
+                                        display: 'flex',
+                                        flexDirection: 'column',
+                                        transition: 'transform 0.3s ease-in-out, box-shadow 0.3s ease-in-out',
+                                        '&:hover': {
+                                          transform: 'translateY(-5px)',
+                                          boxShadow: '0 8px 30px rgba(0, 0, 0, 0.15)'
+                                        }
+                                      }}>
+                                        <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                                          <LightbulbIcon sx={{ color: '#F39C12', mr: 1.5 }} />
+                                          <Typography variant="h6">{recommendation.title}</Typography>
+                                        </Box>
+                                        <Typography variant="body2" sx={{ mb: 2, flex: 1 }}>
+                                          {recommendation.description}
+                                        </Typography>
+                                        <Box sx={{ display: 'flex', alignItems: 'center', mt: 'auto' }}>
+                                          <Chip 
+                                            label={recommendation.category} 
+                                            size="small" 
+                                            color={
+                                              recommendation.category === 'Sleep' ? 'secondary' :
+                                              recommendation.category === 'Activity' ? 'success' :
+                                              recommendation.category === 'Recovery' ? 'info' :
+                                              'default'
                                             }
-                                            
-                                            // Add units to values in tooltip
-                                            const unit = 
-                                              metric === 'resting_heart_rate' ? ' bpm' :
-                                              metric === 'hrv_ms' ? ' ms' :
-                                              metric === 'sleep_hours' ? ' hours' :
-                                              metric === 'recovery_score' ? '%' :
-                                              metric === 'sleep_efficiency' ? '%' :
-                                              metric === 'distance_meters' ? ' km' :
-                                              metric === 'active_calories' ? ' calories' :
-                                              metric === 'intensity_minutes' ? ' min' :
-                                              metric === 'floors_climbed' ? ' floors' :
-                                              '';
-                                              
-                                            return [`${value}${unit}`, formattedMetric];
-                                          }}
-                                          labelFormatter={(label) => {
-                                            // Try to convert numeric index to a more meaningful date if possible
-                                            return `Day ${parseInt(label) + 1}`;
-                                          }}
-                                        />
-                                        <Line 
-                                          type="monotone" 
-                                          dataKey="value" 
-                                          stroke={
-                                            data.trend === 'increasing' ? '#2ecc71' :
-                                            data.trend === 'decreasing' ? '#e74c3c' :
-                                            '#3498db'
-                                          } 
-                                          strokeWidth={2}
-                                          dot={{ r: 3 }}
-                                          activeDot={{ r: 5, stroke: '#fff', strokeWidth: 2 }}
-                                        />
-                                        
-                                        {/* Add reference line at the average value */}
-                                        <ReferenceLine 
-                                          y={data.recent_average} 
-                                          stroke="#95a5a6" 
-                                          strokeDasharray="3 3"
-                                          label={{ 
-                                            value: 'avg', 
-                                            position: 'insideBottomRight',
-                                            fill: '#95a5a6',
-                                            fontSize: 10
-                                          }}
-                                        />
-                                      </LineChart>
-                                    </ResponsiveContainer>
-                                  </Box>
-                                </Card>
-                              </Grid>
-                            );
-                          })}
-                      </Grid>
-                    )}
+                                            variant="outlined"
+                                            sx={{ mr: 1 }}
+                                          />
+                                          <Typography variant="caption" sx={{ color: 'text.secondary', ml: 'auto' }}>
+                                            Based on your {recommendation.dataPoint} data
+                                          </Typography>
+                                        </Box>
+                                      </Card>
+                                    </Grid>
+                                  ))}
+                                </Grid>
+                              ) : (
+                                <Alert severity="info">
+                                  No recommendations available yet. Sync more data or try again later.
+                                </Alert>
+                              )}
+                            </Box>
+                          )}
+                          
+                          {/* Trends */}
+                          {insightTabValue === 2 && (
+                            <Box sx={{ mt: 3 }}>
+                              {Object.keys(insightTrends).length > 0 ? (
+                                <Grid container spacing={3}>
+                                  {Object.entries(insightTrends).map(([metric, trend], index) => (
+                                    <Grid item xs={12} md={4} key={index}>
+                                      <Card sx={{ p: 2 }}>
+                                        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                                          <Typography variant="h6">
+                                            {metric.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}
+                                          </Typography>
+                                          {getTrendIcon(trend.direction)}
+                                        </Box>
+                                        <Typography variant="body2">
+                                          {trend.description}
+                                        </Typography>
+                                        <Box sx={{ mt: 2, pt: 2, borderTop: '1px solid rgba(0,0,0,0.1)' }}>
+                                          <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                                            {trend.percentage}% {trend.direction === 'increasing' ? 'increase' : 
+                                                            trend.direction === 'decreasing' ? 'decrease' : 'change'} in the last {trend.period} days
+                                          </Typography>
+                                        </Box>
+                                      </Card>
+                                    </Grid>
+                                  ))}
+                                </Grid>
+                              ) : (
+                                <Alert severity="info">
+                                  No trend data available yet. Continue syncing data to see trends.
+                                </Alert>
+                              )}
+                            </Box>
+                          )}
+                        </Box>
+                      </TabPanel>
+                    </Box>
                   </Box>
-                )}
+                </Box>
               </>
+            ) : (
+              // No active sources view - redesigned
+              <Box
+                sx={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 3,
+                  my: 6,
+                  p: 4,
+                  textAlign: 'center',
+                  borderRadius: '16px',
+                  background: darkMode 
+                    ? 'linear-gradient(135deg, rgba(44, 62, 80, 0.8) 0%, rgba(52, 152, 219, 0.4) 100%)' 
+                    : 'linear-gradient(135deg, rgba(236, 240, 241, 0.8) 0%, rgba(52, 152, 219, 0.1) 100%)',
+                  boxShadow: '0 10px 30px rgba(0, 0, 0, 0.1)'
+                }}
+              >
+                <DevicesOutlinedIcon sx={{ fontSize: '80px', color: darkMode ? 'white' : '#3498DB', opacity: 0.8 }} />
+                
+                <Typography variant="h4" component="h2" sx={{ fontWeight: 600 }} gutterBottom>
+                  No Active Data Sources
+                </Typography>
+                
+                <Typography variant="body1" color="text.secondary" sx={{ mb: 2, maxWidth: '600px' }}>
+                  To begin tracking your health and fitness metrics, connect at least one data source.
+                  This will allow you to visualize trends, receive personalized insights, and monitor your progress.
+                </Typography>
+                
+                <Button
+                  variant="contained"
+                  color="primary"
+                  onClick={() => setDashboardTab(1)}
+                  startIcon={<AddIcon />}
+                  size="large"
+                  sx={{ 
+                    borderRadius: '30px',
+                    px: 4,
+                    py: 1.5
+                  }}
+                >
+                  Connect a Data Source
+                </Button>
+                
+                <Typography variant="caption" sx={{ mt: 3, opacity: 0.7 }}>
+                  Supported integrations include Garmin, WHOOP, Fitbit, and more.
+                </Typography>
+              </Box>
             )}
-          </Box>
+          </>
         )}
 
-        <HeartRateMetrics
-          resting={filteredData.length > 0 ? filteredData[filteredData.length - 1].resting_heart_rate || 0 : 0}
-          average={filteredData.length > 0 ?
-            (selectedDataSource === 'whoop' ?
-              filteredData[filteredData.length - 1].recovery_score || 0 :
-              filteredData[filteredData.length - 1].last_seven_days_avg_resting_heart_rate || 0)
-            : 0}
-          max={filteredData.length > 0 ?
-            (selectedDataSource === 'whoop' ?
-              filteredData[filteredData.length - 1].strain || 0 :
-              filteredData[filteredData.length - 1].max_heart_rate || 0)
-            : 0}
-          isWhoop={selectedDataSource === 'whoop'}
-        />
+        {/* Active Integrations View */}
+        {dashboardTab === 1 && (
+          <>
+            {/* Hero section */}
+            <Box 
+              sx={{ 
+                mb: 4, 
+                p: 3, 
+                borderRadius: '16px',
+                background: darkMode 
+                  ? 'linear-gradient(135deg, rgba(44, 62, 80, 0.8) 0%, rgba(52, 152, 219, 0.8) 100%)' 
+                  : 'linear-gradient(135deg, rgba(236, 240, 241, 0.8) 0%, rgba(52, 152, 219, 0.2) 100%)',
+                boxShadow: '0 10px 30px rgba(0, 0, 0, 0.15)',
+                position: 'relative',
+                overflow: 'hidden'
+              }}
+            >
+              <Box sx={{ position: 'relative', zIndex: 1 }}>
+                <Typography variant="h4" sx={{ mb: 2, fontWeight: 600 }}>
+                  Hardware Integrations
+                </Typography>
+                
+                <Typography variant="body1" sx={{ mb: 3, opacity: 0.9, maxWidth: '700px' }}>
+                  Connect your wearables and fitness trackers to sync biometric data. 
+                  Your data is securely stored and only accessible to you.
+                </Typography>
+                
+                {/* Action buttons */}
+                <Button
+                  variant="contained"
+                  color="primary"
+                  onClick={() => setShowSourceMenu(true)}
+                  startIcon={<AddIcon />}
+                  sx={{ borderRadius: '30px' }}
+                >
+                  Connect New Device
+                </Button>
+              </Box>
+            </Box>
+            
+            {/* Active Integrations Section */}
+            <Typography variant="h5" sx={{ mb: 2, fontWeight: 600 }}>
+              Your Connected Devices
+            </Typography>
+            
+            {activeSources && activeSources.length > 0 ? (
+              <Grid container spacing={3} sx={{ mb: 4 }}>
+                {activeSources.map((source) => {
+                  // Skip rendering if source is invalid
+                  if (!source) return null;
+                  
+                  // Safely get the source ID or use the source itself if it's a string
+                  const sourceId = typeof source === 'object' ? source.id : source;
+                  
+                  // Skip rendering if we can't determine a valid key
+                  if (!sourceId) return null;
+                  
+                  // Safely determine the display name
+                  let displayName;
+                  if (typeof source === 'object' && source.name) {
+                    displayName = source.name;
+                  } else if (typeof source === 'string') {
+                    displayName = source.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
+                  } else if (typeof sourceId === 'string') {
+                    displayName = sourceId.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
+                  } else {
+                    displayName = 'Unknown Source';
+                  }
+                  
+                  return (
+                    <Grid item xs={12} sm={6} md={4} key={sourceId}>
+                      <Card sx={{ 
+                        borderRadius: '12px',
+                        transition: 'transform 0.3s ease-in-out, box-shadow 0.3s ease-in-out',
+                        '&:hover': {
+                          transform: 'translateY(-5px)',
+                          boxShadow: '0 10px 20px rgba(0,0,0,0.2)'
+                        }
+                      }}>
+                        <CardContent sx={{ p: 3 }}>
+                          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                              <DevicesOutlinedIcon sx={{ color: '#3498DB' }} />
+                              <Typography variant="h6">
+                                {displayName}
+                              </Typography>
+                            </Box>
+                            <Chip 
+                              label="Active" 
+                              color="success" 
+                              size="small" 
+                              sx={{ 
+                                height: '24px',
+                                fontSize: '0.75rem',
+                                fontWeight: 'bold'
+                              }} 
+                            />
+                          </Box>
+                          
+                          {source.profile_type && (
+                            <Typography variant="body2" color="textSecondary" sx={{ mb: 2 }}>
+                              Profile: {source.profile_type}
+                            </Typography>
+                          )}
+                          
+                          <Box sx={{ mt: 3, display: 'flex', justifyContent: 'space-between' }}>
+                            <Button
+                              startIcon={<SyncIcon />}
+                              variant="outlined"
+                              size="small"
+                              onClick={() => syncData(source.id || source)}
+                              sx={{ 
+                                borderRadius: '20px',
+                                fontSize: '0.75rem'
+                              }}
+                            >
+                              Sync
+                            </Button>
+                            
+                            <Button
+                              startIcon={<DeleteOutlineIcon />}
+                              variant="outlined"
+                              color="error"
+                              size="small"
+                              onClick={() => removeDataSource(source.id || source)}
+                              sx={{ 
+                                borderRadius: '20px',
+                                fontSize: '0.75rem'
+                              }}
+                            >
+                              Disconnect
+                            </Button>
+                          </Box>
+                        </CardContent>
+                      </Card>
+                    </Grid>
+                  );
+                })}
+              </Grid>
+            ) : (
+              <Alert 
+                severity="info" 
+                sx={{ 
+                  mb: 4, 
+                  borderRadius: '10px',
+                  boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)'
+                }}
+              >
+                No active data sources yet. Click "Connect New Device" to get started.
+              </Alert>
+            )}
+            
+            {/* Available Integrations Section */}
+            <Typography variant="h5" sx={{ mb: 2, fontWeight: 600 }}>
+              Available Integrations
+            </Typography>
+            
+            <Grid container spacing={3}>
+              {['garmin', 'whoop', 'fitbit', 'oura', 'apple_health'].map((source) => {
+                const isActive = activeSources && Array.isArray(activeSources) && 
+                  (activeSources.some(s => (s.id === source || s === source)));
+                
+                return (
+                  <Grid item xs={12} sm={6} md={4} key={source}>
+                    <Card sx={{ 
+                      borderRadius: '12px',
+                      background: isActive ? (darkMode ? 'rgba(46, 204, 113, 0.1)' : 'rgba(46, 204, 113, 0.05)') : 'inherit',
+                      border: isActive ? `1px solid ${darkMode ? 'rgba(46, 204, 113, 0.3)' : 'rgba(46, 204, 113, 0.2)'}` : 'inherit',
+                      opacity: isActive ? 0.8 : 1,
+                      transition: 'transform 0.3s ease-in-out, box-shadow 0.3s ease-in-out',
+                      '&:hover': {
+                        transform: 'translateY(-5px)',
+                        boxShadow: '0 10px 20px rgba(0,0,0,0.2)'
+                      }
+                    }}>
+                      <CardContent sx={{ p: 3 }}>
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                          <Typography variant="h6">
+                            {source.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}
+                          </Typography>
+                          {isActive ? (
+                            <Chip 
+                              label="Connected" 
+                              color="success" 
+                              variant="outlined" 
+                              size="small" 
+                              sx={{ height: '24px' }} 
+                            />
+                          ) : (
+                            <Chip 
+                              label="Available" 
+                              variant="outlined" 
+                              size="small" 
+                              sx={{ height: '24px' }} 
+                            />
+                          )}
+                        </Box>
+                        
+                        <Typography variant="body2" color="textSecondary" sx={{ mb: 2 }}>
+                          {getSourceDescription(source)}
+                        </Typography>
+                        
+                        {isActive ? (
+                          <Button
+                            variant="outlined"
+                            color="error"
+                            fullWidth
+                            size="small"
+                            startIcon={<DeleteOutlineIcon />}
+                            onClick={() => removeDataSource(source)}
+                            sx={{ borderRadius: '20px', mt: 1 }}
+                          >
+                            Disconnect
+                          </Button>
+                        ) : (
+                          <Button
+                            variant="contained"
+                            color="primary"
+                            fullWidth
+                            startIcon={<AddIcon />}
+                            onClick={() => {
+                              if (source === 'whoop') {
+                                setShowWhoopConnect(true);
+                              } else {
+                                setSelectedSource(source);
+                                setShowCredentialsMenu(true);
+                              }
+                            }}
+                            sx={{ borderRadius: '20px', mt: 1 }}
+                          >
+                            Connect
+                          </Button>
+                        )}
+                      </CardContent>
+                    </Card>
+                  </Grid>
+                );
+              })}
+            </Grid>
+          </>
+        )}
 
         {/* Render the footer using the function */}
         {renderFooter()}
       </Box>
+
+      {/* Main Menu */}
+      <StyledMenu
+        anchorEl={anchorEl}
+        open={Boolean(anchorEl)}
+        onClose={closeMenu}
+      >
+        <StyledMenuItem onClick={() => { 
+          setDashboardTab(1); 
+          closeMenu(); 
+        }}>
+          <ListItemIcon>
+            <DevicesOutlinedIcon fontSize="small" />
+          </ListItemIcon>
+          <ListItemText primary="Manage Integrations" />
+        </StyledMenuItem>
+
+        <StyledMenuItem onClick={() => { 
+          setDarkMode(!darkMode); 
+          closeMenu(); 
+        }}>
+          <ListItemIcon>
+            {darkMode ? <Brightness7Icon fontSize="small" /> : <Brightness4Icon fontSize="small" />}
+          </ListItemIcon>
+          <ListItemText primary={darkMode ? "Light Mode" : "Dark Mode"} />
+        </StyledMenuItem>
+
+        <StyledMenuItem onClick={() => { 
+          setDevMode(!devMode); 
+          closeMenu(); 
+        }}>
+          <ListItemIcon>
+            <DeveloperModeIcon fontSize="small" />
+          </ListItemIcon>
+          <ListItemText primary={devMode ? "Disable Dev Mode" : "Enable Dev Mode"} />
+        </StyledMenuItem>
+
+        <Divider sx={{ my: 1 }} />
+        
+        <StyledMenuItem onClick={handleLogout}>
+          <ListItemIcon>
+            <LogoutIcon fontSize="small" />
+          </ListItemIcon>
+          <ListItemText primary="Logout" />
+        </StyledMenuItem>
+      </StyledMenu>
     </Box>
   );
 };

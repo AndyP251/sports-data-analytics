@@ -11,6 +11,15 @@ export default defineConfig({
         changeOrigin: true,
         secure: false,
       }
-    }
+    },
+    // Enable history API fallback to support client-side routing
+    historyApiFallback: true,
+  },
+  // Configure build output path if needed
+  build: {
+    outDir: '../athlete_platform/staticfiles',
+    emptyOutDir: true,
+    // Generate manifest for Django to use
+    manifest: true,
   }
 })

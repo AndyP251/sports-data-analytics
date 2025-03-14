@@ -5,7 +5,7 @@ from django.contrib import messages
 from .forms import CustomUserCreationForm
 from .utils.s3_utils import S3Utils
 from .models import Athlete, CoreBiometricData, create_biometric_data, get_athlete_biometrics, Team
-from django.http import JsonResponse
+from django.http import JsonResponse, HttpResponse
 from django.views.decorators.http import require_POST, require_http_methods
 from datetime import datetime
 from django.contrib.auth import get_user_model
@@ -15,6 +15,7 @@ import logging
 import boto3
 from botocore.exceptions import ClientError
 import json
+import os
 from .services.data_sync_service import DataSyncService
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
@@ -47,6 +48,36 @@ logger = logging.getLogger(__name__)
 @login_required
 def home(request):
     return render(request, 'core/home.html')
+
+# Serve React frontend for any non-API route
+def frontend_view(request, path=''):
+    """
+    Serve the React frontend app for any path that doesn't match API or admin routes.
+    This enables client-side routing to work with direct URL access.
+    """
+    try:
+        # Check if this is an API route (which should be handled by Django)
+        if request.path.startswith('/api/') or request.path.startswith('/admin/'):
+            return HttpResponse(status=404)
+            
+        # In production, serve the index.html from the build directory
+        index_file_path = os.path.join(settings.STATIC_ROOT, 'index.html')
+        
+        # If in development, use the Vite dev server
+        if settings.DEBUG:
+            from django.shortcuts import redirect
+            return redirect('http://localhost:5173' + request.get_full_path())
+        
+        # Check if the index file exists
+        if os.path.exists(index_file_path):
+            with open(index_file_path, 'r') as f:
+                return HttpResponse(f.read(), content_type='text/html')
+        else:
+            logger.error(f"Index file not found at {index_file_path}")
+            return HttpResponse("Frontend not built. Please run 'npm run build' in the frontend directory.", status=500)
+    except Exception as e:
+        logger.error(f"Error serving frontend: {e}")
+        return HttpResponse(f"Error serving frontend: {str(e)}", status=500)
 
 @csrf_protect
 @require_http_methods(["POST", "OPTIONS"])

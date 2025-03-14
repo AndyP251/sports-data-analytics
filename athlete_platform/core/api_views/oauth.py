@@ -50,47 +50,31 @@ class WhoopOAuthView(WhoopOAuthBaseView):
         logger.debug(f"WHOOP OAuth Settings - Client Secret exists: {bool(self.client_secret)}")
         logger.debug(f"WHOOP OAuth Settings - Redirect URI: {self.redirect_uri}")
 
-        # Rate limiting check - use session to track last request time
-        last_oauth_request = request.session.get('last_whoop_oauth_request')
-        current_time = timezone.now().timestamp()
-        
-        if last_oauth_request and (current_time - float(last_oauth_request)) < 30:
-            # Less than 30 seconds since last request - suggest user wait
-            logger.warning(f"Rate limiting - WHOOP OAuth request attempted too soon after previous request")
-            return JsonResponse({
-                'error': 'Too many authorization attempts. Please wait a moment before trying again.',
-                'retry_after': 30
-            }, status=429)
-
-        # Update last request time
-        request.session['last_whoop_oauth_request'] = current_time
-
         # Check if the client provided a state parameter
         client_state = request.GET.get('clientState')
         if client_state:
             logger.debug(f"Using client-provided state: {client_state}")
             state = client_state
         else:
-            # Generate a state parameter as usual
-            oauth = OAuth2Session(
-                client_id=self.client_id,
-                redirect_uri=self.redirect_uri,
-                scope=self.scope
-            )
-            authorization_url, state = oauth.authorization_url(self.auth_url)
+            # Generate a random state for CSRF protection
+            import secrets
+            state = secrets.token_urlsafe(16)
             
         # Store the state in session
         request.session['oauth_state'] = state
         
-        # Create authorization URL with state parameter
-        params = {
-            'response_type': 'code',
-            'client_id': self.client_id,
-            'redirect_uri': self.redirect_uri,
-            'scope': self.scope,
-            'state': state
-        }
-        authorization_url = f"{self.auth_url}?{urlencode(params)}"
+        # Use OAuth2Session to create the authorization URL according to spec
+        oauth = OAuth2Session(
+            client_id=self.client_id,
+            redirect_uri=self.redirect_uri,
+            scope=self.scope
+        )
+        
+        # Let the library properly construct the URL with all needed parameters
+        authorization_url, _ = oauth.authorization_url(
+            self.auth_url,
+            state=state,
+        )
 
         logger.debug(f"Redirecting to WHOOP authorization URL: {authorization_url}")
         return redirect(authorization_url)
@@ -121,24 +105,23 @@ class WhoopCallbackView(WhoopOAuthBaseView):
             return redirect('/dashboard?oauth_error=no_authorization_code&provider=whoop')
 
         try:
+            # Create OAuth session for token exchange
             oauth = OAuth2Session(
                 client_id=self.client_id,
                 redirect_uri=self.redirect_uri
             )
 
-            # Add a small delay before token exchange to avoid rate limiting
-            import time
-            time.sleep(1)  # 1 second delay
-
+            # Exchange authorization code for token using the library's method
             token = oauth.fetch_token(
-                token_url=self.token_url,
-                authorization_response=request.build_absolute_uri(),
-                client_id=self.client_id,
+                self.token_url,
+                code=code,
                 client_secret=self.client_secret,
                 include_client_id=True
             )
+            
             logger.info("Successfully exchanged code for WHOOP access token")
             signer = Signer()
+            
             # Store the token in WhoopCredentials
             whoop_creds, created = WhoopCredentials.objects.update_or_create(
                 athlete=request.user.athlete,

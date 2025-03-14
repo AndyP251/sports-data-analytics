@@ -1139,7 +1139,7 @@ const BiometricsDashboard = ({ username }) => {
         let displayError = '';
         
         if (oauthError === 'rate_limited') {
-          displayError = 'WHOOP is rate limiting requests. Please wait a few minutes before trying again.';
+          displayError = 'WHOOP is rate limiting requests. Please try again later.';
         } else if (oauthError === 'invalid_state') {
           displayError = 'Authentication session expired. Please try connecting again.';
         } else if (errorDescription) {
@@ -1151,11 +1151,6 @@ const BiometricsDashboard = ({ username }) => {
         }
         
         addSyncMessage(`Error connecting to ${oauthProvider || 'service'}: ${displayError}`, 'error');
-        
-        // If rate limited, update the rate limiting timestamp to enforce cooldown
-        if (oauthError === 'rate_limited') {
-          localStorage.setItem('lastWhoopOAuthAttempt', Date.now().toString());
-        }
       }
       
       // Clean up URL parameters to avoid processing them again on refresh
@@ -4090,31 +4085,20 @@ const BiometricsDashboard = ({ username }) => {
               color="primary"
               onClick={async () => {
                 try {
-                  // Check if we've attempted OAuth recently to avoid rate limiting
-                  const lastWhoopAttempt = localStorage.getItem('lastWhoopOAuthAttempt');
-                  const now = Date.now();
-                  
-                  if (lastWhoopAttempt && (now - parseInt(lastWhoopAttempt)) < 60000) { // 1 minute cooldown
-                    console.warn("Please wait a moment before trying again to avoid rate limiting");
-                    addSyncMessage("Please wait a moment before trying again to connect to WHOOP. This is a rate limit issue.", "warning");
-                    return;
-                  }
-                  
-                  // Store the timestamp of this attempt
-                  localStorage.setItem('lastWhoopOAuthAttempt', now.toString());
-                  
                   // Ensure we have a CSRF token first
                   await ensureCSRFToken();
                   
                   // Generate a random state parameter and store it in localStorage
-                  // This will help with session continuity after redirect
-                  const state = Math.random().toString(36).substring(2, 15);
+                  const state = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
                   localStorage.setItem('whoopOAuthState', state);
                   
-                  // Add debug logging
-                  console.log("Redirecting to WHOOP OAuth endpoint");
+                  // Log the redirect
+                  console.log("Initiating WHOOP OAuth flow");
                   
-                  // Always redirect to OAuth endpoint with the state parameter
+                  // Close the dialog before redirecting
+                  setShowWhoopConnect(false);
+                  
+                  // Redirect to OAuth endpoint with the state parameter
                   window.location.href = `/api/oauth/whoop/authorize?clientState=${state}`;
                 } catch (error) {
                   console.error("Error connecting to WHOOP:", error);

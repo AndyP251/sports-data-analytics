@@ -3,6 +3,9 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "engines": {
+    "node": "18.x"
+  },
   "scripts": {
     "dev": "vite",
     "build": "vite build && node copy-index.js",
@@ -26,7 +29,7 @@
     "styled-components": "^6.1.15"
   },
   "devDependencies": {
-    "@rollup/rollup-linux-x64-gnu": "4.13.0",
+    "@rollup/rollup-linux-x64-gnu": "4.32.0",
     "@types/react": "^18.2.55",
     "@types/react-dom": "^18.2.19",
     "@vitejs/plugin-react": "^4.2.1",

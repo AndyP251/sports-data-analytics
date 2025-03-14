@@ -20,6 +20,9 @@ from ..models import WhoopCredentials
 from django.utils import timezone
 import logging
 from django.core.signing import Signer
+from urllib.parse import urlencode
+import json
+from django.contrib.auth.decorators import login_required
 
 logger = logging.getLogger(__name__)
 
@@ -47,14 +50,32 @@ class WhoopOAuthView(WhoopOAuthBaseView):
         logger.debug(f"WHOOP OAuth Settings - Client Secret exists: {bool(self.client_secret)}")
         logger.debug(f"WHOOP OAuth Settings - Redirect URI: {self.redirect_uri}")
 
-        oauth = OAuth2Session(
-            client_id=self.client_id,
-            redirect_uri=self.redirect_uri,
-            scope=self.scope
-        )
-
-        authorization_url, state = oauth.authorization_url(self.auth_url)
+        # Check if the client provided a state parameter
+        client_state = request.GET.get('clientState')
+        if client_state:
+            logger.debug(f"Using client-provided state: {client_state}")
+            state = client_state
+        else:
+            # Generate a state parameter as usual
+            oauth = OAuth2Session(
+                client_id=self.client_id,
+                redirect_uri=self.redirect_uri,
+                scope=self.scope
+            )
+            authorization_url, state = oauth.authorization_url(self.auth_url)
+            
+        # Store the state in session
         request.session['oauth_state'] = state
+        
+        # Create authorization URL with state parameter
+        params = {
+            'response_type': 'code',
+            'client_id': self.client_id,
+            'redirect_uri': self.redirect_uri,
+            'scope': self.scope,
+            'state': state
+        }
+        authorization_url = f"{self.auth_url}?{urlencode(params)}"
 
         logger.debug(f"Redirecting to WHOOP authorization URL: {authorization_url}")
         return redirect(authorization_url)
@@ -71,11 +92,11 @@ class WhoopCallbackView(WhoopOAuthBaseView):
 
         if not state or state != request.session.get('oauth_state'):
             logger.error("Invalid state parameter in WHOOP callback")
-            return JsonResponse({'error': 'Invalid state parameter'}, status=400)
+            return redirect('/dashboard?oauth_error=invalid_state&provider=whoop')
 
         if not code:
             logger.error("No authorization code provided in WHOOP callback")
-            return JsonResponse({'error': 'No authorization code provided'}, status=400)
+            return redirect('/dashboard?oauth_error=no_authorization_code&provider=whoop')
 
         try:
             oauth = OAuth2Session(
@@ -98,8 +119,6 @@ class WhoopCallbackView(WhoopOAuthBaseView):
                 defaults={
                     'access_token': signer.sign(token['access_token']),
                     'refresh_token': signer.sign(token['refresh_token']),
-                    # 'access_token': token['access_token'],
-                    # 'refresh_token': token['refresh_token'],
                     'expires_at': timezone.now() + timedelta(seconds=token['expires_in']),
                     'scope': token.get('scope', self.scope)
                 }
@@ -115,11 +134,11 @@ class WhoopCallbackView(WhoopOAuthBaseView):
                 logger.info(f"Added WHOOP to active data sources for user {request.user.username}")
 
             logger.info(f"Successfully stored WHOOP tokens for user {request.user.id}")
-            return redirect('dashboard')
+            return redirect('/dashboard?oauth_success=true&provider=whoop')
 
         except Exception as e:
             logger.error(f"WHOOP OAuth Error: {e}", exc_info=True)
-            return JsonResponse({'error': str(e)}, status=400)
+            return redirect('/dashboard?oauth_error=token_exchange_failed&provider=whoop')
 
 def refresh_whoop_token(oauth_token):
     """Utility function to refresh WHOOP token"""

@@ -1118,6 +1118,8 @@ const BiometricsDashboard = ({ username }) => {
     const oauthSuccess = urlParams.get('oauth_success');
     const oauthProvider = urlParams.get('provider');
     const oauthError = urlParams.get('oauth_error');
+    const errorDescription = urlParams.get('error_description');
+    const errorMessage = urlParams.get('message');
     
     // If we have URL parameters indicating OAuth flow
     if (oauthProvider || oauthSuccess || oauthError) {
@@ -1132,7 +1134,28 @@ const BiometricsDashboard = ({ username }) => {
       // Handle OAuth errors
       else if (oauthError) {
         console.error(`OAuth error: ${oauthError}`);
-        addSyncMessage(`Error connecting to ${oauthProvider || 'service'}: ${oauthError}`, 'error');
+        
+        // Format user-friendly error message
+        let displayError = '';
+        
+        if (oauthError === 'rate_limited') {
+          displayError = 'WHOOP is rate limiting requests. Please wait a few minutes before trying again.';
+        } else if (oauthError === 'invalid_state') {
+          displayError = 'Authentication session expired. Please try connecting again.';
+        } else if (errorDescription) {
+          displayError = errorDescription;
+        } else if (errorMessage) {
+          displayError = errorMessage;
+        } else {
+          displayError = `Error: ${oauthError}`;
+        }
+        
+        addSyncMessage(`Error connecting to ${oauthProvider || 'service'}: ${displayError}`, 'error');
+        
+        // If rate limited, update the rate limiting timestamp to enforce cooldown
+        if (oauthError === 'rate_limited') {
+          localStorage.setItem('lastWhoopOAuthAttempt', Date.now().toString());
+        }
       }
       
       // Clean up URL parameters to avoid processing them again on refresh
@@ -4067,6 +4090,19 @@ const BiometricsDashboard = ({ username }) => {
               color="primary"
               onClick={async () => {
                 try {
+                  // Check if we've attempted OAuth recently to avoid rate limiting
+                  const lastWhoopAttempt = localStorage.getItem('lastWhoopOAuthAttempt');
+                  const now = Date.now();
+                  
+                  if (lastWhoopAttempt && (now - parseInt(lastWhoopAttempt)) < 60000) { // 1 minute cooldown
+                    console.warn("Please wait a moment before trying again to avoid rate limiting");
+                    addSyncMessage("Please wait a moment before trying again to connect to WHOOP. This is a rate limit issue.", "warning");
+                    return;
+                  }
+                  
+                  // Store the timestamp of this attempt
+                  localStorage.setItem('lastWhoopOAuthAttempt', now.toString());
+                  
                   // Ensure we have a CSRF token first
                   await ensureCSRFToken();
                   

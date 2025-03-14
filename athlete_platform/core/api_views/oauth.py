@@ -50,6 +50,21 @@ class WhoopOAuthView(WhoopOAuthBaseView):
         logger.debug(f"WHOOP OAuth Settings - Client Secret exists: {bool(self.client_secret)}")
         logger.debug(f"WHOOP OAuth Settings - Redirect URI: {self.redirect_uri}")
 
+        # Rate limiting check - use session to track last request time
+        last_oauth_request = request.session.get('last_whoop_oauth_request')
+        current_time = timezone.now().timestamp()
+        
+        if last_oauth_request and (current_time - float(last_oauth_request)) < 30:
+            # Less than 30 seconds since last request - suggest user wait
+            logger.warning(f"Rate limiting - WHOOP OAuth request attempted too soon after previous request")
+            return JsonResponse({
+                'error': 'Too many authorization attempts. Please wait a moment before trying again.',
+                'retry_after': 30
+            }, status=429)
+
+        # Update last request time
+        request.session['last_whoop_oauth_request'] = current_time
+
         # Check if the client provided a state parameter
         client_state = request.GET.get('clientState')
         if client_state:
@@ -85,10 +100,17 @@ class WhoopCallbackView(WhoopOAuthBaseView):
         """Handle OAuth callback from WHOOP"""
         code = request.GET.get('code')
         state = request.GET.get('state')
+        error = request.GET.get('error')
+        error_description = request.GET.get('error_description')
 
         logger.info(f"Processing WHOOP OAuth callback for user: {request.user.username}")
         logger.debug(f"WHOOP callback received - code exists: {bool(code)}")
         logger.debug(f"State validation: received={state}, stored={request.session.get('oauth_state')}")
+        
+        # Handle error codes from WHOOP
+        if error:
+            logger.error(f"WHOOP returned an error: {error} - {error_description}")
+            return redirect(f'/dashboard?oauth_error={error}&error_description={error_description}&provider=whoop')
 
         if not state or state != request.session.get('oauth_state'):
             logger.error("Invalid state parameter in WHOOP callback")
@@ -103,6 +125,10 @@ class WhoopCallbackView(WhoopOAuthBaseView):
                 client_id=self.client_id,
                 redirect_uri=self.redirect_uri
             )
+
+            # Add a small delay before token exchange to avoid rate limiting
+            import time
+            time.sleep(1)  # 1 second delay
 
             token = oauth.fetch_token(
                 token_url=self.token_url,
@@ -137,8 +163,14 @@ class WhoopCallbackView(WhoopOAuthBaseView):
             return redirect('/dashboard?oauth_success=true&provider=whoop')
 
         except Exception as e:
-            logger.error(f"WHOOP OAuth Error: {e}", exc_info=True)
-            return redirect('/dashboard?oauth_error=token_exchange_failed&provider=whoop')
+            error_message = str(e)
+            logger.error(f"WHOOP OAuth Error: {error_message}", exc_info=True)
+            
+            # Check for rate limiting error
+            if "429" in error_message:
+                return redirect('/dashboard?oauth_error=rate_limited&provider=whoop&message=WHOOP+is+rate+limiting+requests.+Please+try+again+later.')
+                
+            return redirect(f'/dashboard?oauth_error=token_exchange_failed&provider=whoop&message={error_message}')
 
 def refresh_whoop_token(oauth_token):
     """Utility function to refresh WHOOP token"""

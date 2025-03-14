@@ -1111,6 +1111,52 @@ const BiometricsDashboard = ({ username }) => {
     fetchData();
   }, []);
 
+  // Add a new effect to check for OAuth callback parameters
+  useEffect(() => {
+    // Check if we're coming back from an OAuth redirect by looking at URL params
+    const urlParams = new URLSearchParams(window.location.search);
+    const oauthSuccess = urlParams.get('oauth_success');
+    const oauthProvider = urlParams.get('provider');
+    const oauthError = urlParams.get('oauth_error');
+    
+    // If we have URL parameters indicating OAuth flow
+    if (oauthProvider || oauthSuccess || oauthError) {
+      console.log(`Detected OAuth parameters: provider=${oauthProvider}, success=${oauthSuccess}, error=${oauthError}`);
+      
+      // Handle OAuth success
+      if (oauthSuccess === 'true' && oauthProvider) {
+        addSyncMessage(`Successfully connected to ${oauthProvider}!`);
+        // Refresh active sources and data after successful OAuth
+        fetchActiveSources().then(() => syncData(oauthProvider));
+      } 
+      // Handle OAuth errors
+      else if (oauthError) {
+        console.error(`OAuth error: ${oauthError}`);
+        addSyncMessage(`Error connecting to ${oauthProvider || 'service'}: ${oauthError}`, 'error');
+      }
+      
+      // Clean up URL parameters to avoid processing them again on refresh
+      const cleanUrl = window.location.pathname;
+      window.history.replaceState({}, document.title, cleanUrl);
+    }
+    
+    // Check for WHOOP callback with state parameter
+    const storedWhoopState = localStorage.getItem('whoopOAuthState');
+    if (storedWhoopState && window.location.pathname === '/dashboard') {
+      // We just returned from WHOOP authorization, need to ensure session is intact
+      console.log("Detected return from WHOOP authorization");
+      
+      // Ensure we have a valid CSRF token
+      ensureCSRFToken().then(() => {
+        // Check if we need to refresh active sources
+        fetchActiveSources();
+      });
+      
+      // Clean up stored state
+      localStorage.removeItem('whoopOAuthState');
+    }
+  }, []);
+
   // Also modify the useEffect that filters data based on selectedDataSource for better debugging
   useEffect(() => {
     if (biometricData.length > 0) {
@@ -4024,11 +4070,16 @@ const BiometricsDashboard = ({ username }) => {
                   // Ensure we have a CSRF token first
                   await ensureCSRFToken();
                   
+                  // Generate a random state parameter and store it in localStorage
+                  // This will help with session continuity after redirect
+                  const state = Math.random().toString(36).substring(2, 15);
+                  localStorage.setItem('whoopOAuthState', state);
+                  
                   // Add debug logging
                   console.log("Redirecting to WHOOP OAuth endpoint");
                   
-                  // Always redirect to OAuth endpoint
-                  window.location.href = '/api/oauth/whoop/authorize';
+                  // Always redirect to OAuth endpoint with the state parameter
+                  window.location.href = `/api/oauth/whoop/authorize?clientState=${state}`;
                 } catch (error) {
                   console.error("Error connecting to WHOOP:", error);
                   addSyncMessage("Error connecting to WHOOP. Please try again.", "error");

@@ -1,6 +1,15 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
+// Determine if we're in a deployment environment
+const isProduction = process.env.NODE_ENV === 'production'
+const isDeployment = process.env.DO_APP_PLATFORM === 'true'
+
+// Set output directory based on environment
+// For DigitalOcean deployment, use the default 'dist' directory
+// For local development, continue to use '../athlete_platform/staticfiles'
+const outDir = isDeployment ? 'dist' : '../athlete_platform/staticfiles'
+
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react()],
@@ -15,9 +24,9 @@ export default defineConfig({
     // Enable history API fallback to support client-side routing
     historyApiFallback: true,
   },
-  // Configure build output path if needed
+  // Configure build output path
   build: {
-    outDir: '../athlete_platform/staticfiles',
+    outDir: outDir,
     emptyOutDir: true,
     // Generate manifest for Django to use
     manifest: true,

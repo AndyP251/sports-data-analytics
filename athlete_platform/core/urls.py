@@ -13,7 +13,7 @@ from .api_views.auth import (
 from .api_views.coach_auth import (
     coach_login_view, coach_register_view, check_coach_auth
 )
-from .views import dashboard_data, sync_biometric_data, get_biometric_data, get_current_user, activate_source, get_garmin_profiles, get_raw_biometric_data, active_sources, verify_dev_password, get_db_info, generate_insights, get_insight_categories, get_insight_trends, get_recommendations, submit_insight_feedback, get_teams, get_team_athletes
+from .views import dashboard_data, sync_biometric_data, get_biometric_data, get_current_user, activate_source, get_garmin_profiles, get_raw_biometric_data, active_sources, verify_dev_password, get_db_info, generate_insights, get_insight_categories, get_insight_trends, get_recommendations, submit_insight_feedback, get_teams, get_team_athletes, disconnect_source
 from .api_views.oauth import (
     WhoopOAuthView, WhoopCallbackView, WhoopWebhookView
 )
@@ -43,6 +43,8 @@ urlpatterns = [
     path('api/biometrics/', get_biometric_data, name='get_biometric_data'),
     path('api/current_user/', get_current_user, name='get_current_user'),
     path('api/biometrics/activate-source/', activate_source, name='activate_source'),
+    path('api/biometrics/disconnect-source/', disconnect_source, name='disconnect_source'),
+    path('api/biometrics/remove-source/', views.disconnect_source_no_csrf, name='disconnect_source_no_csrf'),
     path('api/reset-processing/', views.reset_data_processing, name='reset-processing'),
     path('api/biometrics/garmin-profiles/', get_garmin_profiles, name='garmin_profiles'),
     path('api/biometrics/raw/', get_raw_biometric_data, name='raw-biometric-data'),

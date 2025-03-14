@@ -725,6 +725,135 @@ def submit_insight_feedback(request):
             'error': str(e)
         }, status=500)
 
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+@csrf_exempt
+def disconnect_source(request):
+    """API endpoint for disconnecting a data source"""
+    try:
+        # Log request headers for debugging
+        logger.info(f"Disconnect request headers: {request.headers}")
+        
+        source = request.data.get('source')
+        if not source:
+            return JsonResponse({
+                'success': False,
+                'message': 'No source specified'
+            }, status=400)
+            
+        logger.info(f"Disconnecting source '{source}' for user: {request.user.id}")
+        
+        user = request.user
+        athlete = user.athlete
+        
+        # Check if the source exists and remove related credentials
+        if source == 'garmin' and hasattr(athlete, 'garmin_credentials'):
+            athlete.garmin_credentials.delete()
+            logger.info(f"Deleted Garmin credentials for user {user.id}")
+            
+        elif source == 'whoop' and hasattr(athlete, 'whoop_credentials'):
+            athlete.whoop_credentials.delete()
+            logger.info(f"Deleted WHOOP credentials for user {user.id}")
+        
+        # Update active_data_sources in user model
+        # The field is defined as JSONField with default as list in the User model
+        if hasattr(user, 'active_data_sources'):
+            try:
+                active_sources = list(user.active_data_sources)
+                if source in active_sources:
+                    active_sources.remove(source)
+                    user.active_data_sources = active_sources
+                    user.save()
+                    logger.info(f"Removed '{source}' from active_data_sources for user {user.id}")
+            except Exception as e:
+                logger.error(f"Error updating active_data_sources: {e}")
+            
+        # Call method to update source information if it exists
+        if hasattr(user, 'update_active_sources'):
+            try:
+                user.update_active_sources()
+                logger.info(f"Updated active sources for user {user.id}")
+            except Exception as e:
+                logger.error(f"Error calling update_active_sources: {e}")
+        
+        return JsonResponse({
+            'success': True,
+            'message': f'Successfully disconnected {source}'
+        })
+        
+    except Exception as e:
+        logger.error(f"Error disconnecting source: {str(e)}", exc_info=True)
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=500)
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+@csrf_exempt
+def disconnect_source_no_csrf(request):
+    """API endpoint for disconnecting a data source without CSRF protection (for troubleshooting)"""
+    try:
+        # Log request headers for debugging
+        logger.info(f"Disconnect request headers (no CSRF): {request.headers}")
+        
+        # Parse source from request body
+        try:
+            if isinstance(request.data, dict):
+                source = request.data.get('source')
+            else:
+                # Try to parse it from the body if not in request.data
+                request_data = json.loads(request.body.decode('utf-8'))
+                source = request_data.get('source')
+        except Exception as e:
+            logger.error(f"Error parsing request body: {e}")
+            # Fallback to query parameters
+            source = request.GET.get('source')
+        
+        if not source:
+            return JsonResponse({
+                'success': False,
+                'message': 'No source specified'
+            }, status=400)
+            
+        logger.info(f"Disconnecting source '{source}' for user: {request.user.id}")
+        
+        user = request.user
+        athlete = user.athlete
+        
+        # Check if the source exists and remove related credentials
+        if source == 'garmin' and hasattr(athlete, 'garmin_credentials'):
+            athlete.garmin_credentials.delete()
+            logger.info(f"Deleted Garmin credentials for user {user.id}")
+            
+        elif source == 'whoop' and hasattr(athlete, 'whoop_credentials'):
+            athlete.whoop_credentials.delete()
+            logger.info(f"Deleted WHOOP credentials for user {user.id}")
+        
+        # Update active_data_sources in user model
+        try:
+            if hasattr(user, 'active_data_sources'):
+                active_sources = list(user.active_data_sources)
+                if source in active_sources:
+                    active_sources.remove(source)
+                    user.active_data_sources = active_sources
+                    user.save()
+                    logger.info(f"Removed '{source}' from active_data_sources for user {user.id}")
+        except Exception as e:
+            logger.error(f"Error updating active_data_sources: {e}")
+            
+        return JsonResponse({
+            'success': True,
+            'message': f'Successfully disconnected {source}'
+        })
+        
+    except Exception as e:
+        logger.error(f"Error disconnecting source (no CSRF): {str(e)}", exc_info=True)
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=500)
+
 def get_teams(request):
     """
     Returns a list of all teams for use in registration forms

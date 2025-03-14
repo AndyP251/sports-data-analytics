@@ -8,6 +8,23 @@ import path from 'path';
 // Paths
 const buildDir = path.resolve('./dist');
 const staticfilesDir = path.resolve('../athlete_platform/staticfiles');
+const isDeployment = process.env.DO_APP_PLATFORM === 'true';
+
+// Function to check if we're in a deployment environment where athlete_platform doesn't exist
+function isTargetDirectoryAvailable() {
+  return fs.existsSync(path.resolve('../athlete_platform')) || 
+         fs.existsSync(staticfilesDir);
+}
+
+// If we're in deployment and target directory isn't available, exit gracefully
+if (isDeployment || !isTargetDirectoryAvailable()) {
+  console.log('\x1b[33m%s\x1b[0m', '⚠️ Deployment environment detected or athlete_platform directory not found.');
+  console.log('\x1b[33m%s\x1b[0m', '⚠️ Skipping copy operation to athlete_platform/staticfiles.');
+  console.log('\x1b[36m%s\x1b[0m', '✨ Build process completed successfully!');
+  process.exit(0);
+}
+
+// If we reach here, we're in development and should proceed with copying
 
 // Ensure the staticfiles directory exists
 if (!fs.existsSync(staticfilesDir)) {

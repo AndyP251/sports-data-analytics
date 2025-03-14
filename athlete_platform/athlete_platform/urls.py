@@ -23,13 +23,11 @@ from django.conf import settings
 from django.conf.urls.static import static
 
 urlpatterns = [
+    # Admin routes
     path('admin/', admin.site.urls),
-    path('', core_views.dashboard_view, name='dashboard'),
-    path('login/', auth_views.LoginView.as_view(template_name='registration/login.html'), name='login'),
-    path('logout/', core_views.logout_view, name='logout'),
-    path('register/', register_view, name='register'),
-    path('accounts/', include('allauth.urls')),
-    path('', include('core.urls')),  # API endpoints
+    
+    # API and backend routes - process before catch-all route
+    path('', include('core.urls')),  # All API endpoints and catch-all route
 ]
 
 # debug check to ensure static files are served in development

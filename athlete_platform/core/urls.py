@@ -5,7 +5,7 @@ Last Edit: March 6th, 2025
 URL routing configuration for the core application, defining API endpoints
 and view mappings for the athlete platform.
 """
-from django.urls import path
+from django.urls import path, re_path
 from .api_views.auth import (
     check_auth, login_view, register_view, 
     logout_view, get_data
@@ -13,7 +13,7 @@ from .api_views.auth import (
 from .api_views.coach_auth import (
     coach_login_view, coach_register_view, check_coach_auth
 )
-from .views import dashboard_data, sync_biometric_data, get_biometric_data, get_current_user, activate_source, get_garmin_profiles, get_raw_biometric_data, active_sources, verify_dev_password, get_db_info, generate_insights, get_insight_categories, get_insight_trends, get_recommendations, submit_insight_feedback, get_teams, get_team_athletes, disconnect_source
+from .views import dashboard_data, sync_biometric_data, get_biometric_data, get_current_user, activate_source, get_garmin_profiles, get_raw_biometric_data, active_sources, verify_dev_password, get_db_info, generate_insights, get_insight_categories, get_insight_trends, get_recommendations, submit_insight_feedback, get_teams, get_team_athletes, disconnect_source, frontend_view
 from .api_views.oauth import (
     WhoopOAuthView, WhoopCallbackView, WhoopWebhookView
 )
@@ -62,4 +62,8 @@ urlpatterns = [
     path('api/oauth/whoop/authorize', WhoopOAuthView.as_view(), name='whoop-oauth'),
     path('api/oauth/whoop/callback', WhoopCallbackView.as_view(), name='whoop-callback'),
     path('api/webhooks/whoop', WhoopWebhookView.as_view(), name='whoop-webhook'),
+    
+    # Catch-all route for React frontend
+    # This must be the last route to ensure API routes are handled correctly
+    re_path(r'^(?P<path>.*)$', frontend_view, name='frontend'),
 ] 

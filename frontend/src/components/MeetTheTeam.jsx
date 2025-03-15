@@ -61,24 +61,24 @@ const MeetTheTeam = () => {
     {
       name: 'Ben Wayer',
       role: 'Co-Founder',
-      bio: 'Ben combines his experience as a D1 lacrosse player with deep expertise in sports analytics. His intimate understanding of competitive athletics and data science enables him to create performance insights that truly resonate with athletes and coaches alike.',
+      bio: 'Ben combines his experience as a D1 lacrosse team captain with exceptional creative vision and strategic thinking. His leadership on the field translates to innovative approaches in sports analytics, allowing him to develop unique performance insights that resonate deeply with athletes and coaches.',
       photo: benImage,
-      affiliation: 'University of Virginia D1 Men\'s Lacrosse',
+      affiliation: 'University of Virginia D1 Men\'s Lacrosse Captain',
       linkedin: 'https://www.linkedin.com/in/ben-wayer-a3476b200/'
     },
     {
       name: 'Kate Galcia',
-      role: 'Co-Founder',
-      bio: 'As a standout on UVA\'s Women\'s Lacrosse team, Kate brings firsthand experience of elite athletic performance. Her background in kinesiology and sports science helps shape our platform\'s practical applications for injury prevention and performance optimization.',
+      role: 'Athlete Experience Advisor',
+      bio: 'As a standout on UVA\'s Women\'s Lacrosse team, Kate brings elite-level competitive experience to the team. Her excellence on the field and deep understanding of team dynamics showcases the type of high-caliber athletes that the Pulse Project platform is designed to support in high-pressure situations.',
       photo: kateImage,
       affiliation: 'University of Virginia D1 Women\'s Lacrosse',
       linkedin: 'https://www.linkedin.com/in/katherine-galica/'
     },
     {
       name: 'Lara Kology',
-      role: 'Co-Founder',
-      bio: 'Lara brings a unique dual perspective as both a D1 athlete and design specialist. Her understanding of how athletes process information during training has been instrumental in creating an intuitive interface that delivers critical insights when they matter most.',
-      photo: laraImage, // Still using placeholder for Lara
+      role: 'Athlete Experience Advisor',
+      bio: 'Lara exemplifies the D1 lacrosse player experience with her exceptional field awareness and competitive drive. Her career demonstrates how elite athletes process information during intense training and competition, representing the exact user profile that the Pulse Project platform is built to benefit.',
+      photo: laraImage,
       affiliation: 'University of Virginia D1 Women\'s Lacrosse',
       linkedin: 'https://www.linkedin.com/in/lara-kology-7a68ab282/'
     }
@@ -87,9 +87,9 @@ const MeetTheTeam = () => {
   const renderBioWithHighlights = (bio, name) => {
     const highlightTerms = {
       'Andrew Prince': ['outdoor adventure', 'technology', 'competitive athlete', 'software developer', 'UVA'],
-      'Ben Wayer': ['D1 lacrosse player', 'sports analytics', 'data science'],
-      'Kate Galcia': ['UVA\'s Women\'s Lacrosse', 'kinesiology', 'sports science', 'injury prevention'],
-      'Lara Kology': ['D1 athlete', 'design specialist', 'interface']
+      'Ben Wayer': ['D1 lacrosse team captain', 'creative vision', 'strategic thinking', 'leadership'],
+      'Kate Galcia': ['UVA\'s Women\'s Lacrosse', 'elite-level', 'team dynamics', 'performance optimization'],
+      'Lara Kology': ['D1 lacrosse player', 'field awareness', 'competitive drive', 'intuitive platform']
     };
 
     const terms = highlightTerms[name] || [];

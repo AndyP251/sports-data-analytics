@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   LineChart, Line, AreaChart, Area, BarChart, Bar,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend,
@@ -754,6 +754,12 @@ const BiometricsDashboard = ({ username }) => {
     
     return data.map(item => {
       try {
+        // Enhance source detection logic
+        // If item has WHOOP-specific fields but no source, mark as WHOOP
+        if (!item.source && (item.recovery_score || item.hrv_ms)) {
+          item.source = 'whoop';
+        }
+        
         // Convert seconds to hours and handle null/undefined values
         const sleepHours = (item.total_sleep_seconds || 0) / 3600;
         const deepSleepHours = (item.deep_sleep_seconds || 0) / 3600;
@@ -1214,35 +1220,151 @@ const BiometricsDashboard = ({ username }) => {
       } else {
         console.log('selectedDataSource:', selectedDataSource);
         
-        // Try more flexible matching for debugging
+        // Add extensive debugging to find WHOOP data
+        const sourceCounts = {};
+        biometricData.forEach(item => {
+          const source = (item.source || '').toLowerCase().trim();
+          sourceCounts[source] = (sourceCounts[source] || 0) + 1;
+        });
+        console.log('Sources found in biometricData:', sourceCounts);
+        
+        // Check for WHOOP specifically
+        const whoopItems = biometricData.filter(item => {
+          const source = (item.source || '').toLowerCase().trim();
+          return source.includes('whoop') || 
+                 (item.recovery_score !== undefined && item.recovery_score > 0) || 
+                 (item.hrv_ms !== undefined && item.hrv_ms > 0);
+        });
+        console.log('Potential WHOOP items found:', whoopItems.length);
+        
+        // Enhanced matching for better filtering
         dataToUse = biometricData.filter(dataItem => {
-          const itemSource = (dataItem.source || '').toLowerCase();
-          const targetSource = selectedDataSource.toLowerCase();
-          const isMatch = itemSource === targetSource;
+          const itemSource = (dataItem.source || '').toLowerCase().trim();
+          const targetSource = selectedDataSource.toLowerCase().trim();
           
-          // Log each comparison for the first few items to understand mismatches
-          if (dataItem === biometricData[0] || dataItem === biometricData[1]) {
-            console.log(`Source comparison: '${itemSource}' === '${targetSource}' => ${isMatch}`, {
-              itemSourceType: typeof dataItem.source,
-              charCodes: [...(dataItem.source || '')].map(c => c.charCodeAt(0))
-            });
+          // Exact match
+          if (itemSource === targetSource) {
+            return true;
           }
           
-          return isMatch;
+          // Partial match (includes)
+          if (itemSource.includes(targetSource) || targetSource.includes(itemSource)) {
+            return true;
+          }
+          
+          // For WHOOP, also match based on WHOOP-specific fields
+          if (targetSource === 'whoop' && 
+              ((dataItem.recovery_score !== undefined && dataItem.recovery_score > 0) || 
+               (dataItem.hrv_ms !== undefined && dataItem.hrv_ms > 0))) {
+            console.log('Found WHOOP data via fields:', dataItem);
+            return true;
+          }
+          
+          return false;
         });
         
         console.log(`Found ${dataToUse.length} items matching source: ${selectedDataSource}`);
+        
+        // If no WHOOP data found but WHOOP was selected, show detailed debugging
+        if (dataToUse.length === 0 && selectedDataSource.toLowerCase() === 'whoop') {
+          console.log('No WHOOP data found despite selecting WHOOP. Checking all entries:');
+          biometricData.slice(0, 10).forEach((item, index) => {
+            console.log(`Item ${index}:`, {
+              source: item.source,
+              sourceType: typeof item.source,
+              hasWhoopFields: !!(item.recovery_score || item.hrv_ms),
+              hasGarminFields: !!(item.steps || item.body_battery),
+              recoveryScore: item.recovery_score,
+              hrvMs: item.hrv_ms
+            });
+          });
+        }
       }
       
       console.log('dataToUse:', dataToUse);
       
+      // Group data by date to handle multiple entries per day from different sources
+      const dataByDate = {};
+      dataToUse.forEach(item => {
+        const dateKey = item.originalDate || item.date;
+        if (!dataByDate[dateKey]) {
+          dataByDate[dateKey] = [];
+        }
+        dataByDate[dateKey].push(item);
+      });
+
+      // Merge multiple entries for the same date by prioritizing non-zero values
+      const mergedDataByDate = Object.keys(dataByDate).map(dateKey => {
+        // If only one entry for this date, use it directly
+        if (dataByDate[dateKey].length === 1) {
+          return dataByDate[dateKey][0];
+        }
+
+        // If multiple entries, merge them prioritizing non-zero values
+        const mergedEntry = { ...dataByDate[dateKey][0] }; // Start with first entry
+        
+        // Go through other entries and update any fields with non-zero/non-null values
+        dataByDate[dateKey].slice(1).forEach(entry => {
+          Object.keys(entry).forEach(key => {
+            const value = entry[key];
+            // Skip null, undefined, and 0 values if we already have a value
+            if (value !== null && value !== undefined && value !== 0) {
+              if (mergedEntry[key] === 0 || mergedEntry[key] === null || mergedEntry[key] === undefined) {
+                mergedEntry[key] = value;
+              }
+            }
+          });
+        });
+        
+        return mergedEntry;
+      });
+
       // For charts, we want chronological order (oldest to newest from left to right)
-      const orderedData = [...dataToUse].reverse();
+      const orderedData = [...mergedDataByDate].sort((a, b) => {
+        // Convert date strings to Date objects for proper comparison
+        const formatDateString = (str) => {
+          // If the date is in MM/DD format, convert to YYYY-MM-DD using current year
+          if (/^\d{2}\/\d{2}$/.test(str)) {
+            const currentYear = new Date().getFullYear();
+            const [month, day] = str.split('/');
+            return `${currentYear}-${month}-${day}`;
+          }
+          return str;
+        };
+        
+        // Handle original dates first, then formatted dates
+        const dateA = new Date(formatDateString(a.originalDate || a.date));
+        const dateB = new Date(formatDateString(b.originalDate || b.date));
+        
+        // Fall back to string comparison if date parsing fails
+        if (isNaN(dateA.getTime()) || isNaN(dateB.getTime())) {
+          const strA = a.originalDate || a.date;
+          const strB = b.originalDate || b.date;
+          return strA.localeCompare(strB);
+        }
+        
+        return dateA - dateB;
+      });
 
       console.log('Original data order (newest first):',
         dataToUse.slice(0, 3).map(item => item.originalDate || item.date));
-      console.log('Reversed data order for charts (oldest first):',
+      console.log('Merged and ordered data for charts (oldest first):',
         orderedData.slice(0, 3).map(item => item.originalDate || item.date));
+
+      // Add debug logging for health snapshot metrics
+      if (orderedData.length > 0) {
+        const latestData = orderedData[orderedData.length - 1];
+        console.log('Health Snapshot latest data:', {
+          date: latestData.originalDate || latestData.date,
+          resting_heart_rate: latestData.resting_heart_rate,
+          recovery_score: latestData.recovery_score,
+          sleep_hours: latestData.sleep_hours,
+          steps: latestData.steps,
+          source: latestData.source
+        });
+      } else {
+        console.log('No data available for Health Snapshot');
+      }
 
       setFilteredData(orderedData);
     }
@@ -2739,6 +2861,69 @@ const BiometricsDashboard = ({ username }) => {
     }
   };
 
+  // Add a function to get WHOOP-specific data reliably
+  const getWhoopData = () => {
+    if (!biometricData || biometricData.length === 0) {
+      return [];
+    }
+    
+    // Find items with WHOOP source or WHOOP-specific fields
+    return biometricData.filter(item => {
+      // Check source field
+      const isWhoopSource = (item.source || '').toLowerCase().includes('whoop');
+      
+      // Check WHOOP-specific fields
+      const hasWhoopFields = 
+        (item.recovery_score !== undefined && item.recovery_score > 0) || 
+        (item.hrv_ms !== undefined && item.hrv_ms > 0) ||
+        (item.strain !== undefined && item.strain > 0) ||
+        (item.sleep_performance !== undefined && item.sleep_performance > 0);
+        
+      return isWhoopSource || hasWhoopFields;
+    });
+  };
+  
+  // Function to get latest significant value for a metric from any data source
+  const getLatestMetricValue = (metricName, defaultValue = '—') => {
+    if (!filteredData || filteredData.length === 0) {
+      return defaultValue;
+    }
+    
+    // Try to get from filtered data first
+    for (let i = 0; i < Math.min(5, filteredData.length); i++) {
+      const dataPoint = filteredData[filteredData.length - 1 - i];
+      if (dataPoint[metricName] !== undefined && 
+          dataPoint[metricName] !== null && 
+          dataPoint[metricName] > 0) {
+        return dataPoint[metricName];
+      }
+    }
+    
+    // If not found and the metric is a WHOOP-specific one, check WHOOP data
+    if (['recovery_score', 'hrv_ms', 'strain', 'sleep_performance'].includes(metricName)) {
+      const whoopData = getWhoopData();
+      if (whoopData.length > 0) {
+        // Sort by date, newest first
+        const sortedWhoopData = [...whoopData].sort((a, b) => {
+          const dateA = new Date(a.originalDate || a.date);
+          const dateB = new Date(b.originalDate || b.date);
+          return dateB - dateA; // Newest first
+        });
+        
+        // Get the first item with a valid value for the metric
+        for (const item of sortedWhoopData) {
+          if (item[metricName] !== undefined && 
+              item[metricName] !== null && 
+              item[metricName] > 0) {
+            return item[metricName];
+          }
+        }
+      }
+    }
+    
+    return defaultValue;
+  };
+
   return (
     <Box className={`biometrics-dashboard ${darkMode ? '' : 'light-mode'}`}>
       {/* Updated header and navigation */}
@@ -2947,7 +3132,16 @@ const BiometricsDashboard = ({ username }) => {
                           <MonitorHeartIcon sx={{ color: '#E74C3C' }} />
                         </Box>
                         <Typography variant="h3" sx={{ mb: 0, fontWeight: 700 }}>
-                          {filteredData.length > 0 ? filteredData[filteredData.length - 1].resting_heart_rate || '—' : '—'}
+                          {filteredData.length > 0 ? 
+                            (() => {
+                              // Use the getLatestMetricValue function for resting heart rate
+                              const restingHR = getLatestMetricValue('resting_heart_rate');
+                              if (restingHR !== '—') {
+                                return Math.round(restingHR);
+                              }
+                              return '—';
+                            })() 
+                            : '—'}
                         </Typography>
                         <Typography variant="body2" color="textSecondary">
                           BPM
@@ -2970,10 +3164,36 @@ const BiometricsDashboard = ({ username }) => {
                       <CardContent sx={{ p: 3 }}>
                         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
                           <Typography variant="subtitle1" color="textSecondary">Recovery Score</Typography>
-                          <SpeedIcon sx={{ color: '#2ECC71' }} />
+                          <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                            <SpeedIcon sx={{ color: '#2ECC71' }} />
+                            {selectedDataSource === 'whoop' && (
+                              <Tooltip title="Recovery Score from WHOOP">
+                                <Chip 
+                                  label="WHOOP" 
+                                  size="small"
+                                  sx={{ 
+                                    ml: 1, 
+                                    height: '18px',
+                                    fontSize: '10px',
+                                    backgroundColor: '#33D154',
+                                    color: 'white'
+                                  }} 
+                                />
+                              </Tooltip>
+                            )}
+                          </Box>
                         </Box>
                         <Typography variant="h3" sx={{ mb: 0, fontWeight: 700 }}>
-                          {filteredData.length > 0 ? filteredData[filteredData.length - 1].recovery_score || '—' : '—'}
+                          {filteredData.length > 0 ? 
+                            (() => {
+                              // Use the getLatestMetricValue function for recovery score
+                              const recoveryScore = getLatestMetricValue('recovery_score');
+                              if (recoveryScore !== '—') {
+                                return Math.round(recoveryScore);
+                              }
+                              return '—';
+                            })() 
+                            : '—'}
                         </Typography>
                         <Typography variant="body2" color="textSecondary">
                           out of 100
@@ -2999,7 +3219,23 @@ const BiometricsDashboard = ({ username }) => {
                           <NightsStayIcon sx={{ color: '#9B59B6' }} />
                         </Box>
                         <Typography variant="h3" sx={{ mb: 0, fontWeight: 700 }}>
-                          {filteredData.length > 0 ? filteredData[filteredData.length - 1].sleep_hours || '—' : '—'}
+                          {filteredData.length > 0 ? 
+                            (() => {
+                              // Use the getLatestMetricValue function for sleep hours
+                              const sleepHours = getLatestMetricValue('sleep_hours');
+                              if (sleepHours !== '—') {
+                                return Number(sleepHours).toFixed(1);
+                              }
+                              
+                              // Try total_sleep_seconds as backup
+                              const totalSleepSecs = getLatestMetricValue('total_sleep_seconds');
+                              if (totalSleepSecs !== '—') {
+                                return (Number(totalSleepSecs) / 3600).toFixed(1);
+                              }
+                              
+                              return '—';
+                            })() 
+                            : '—'}
                         </Typography>
                         <Typography variant="body2" color="textSecondary">
                           hours
@@ -3022,11 +3258,42 @@ const BiometricsDashboard = ({ username }) => {
                       <CardContent sx={{ p: 3 }}>
                         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
                           <Typography variant="subtitle1" color="textSecondary">Daily Steps</Typography>
-                          <DirectionsRunIcon sx={{ color: '#3498DB' }} />
+                          <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                            <DirectionsRunIcon sx={{ color: '#3498DB' }} />
+                            {selectedDataSource === 'garmin' && (
+                              <Tooltip title="Steps from Garmin">
+                                <Chip 
+                                  label="GARMIN" 
+                                  size="small"
+                                  sx={{ 
+                                    ml: 1, 
+                                    height: '18px',
+                                    fontSize: '10px',
+                                    backgroundColor: '#0066B5',
+                                    color: 'white'
+                                  }} 
+                                />
+                              </Tooltip>
+                            )}
+                          </Box>
                         </Box>
                         <Typography variant="h3" sx={{ mb: 0, fontWeight: 700 }}>
-                          {filteredData.length > 0 && filteredData[filteredData.length - 1].steps ? 
-                            new Intl.NumberFormat().format(filteredData[filteredData.length - 1].steps) : '—'}
+                          {filteredData.length > 0 ? 
+                            (() => {
+                              // Try both steps and total_steps fields
+                              const steps = getLatestMetricValue('steps');
+                              if (steps !== '—') {
+                                return new Intl.NumberFormat().format(steps);
+                              }
+                              
+                              const totalSteps = getLatestMetricValue('total_steps');
+                              if (totalSteps !== '—') {
+                                return new Intl.NumberFormat().format(totalSteps);
+                              }
+                              
+                              return '—';
+                            })() 
+                            : '—'}
                         </Typography>
                         <Typography variant="body2" color="textSecondary">
                           steps
@@ -3073,34 +3340,24 @@ const BiometricsDashboard = ({ username }) => {
                       >
                         <MenuItem value="all">All Sources</MenuItem>
                         {activeSources && Array.isArray(activeSources) && activeSources.map((source) => {
-                          // Safely handle the source object or string
-                          const sourceId = source && (source.id || source);
-                          // Safely create a display name ensuring it's a string
-                          let displayName = 'Unknown Source';
+                          // Skip displaying if we have no data for this source
+                          const hasData = biometricData.some(item => 
+                            (item.source || '').toLowerCase() === source.toLowerCase()
+                          );
                           
-                          if (source) {
-                            if (source.name) {
-                              displayName = source.name;
-                            } else if (typeof source === 'string') {
-                              displayName = source.split('_')
-                                .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-                                .join(' ');
-                            } else if (typeof sourceId === 'string') {
-                              displayName = sourceId.split('_')
-                                .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-                                .join(' ');
-                            }
+                          // For WHOOP, also check if we have data with WHOOP-specific fields
+                          const isWhoopAndHasData = 
+                            source.toLowerCase() === 'whoop' && 
+                            getWhoopData().length > 0;
+                            
+                          if (hasData || isWhoopAndHasData) {
+                            return (
+                              <MenuItem key={source} value={source}>
+                                {source.charAt(0).toUpperCase() + source.slice(1)}
+                              </MenuItem>
+                            );
                           }
-                          
-                          // Only render MenuItem if we have a valid sourceId
-                          return sourceId ? (
-                            <MenuItem 
-                              key={sourceId} 
-                              value={sourceId}
-                            >
-                              {displayName}
-                            </MenuItem>
-                          ) : null;
+                          return null;
                         })}
                       </Select>
                     </FormControl>

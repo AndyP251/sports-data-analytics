@@ -5,6 +5,20 @@
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Pulse Project</title>
+    <script>
+      // Check if we have a redirect path stored
+      (function() {
+        var redirectPath = sessionStorage.getItem('redirectPath');
+        if (redirectPath) {
+          // Clear the stored path
+          sessionStorage.removeItem('redirectPath');
+          // Update the browser history without triggering a page reload
+          if (history && history.replaceState) {
+            history.replaceState(null, null, redirectPath);
+          }
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

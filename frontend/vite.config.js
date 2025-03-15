@@ -1,5 +1,6 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import { resolve } from 'path'
 
 // Determine if we're in a deployment environment
 const isProduction = process.env.NODE_ENV === 'production'
@@ -30,5 +31,10 @@ export default defineConfig({
     emptyOutDir: true,
     // Generate manifest for Django to use
     manifest: true,
+    rollupOptions: {
+      input: {
+        main: resolve(__dirname, 'index.html'),
+      },
+    },
   }
 })

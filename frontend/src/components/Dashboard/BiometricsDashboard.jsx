@@ -432,7 +432,7 @@ const BiometricsDashboard = ({ username }) => {
       
       // Check for Garmin data specifically
       const garminData = response.data.filter(item => 
-        (item.source || '').toLowerCase() === 'garmin'
+        String(item.source || '').toLowerCase() === 'garmin'
       );
       console.log(`Found ${garminData.length} Garmin entries in API response`);
       
@@ -1223,14 +1223,14 @@ const BiometricsDashboard = ({ username }) => {
         // Add extensive debugging to find WHOOP data
         const sourceCounts = {};
         biometricData.forEach(item => {
-          const source = (item.source || '').toLowerCase().trim();
+          const source = String(item.source || '').toLowerCase().trim();
           sourceCounts[source] = (sourceCounts[source] || 0) + 1;
         });
         console.log('Sources found in biometricData:', sourceCounts);
         
         // Check for WHOOP specifically
         const whoopItems = biometricData.filter(item => {
-          const source = (item.source || '').toLowerCase().trim();
+          const source = String(item.source || '').toLowerCase().trim();
           return source.includes('whoop') || 
                  (item.recovery_score !== undefined && item.recovery_score > 0) || 
                  (item.hrv_ms !== undefined && item.hrv_ms > 0);
@@ -1239,8 +1239,8 @@ const BiometricsDashboard = ({ username }) => {
         
         // Enhanced matching for better filtering
         dataToUse = biometricData.filter(dataItem => {
-          const itemSource = (dataItem.source || '').toLowerCase().trim();
-          const targetSource = selectedDataSource.toLowerCase().trim();
+          const itemSource = String(dataItem.source || '').toLowerCase().trim();
+          const targetSource = String(selectedDataSource || '').toLowerCase().trim();
           
           // Exact match
           if (itemSource === targetSource) {
@@ -1266,7 +1266,7 @@ const BiometricsDashboard = ({ username }) => {
         console.log(`Found ${dataToUse.length} items matching source: ${selectedDataSource}`);
         
         // If no WHOOP data found but WHOOP was selected, show detailed debugging
-        if (dataToUse.length === 0 && selectedDataSource.toLowerCase() === 'whoop') {
+        if (dataToUse.length === 0 && String(selectedDataSource || '').toLowerCase() === 'whoop') {
           console.log('No WHOOP data found despite selecting WHOOP. Checking all entries:');
           biometricData.slice(0, 10).forEach((item, index) => {
             console.log(`Item ${index}:`, {
@@ -1374,7 +1374,7 @@ const BiometricsDashboard = ({ username }) => {
   const getSourceSpecificData = (data, source) => {
     if (!data || data.length === 0) return [];
     return data.filter(item => 
-      (item.source || '').toLowerCase() === source.toLowerCase()
+      String(item.source || '').toLowerCase() === String(source || '').toLowerCase()
     );
   };
 
@@ -1385,7 +1385,7 @@ const BiometricsDashboard = ({ username }) => {
     // If specific source requested, check if we have that source data
     const sourceData = dataSource === 'all' ? 
       filteredData : 
-      filteredData.filter(item => (item.source || '').toLowerCase() === dataSource.toLowerCase());
+      filteredData.filter(item => String(item.source || '').toLowerCase() === String(dataSource || '').toLowerCase());
     
     if (sourceData.length === 0) return false;
     
@@ -2863,23 +2863,19 @@ const BiometricsDashboard = ({ username }) => {
 
   // Add a function to get WHOOP-specific data reliably
   const getWhoopData = () => {
-    if (!biometricData || biometricData.length === 0) {
-      return [];
-    }
+    if (!biometricData || biometricData.length === 0) return [];
     
-    // Find items with WHOOP source or WHOOP-specific fields
     return biometricData.filter(item => {
-      // Check source field
-      const isWhoopSource = (item.source || '').toLowerCase().includes('whoop');
-      
-      // Check WHOOP-specific fields
-      const hasWhoopFields = 
-        (item.recovery_score !== undefined && item.recovery_score > 0) || 
-        (item.hrv_ms !== undefined && item.hrv_ms > 0) ||
+      // Check both by source field and by WHOOP-specific data patterns
+      const isWhoopSource = String(item.source || '').toLowerCase().includes('whoop');
+      const hasWhoopSpecificFields = (
+        (item.recovery_score !== undefined && item.recovery_score > 0) ||
+        (item.hrv_ms !== undefined && item.hrv_ms > 0) || 
         (item.strain !== undefined && item.strain > 0) ||
-        (item.sleep_performance !== undefined && item.sleep_performance > 0);
-        
-      return isWhoopSource || hasWhoopFields;
+        (item.sleep_performance !== undefined && item.sleep_performance > 0)
+      );
+      
+      return isWhoopSource || hasWhoopSpecificFields;
     });
   };
   
@@ -3340,20 +3336,25 @@ const BiometricsDashboard = ({ username }) => {
                       >
                         <MenuItem value="all">All Sources</MenuItem>
                         {activeSources && Array.isArray(activeSources) && activeSources.map((source) => {
+                          // Make sure source is a string
+                          const sourceStr = String(source || '');
+                          
                           // Skip displaying if we have no data for this source
-                          const hasData = biometricData.some(item => 
-                            (item.source || '').toLowerCase() === source.toLowerCase()
-                          );
+                          const hasData = biometricData.some(item => {
+                            // Make sure item.source is also handled safely
+                            const itemSource = String(item.source || '');
+                            return itemSource.toLowerCase() === sourceStr.toLowerCase();
+                          });
                           
                           // For WHOOP, also check if we have data with WHOOP-specific fields
                           const isWhoopAndHasData = 
-                            source.toLowerCase() === 'whoop' && 
+                            sourceStr.toLowerCase() === 'whoop' && 
                             getWhoopData().length > 0;
                             
                           if (hasData || isWhoopAndHasData) {
                             return (
-                              <MenuItem key={source} value={source}>
-                                {source.charAt(0).toUpperCase() + source.slice(1)}
+                              <MenuItem key={sourceStr} value={sourceStr}>
+                                {sourceStr.charAt(0).toUpperCase() + sourceStr.slice(1)}
                               </MenuItem>
                             );
                           }

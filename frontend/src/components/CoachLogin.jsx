@@ -201,10 +201,12 @@ const CoachLogin = ({ setIsAuthenticated }) => {
         zIndex: 1000
       }}
     >
-      <div className="auth-container">
-        <div className="auth-box">
-          <div className="brand-title">Pulse Project</div>
-          <div className="developer-credit">Developed by Andrew Prince</div>
+      <div className="auth-container" style={{ overflow: 'hidden' }}>
+        <div className="auth-box" style={{ overflow: 'hidden' }}>
+          <div style={{ overflow: 'hidden', padding: 0, margin: 0 }}>
+            <div className="brand-title" style={{ overflow: 'hidden', padding: 0 }}>Pulse Project</div>
+            <div className="developer-credit" style={{ overflow: 'hidden', padding: 0 }}>Developed by Andrew Prince</div>
+          </div>
           <h2 className="auth-title">{isLoginMode ? 'Coach Login' : 'Register as Coach'}</h2>
           <div className={`csrf-status ${csrfStatus}`}>
             {csrfStatus === 'loading' && 'Initializing security...'}

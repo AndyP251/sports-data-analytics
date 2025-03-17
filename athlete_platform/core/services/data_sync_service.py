@@ -119,6 +119,12 @@ class DataSyncService:
             
         logger.info(f"Sync date range: {start_date} to {end_date} (force_refresh: {force_refresh})")
 
+        # Get today's date to compare
+        today = timezone.now().date()
+        
+        # Check if current day is in the requested range
+        current_day_in_range = start_date <= today <= end_date
+        
         results = {}
         
         for source in sources:
@@ -149,9 +155,35 @@ class DataSyncService:
                     processor = GarminProcessor(self.athlete, profile_type)
                 
                 if processor:
-                    logger.info(f"Syncing {source} data for athlete {self.athlete.id} from {start_date} to {end_date}")
-                    # Pass through force_refresh parameter
-                    success = processor.sync_data(start_date, end_date, force_refresh=force_refresh)
+                    # If today is in the date range, we need to sync it separately with force_refresh=True
+                    if current_day_in_range:
+                        logger.info(f"Current day ({today}) is in range - will force refresh for {source}")
+                        
+                        # Sync historical data (excluding today) first if exists
+                        historical_success = True
+                        if start_date < today:
+                            historical_end = today - timedelta(days=1)
+                            logger.info(f"Syncing historical {source} data for athlete {self.athlete.id} from {start_date} to {historical_end}")
+                            historical_success = processor.sync_data(start_date, historical_end, force_refresh=force_refresh)
+                        
+                        # Always force refresh the current day
+                        logger.info(f"Force refreshing today's {source} data for athlete {self.athlete.id}")
+                        today_success = processor.sync_data(today, today, force_refresh=True)
+                        
+                        # Sync future days if any (shouldn't normally happen, but handle it anyway)
+                        future_success = True
+                        if end_date > today:
+                            future_start = today + timedelta(days=1)
+                            logger.info(f"Syncing future {source} data for athlete {self.athlete.id} from {future_start} to {end_date}")
+                            future_success = processor.sync_data(future_start, end_date, force_refresh=force_refresh)
+                        
+                        # Success if any part was successful
+                        success = historical_success or today_success or future_success
+                    else:
+                        # If today is not in the range, use the normal sync path
+                        logger.info(f"Syncing {source} data for athlete {self.athlete.id} from {start_date} to {end_date}")
+                        success = processor.sync_data(start_date, end_date, force_refresh=force_refresh)
+                    
                     results[source] = success
                     logger.info(f"Sync {source} result: {success}")
                 else:
@@ -193,8 +225,23 @@ class DataSyncService:
             expected_days = (end_date - start_date).days + 1
             threshold = expected_days // 3
             
-            if not data.exists() or data.count() < threshold:
-                logger.info(f"Insufficient data found ({data.count()} of {expected_days} days), syncing data")
+            # Check if we're missing today's data or if we have insufficient data overall
+            today = end_date
+            has_today = False
+            
+            for item in data:
+                if str(item['date']) == str(today):
+                    has_today = True
+                    break
+            
+            missing_today = not has_today
+            insufficient_data = not data.exists() or data.count() < threshold
+            
+            if missing_today or insufficient_data:
+                if missing_today:
+                    logger.info(f"Today's data ({today}) is missing, syncing data")
+                if insufficient_data:
+                    logger.info(f"Insufficient data found ({data.count()} of {expected_days} days), syncing data")
                 
                 # Try to sync all active sources
                 sync_results = self.sync_specific_sources(self.active_sources, start_date, end_date)

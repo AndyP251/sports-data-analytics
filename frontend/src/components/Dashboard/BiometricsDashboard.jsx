@@ -2120,30 +2120,39 @@ const BiometricsDashboard = ({ username }) => {
               <Radar 
                 name="Sleep Efficiency" 
                 dataKey="sleep_efficiency" 
-                stroke="#8884d8" 
-                fill="#8884d8" 
-                fillOpacity={0.6} 
+                stroke="#3498db" 
+                fill="#3498db" 
+                fillOpacity={0.4} 
               />
               {recentData[0]?.sleep_performance && (
                 <Radar 
                   name="Sleep Performance" 
                   dataKey="sleep_performance" 
-                  stroke="#82ca9d" 
-                  fill="#82ca9d" 
-                  fillOpacity={0.6} 
+                  stroke="#8e44ad" 
+                  fill="#8e44ad" 
+                  fillOpacity={0.4} 
+                />
+              )}
+              {recentData[0]?.sleep_consistency && (
+                <Radar 
+                  name="Sleep Consistency" 
+                  dataKey="sleep_consistency" 
+                  stroke="#2ecc71" 
+                  fill="#2ecc71" 
+                  fillOpacity={0.4} 
                 />
               )}
               {recentData[0]?.rem_sleep_percentage && (
                 <Radar 
                   name="REM Sleep %" 
                   dataKey="rem_sleep_percentage" 
-                  stroke="#ffc658" 
-                  fill="#ffc658" 
-                  fillOpacity={0.6} 
+                  stroke="#f39c12" 
+                  fill="#f39c12" 
+                  fillOpacity={0.4} 
                 />
               )}
               <Legend />
-              <Tooltip />
+              <Tooltip formatter={(value) => [`${value}%`, null]} />
             </RadarChart>
           );
         }
@@ -3509,17 +3518,97 @@ const BiometricsDashboard = ({ username }) => {
                                   <BarChart data={filteredData}>
                                     <CartesianGrid strokeDasharray="3 3" />
                                     <XAxis dataKey="date" />
-                                    <YAxis domain={[0, 100]} />
-                                    <Tooltip />
+                                    <YAxis yAxisId="left" domain={[0, 100]} tickFormatter={(value) => `${value}%`} />
+                                    <Tooltip formatter={(value) => [`${value}%`, null]} />
                                     <Legend />
-                                    <Bar dataKey="sleep_efficiency" name="Sleep Efficiency" fill="#3498DB" />
-                                    <Bar dataKey="sleep_consistency" name="Sleep Consistency" fill="#F1C40F" />
-                                    <Bar dataKey="sleep_performance" name="Sleep Performance" fill="#27AE60" />
+                                    <Bar yAxisId="left" dataKey="sleep_efficiency" name="Sleep Efficiency" fill="#3498DB" radius={[4, 4, 0, 0]} />
+                                    <Bar yAxisId="left" dataKey="sleep_consistency" name="Sleep Consistency" fill="#2ecc71" radius={[4, 4, 0, 0]} />
+                                    <Bar yAxisId="left" dataKey="sleep_performance" name="Sleep Performance" fill="#8e44ad" radius={[4, 4, 0, 0]} />
                                   </BarChart>
                                 </ResponsiveContainer>
                               </Card>
                             </Grid>
                           )}
+                          
+                          <Grid item xs={12} md={6}>
+                            <Card sx={{ p: 2, boxShadow: '0 4px 20px rgba(0,0,0,0.1)', borderRadius: '12px', height: '100%' }}>
+                              <Typography variant="h6" sx={{ mb: 2, fontWeight: 600 }}>Sleep Composition</Typography>
+                              <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+                                <ResponsiveContainer width="100%" height={280}>
+                                  <PieChart>
+                                    <Pie
+                                      data={[
+                                        { 
+                                          name: 'Deep Sleep', 
+                                          value: filteredData.length > 0 ? filteredData[0].deep_sleep || 0 : 0,
+                                          fill: '#2c3e50'
+                                        },
+                                        { 
+                                          name: 'Light Sleep', 
+                                          value: filteredData.length > 0 ? filteredData[0].light_sleep || 0 : 0,
+                                          fill: '#16a085'
+                                        },
+                                        { 
+                                          name: 'REM Sleep', 
+                                          value: filteredData.length > 0 ? filteredData[0].rem_sleep || 0 : 0,
+                                          fill: '#3498db'
+                                        },
+                                        { 
+                                          name: 'Awake', 
+                                          value: filteredData.length > 0 ? filteredData[0].awake_time || 0 : 0,
+                                          fill: '#e74c3c'
+                                        }
+                                      ]}
+                                      cx="50%"
+                                      cy="50%"
+                                      labelLine={false}
+                                      outerRadius={100}
+                                      innerRadius={60}
+                                      fill="#8884d8"
+                                      dataKey="value"
+                                      nameKey="name"
+                                      label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                                    >
+                                    </Pie>
+                                    <Tooltip formatter={(value) => [`${value.toFixed(1)} hours`, null]} />
+                                  </PieChart>
+                                </ResponsiveContainer>
+                                <Box sx={{ mt: 'auto', textAlign: 'center', pt: 2 }}>
+                                  <Typography variant="subtitle2" color="text.secondary">
+                                    Most recent sleep composition breakdown
+                                  </Typography>
+                                </Box>
+                              </Box>
+                            </Card>
+                          </Grid>
+                          
+                          <Grid item xs={12} md={6}>
+                            <Card sx={{ p: 2, boxShadow: '0 4px 20px rgba(0,0,0,0.1)', borderRadius: '12px', height: '100%' }}>
+                              <Typography variant="h6" sx={{ mb: 2, fontWeight: 600 }}>Sleep Trends</Typography>
+                              <ResponsiveContainer width="100%" height={280}>
+                                <LineChart
+                                  data={filteredData}
+                                  margin={{ top: 10, right: 30, left: 0, bottom: 0 }}
+                                >
+                                  <CartesianGrid strokeDasharray="3 3" />
+                                  <XAxis dataKey="date" />
+                                  <YAxis tickFormatter={(value) => `${value}h`} />
+                                  <Tooltip formatter={(value) => [`${value} hours`, null]} />
+                                  <Legend />
+                                  <Line 
+                                    type="monotone" 
+                                    dataKey="sleep_hours" 
+                                    name="Total Sleep" 
+                                    stroke="#8e44ad" 
+                                    strokeWidth={2}
+                                    dot={{ r: 4 }} 
+                                  />
+                                  <ReferenceLine y={8} label="Optimal" stroke="#2ecc71" strokeDasharray="3 3" />
+                                  <ReferenceLine y={6} label="Minimum" stroke="#e74c3c" strokeDasharray="3 3" />
+                                </LineChart>
+                              </ResponsiveContainer>
+                            </Card>
+                          </Grid>
                           
                           <Grid item xs={12}>
                             <Card sx={{ p: 2, boxShadow: '0 4px 20px rgba(0,0,0,0.1)', borderRadius: '12px' }}>
@@ -3559,7 +3648,7 @@ const BiometricsDashboard = ({ username }) => {
                                     verticalAlign="bottom" 
                                     wrapperStyle={{ paddingTop: '15px' }}
                                   />
-                                  <Bar yAxisId="left" dataKey="sleep_hours" name="Sleep Hours" fill="#3498db" />
+                                  <Bar yAxisId="left" dataKey="sleep_hours" name="Total Sleep" fill="#8e44ad" radius={[4, 4, 0, 0]} />
                                   <Bar yAxisId="left" dataKey="deep_sleep" name="Deep Sleep" fill="#2c3e50" radius={[4, 4, 0, 0]} />
                                   <Bar yAxisId="left" dataKey="light_sleep" name="Light Sleep" fill="#16a085" radius={[4, 4, 0, 0]} />
                                   <Bar yAxisId="left" dataKey="rem_sleep" name="REM Sleep" fill="#3498db" radius={[4, 4, 0, 0]} />

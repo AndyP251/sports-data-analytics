@@ -76,6 +76,7 @@ import AccountCircleIcon from '@mui/icons-material/AccountCircle';
 import AddIcon from '@mui/icons-material/Add';
 import CloseIcon from '@mui/icons-material/Close';
 import ArrowForwardIosIcon from '@mui/icons-material/ArrowForwardIos';
+import RefreshIcon from '@mui/icons-material/Refresh';
 
 // Modern, professional color palette
 const colors = {
@@ -642,7 +643,7 @@ const BiometricsDashboard = ({ username }) => {
     }
   };
 
-  const syncData = async (specificSource = null) => {
+  const syncData = async (specificSource = null, forceRefresh = false) => {
     // Safely validate the specificSource parameter
     const isValidSource = specificSource && 
                          (typeof specificSource === 'string' || 
@@ -663,9 +664,16 @@ const BiometricsDashboard = ({ username }) => {
                          (typeof specificSource === 'string' ? specificSource : specificSource.id) :
                          null;
       
-      const requestBody = sourceToSync ? { source: sourceToSync } : {};
+      const requestBody = {
+        ...(sourceToSync ? { source: sourceToSync } : {}),
+        force_refresh: forceRefresh
+      };
       
       console.log('Syncing with request body:', requestBody);
+      
+      if (forceRefresh) {
+        addSyncMessage('Performing force refresh - this may take longer than a normal sync...', 'info');
+      }
       
       const response = await fetch('/api/biometrics/sync/', {
         method: 'POST',
@@ -767,6 +775,7 @@ const BiometricsDashboard = ({ username }) => {
         const lightSleepHours = (item.light_sleep_seconds || 0) / 3600;
         const remSleepHours = (item.rem_sleep_seconds || 0) / 3600;
         const awakeHours = (item.awake_seconds || 0) / 3600;
+        const inBedHours = (item.total_in_bed_seconds || 0) / 3600;
 
         // Format date as MM/DD for display
         let formattedDate;
@@ -788,6 +797,7 @@ const BiometricsDashboard = ({ username }) => {
           light_sleep: roundToTwo(lightSleepHours),
           rem_sleep: roundToTwo(remSleepHours),
           awake_time: roundToTwo(awakeHours),
+          inBed_time: roundToTwo(inBedHours),
 
           // Heart rate metrics (rounded to 2 decimal places)
           resting_heart_rate: roundToTwo(item.resting_heart_rate || 0),
@@ -3092,7 +3102,7 @@ const BiometricsDashboard = ({ username }) => {
                       <Button
                         variant="contained"
                         color="primary"
-                        onClick={syncData}
+                        onClick={() => syncData(null, false)}
                         disabled={loading}
                         startIcon={<SyncIcon />}
                         className="sync-button"
@@ -3100,6 +3110,20 @@ const BiometricsDashboard = ({ username }) => {
                       >
                         Sync Latest Data
                       </Button>
+                      
+                      {devMode && (
+                        <Button
+                          variant="contained"
+                          color="secondary"
+                          onClick={() => syncData(null, true)}
+                          disabled={loading}
+                          startIcon={<RefreshIcon />}
+                          className="force-refresh-button"
+                          sx={{ borderRadius: '30px' }}
+                        >
+                          Force Refresh
+                        </Button>
+                      )}
                       
                       <Button
                         variant="outlined"
@@ -3372,12 +3396,26 @@ const BiometricsDashboard = ({ username }) => {
                       variant="outlined"
                       size="small"
                       startIcon={<SyncIcon />}
-                      onClick={() => syncData(selectedDataSource)}
+                      onClick={() => syncData(selectedDataSource, false)}
                       disabled={loading}
                       sx={{ borderRadius: '8px' }}
                     >
                       Refresh Data
                     </Button>
+                    
+                    {devMode && (
+                      <Button
+                        variant="outlined"
+                        size="small"
+                        color="secondary"
+                        startIcon={<RefreshIcon />}
+                        onClick={() => syncData(selectedDataSource, true)}
+                        disabled={loading}
+                        sx={{ borderRadius: '8px', ml: 1 }}
+                      >
+                        Force Refresh
+                      </Button>
+                    )}
                   </Box>
                   
                   <Box sx={{ 
@@ -3440,16 +3478,32 @@ const BiometricsDashboard = ({ username }) => {
                           <Grid item xs={12}>
                             <Card sx={{ p: 2 }}>
                               <Typography variant="h6" gutterBottom>Sleep Duration</Typography>
+                              {console.log('Sleep Duration Chart Data:', filteredData.map(item => ({
+                                date: item.date,
+                                total_sleep_seconds: item.total_sleep_seconds,
+                                sleep_hours: item.sleep_hours,
+                                deep_sleep: item.deep_sleep,
+                                light_sleep: item.light_sleep,
+                                rem_sleep: item.rem_sleep,
+                                awake_time: item.awake_time,
+                                inBed_time: item.inBed_time,
+                                total_in_bed_seconds: item.total_in_bed_seconds
+                              })))}
                               <ResponsiveContainer width="100%" height={300}>
                                 <BarChart data={filteredData}>
                                   <CartesianGrid strokeDasharray="3 3" />
                                   <XAxis dataKey="date" />
-                                  <YAxis />
+                                  <YAxis domain={[0, 'dataMax + 2']} />
                                   <Tooltip />
                                   <Legend />
                                   <Bar dataKey="sleep_hours" name="Total Sleep" fill="#8e44ad" />
                                   <Bar dataKey="deep_sleep" name="Deep Sleep" fill="#2c3e50" />
+                                  <Bar dataKey="light_sleep" name="Light Sleep" fill="#16a085" />
                                   <Bar dataKey="rem_sleep" name="REM Sleep" fill="#3498db" />
+                                  <Bar dataKey="awake_time" name="Awake Time" fill="#e74c3c" />
+                                  {filteredData.some(item => item.inBed_time > 0) && (
+                                    <Bar dataKey="inBed_time" name="Total In Bed" fill="#34495e" />
+                                  )}
                                 </BarChart>
                               </ResponsiveContainer>
                             </Card>
@@ -4013,18 +4067,36 @@ const BiometricsDashboard = ({ username }) => {
                             )}
                             
                             <Box sx={{ mt: 3, display: 'flex', justifyContent: 'space-between' }}>
-                              <Button
-                                startIcon={<SyncIcon />}
-                                variant="outlined"
-                                size="small"
-                                onClick={() => syncData(source.id || source)}
-                                sx={{ 
-                                  borderRadius: '20px',
-                                  fontSize: '0.75rem'
-                                }}
-                              >
-                                Sync
-                              </Button>
+                              <Box sx={{ display: 'flex', gap: 1 }}>
+                                <Button
+                                  startIcon={<SyncIcon />}
+                                  variant="outlined"
+                                  size="small"
+                                  onClick={() => syncData(source.id || source, false)}
+                                  sx={{ 
+                                    borderRadius: '20px',
+                                    fontSize: '0.75rem'
+                                  }}
+                                >
+                                  Sync
+                                </Button>
+                                
+                                {devMode && (
+                                  <Button
+                                    startIcon={<RefreshIcon />}
+                                    variant="outlined"
+                                    size="small"
+                                    color="secondary"
+                                    onClick={() => syncData(source.id || source, true)}
+                                    sx={{ 
+                                      borderRadius: '20px',
+                                      fontSize: '0.75rem'
+                                    }}
+                                  >
+                                    Force
+                                  </Button>
+                                )}
+                              </Box>
                               
                               <Button
                                 startIcon={<DeleteOutlineIcon />}

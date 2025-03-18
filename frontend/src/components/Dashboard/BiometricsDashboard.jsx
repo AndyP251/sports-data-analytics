@@ -845,6 +845,9 @@ const BiometricsDashboard = ({ username }) => {
           distance: roundToTwo((item.total_distance_meters || 0) / 1000), // Convert to km and round
           total_calories: roundToTwo(item.total_calories || 0),
           active_calories: roundToTwo(item.active_calories || 0),
+          
+          // If source is WHOOP, convert kilojoules to calories (1 kilojoule = 0.239 kilocalories)
+          whoop_calories: item.source === 'whoop' && item.kilojoules ? roundToTwo(item.kilojoules * 0.239) : 0,
 
           // Stress metrics
           stress_level: roundToTwo(item.average_stress_level || 0),
@@ -3708,11 +3711,29 @@ const BiometricsDashboard = ({ username }) => {
                                 <AreaChart data={filteredData}>
                                   <CartesianGrid strokeDasharray="3 3" />
                                   <XAxis dataKey="date" />
-                                  <YAxis />
-                                  <Tooltip />
+                                  <YAxis yAxisId="left" />
+                                  <Tooltip formatter={(value, name) => [
+                                    `${Math.round(value)} kcal`, 
+                                    name.includes('WHOOP') ? 'WHOOP Calories' : name
+                                  ]} />
                                   <Legend />
-                                  <Area type="monotone" dataKey="total_calories" name="Total Calories" stroke="#27AE60" fill="#27AE60" fillOpacity={0.3} />
-                                  <Area type="monotone" dataKey="active_calories" name="Active Calories" stroke="#3498DB" fill="#3498DB" fillOpacity={0.3} />
+                                  <Area yAxisId="left" type="monotone" dataKey="total_calories" name="Total Calories" stroke="#27AE60" fill="#27AE60" fillOpacity={0.3} />
+                                  <Area yAxisId="left" type="monotone" dataKey="active_calories" name="Active Calories" stroke="#3498DB" fill="#3498DB" fillOpacity={0.3} />
+                                  
+                                  {/* Only show WHOOP calories if WHOOP is an active source */}
+                                  {activeSources && activeSources.some(source => 
+                                    source.id === 'whoop' || source === 'whoop'
+                                  ) && (
+                                    <Area 
+                                      yAxisId="left"
+                                      type="monotone" 
+                                      dataKey="whoop_calories" 
+                                      name="WHOOP Calories" 
+                                      stroke="#8E44AD" 
+                                      fill="#8E44AD" 
+                                      fillOpacity={0.3} 
+                                    />
+                                  )}
                                 </AreaChart>
                               </ResponsiveContainer>
                             </Card>

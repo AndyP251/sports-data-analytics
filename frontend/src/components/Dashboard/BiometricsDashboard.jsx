@@ -776,6 +776,42 @@ const BiometricsDashboard = ({ username }) => {
         const remSleepHours = (item.rem_sleep_seconds || 0) / 3600;
         const awakeHours = (item.awake_seconds || 0) / 3600;
         const inBedHours = (item.total_in_bed_seconds || 0) / 3600;
+        
+        // Debug unusual sleep values
+        if (sleepHours > 24) {
+          console.warn(`Unusually high sleep hours detected: ${sleepHours} hours (${item.total_sleep_seconds} seconds) for date ${item.date}`);
+          console.log('Raw item data:', item);
+        }
+        
+        // Determine if the data is in milliseconds (values would be ~1000x larger than expected)
+        // Most reasonable sleep values should be between 0-12 hours
+        const isMilliseconds = item.total_sleep_seconds > 50000 || 
+                               item.deep_sleep_seconds > 20000 || 
+                               item.light_sleep_seconds > 20000 || 
+                               item.rem_sleep_seconds > 20000;
+
+        // Apply appropriate conversion factor
+        const conversionFactor = isMilliseconds ? 3600000 : 3600;
+
+        // Convert values using the correct factor
+        const fixedSleepHours = (item.total_sleep_seconds || 0) / conversionFactor;
+        const fixedDeepSleepHours = (item.deep_sleep_seconds || 0) / conversionFactor;
+        const fixedLightSleepHours = (item.light_sleep_seconds || 0) / conversionFactor;
+        const fixedRemSleepHours = (item.rem_sleep_seconds || 0) / conversionFactor;
+        const fixedAwakeHours = (item.awake_seconds || 0) / conversionFactor;
+        const fixedInBedHours = (item.total_in_bed_seconds || 0) / conversionFactor;
+
+        // Log the conversion for debugging
+        if (isMilliseconds) {
+          console.log(`Converting from milliseconds for date ${item.date}:`);
+          console.log(`Sleep hours adjusted from ${sleepHours} to ${fixedSleepHours}`);
+          console.log(`Using conversion factor: ${conversionFactor}`);
+        }
+        
+        // Add additional logging for debugging
+        if (fixedSleepHours !== sleepHours) {
+          console.log(`Sleep hours fixed from ${sleepHours} to ${fixedSleepHours} for date ${item.date}`);
+        }
 
         // Format date as MM/DD for display
         let formattedDate;
@@ -792,12 +828,12 @@ const BiometricsDashboard = ({ username }) => {
           date: formattedDate, // Use formatted date for display
 
           // Sleep metrics (in hours)
-          sleep_hours: roundToTwo(sleepHours),
-          deep_sleep: roundToTwo(deepSleepHours),
-          light_sleep: roundToTwo(lightSleepHours),
-          rem_sleep: roundToTwo(remSleepHours),
-          awake_time: roundToTwo(awakeHours),
-          inBed_time: roundToTwo(inBedHours),
+          sleep_hours: roundToTwo(fixedSleepHours),
+          deep_sleep: roundToTwo(fixedDeepSleepHours),
+          light_sleep: roundToTwo(fixedLightSleepHours),
+          rem_sleep: roundToTwo(fixedRemSleepHours),
+          awake_time: roundToTwo(fixedAwakeHours),
+          inBed_time: roundToTwo(fixedInBedHours),
 
           // Heart rate metrics (rounded to 2 decimal places)
           resting_heart_rate: roundToTwo(item.resting_heart_rate || 0),
@@ -1684,9 +1720,9 @@ const BiometricsDashboard = ({ username }) => {
           <BarChart data={data}>
             <CartesianGrid strokeDasharray="3 3" />
             <XAxis dataKey="date" />
-            <YAxis domain={[0, 'dataMax + 2']} />
-            <Tooltip />
-            <Bar dataKey="sleep_hours" name="Sleep Hours" fill="#3498db" />
+            <YAxis yAxisId="left" domain={[0, 'dataMax + 2']} tickFormatter={(value) => `${value}h`} />
+            <Tooltip formatter={(value) => [`${value} hours`, 'Sleep']} />
+            <Bar yAxisId="left" dataKey="sleep_hours" name="Sleep Hours" fill="#3498db" />
           </BarChart>
         )
       },
@@ -1722,35 +1758,45 @@ const BiometricsDashboard = ({ username }) => {
           const whoopData = getSourceSpecificData(data, 'whoop');
           const garminData = getSourceSpecificData(data, 'garmin');
           
+          // Check if each source has actual sleep data
+          const hasWhoopSleepData = whoopData.some(item => item.sleep_hours > 0);
+          const hasGarminSleepData = garminData.some(item => item.sleep_hours > 0);
+          
           // Combine data into a single format for the chart
           const combinedData = [];
           
-          // Process all unique dates
-          const allDates = [...new Set([
-            ...whoopData.map(item => item.date),
-            ...garminData.map(item => item.date)
-          ])].sort();
+          // Process all unique dates from sources that have data
+          const datesToInclude = [];
+          if (hasWhoopSleepData) datesToInclude.push(...whoopData.map(item => item.date));
+          if (hasGarminSleepData) datesToInclude.push(...garminData.map(item => item.date));
+          
+          const allDates = [...new Set(datesToInclude)].sort();
           
           allDates.forEach(date => {
-            const whoopItem = whoopData.find(item => item.date === date);
-            const garminItem = garminData.find(item => item.date === date);
+            const dataPoint = { date };
             
-            combinedData.push({
-              date,
-              'whoop_sleep': whoopItem?.sleep_hours || 0,
-              'garmin_sleep': garminItem?.sleep_hours || 0
-            });
+            if (hasWhoopSleepData) {
+              const whoopItem = whoopData.find(item => item.date === date);
+              if (whoopItem) dataPoint.whoop_sleep = whoopItem.sleep_hours || 0;
+            }
+            
+            if (hasGarminSleepData) {
+              const garminItem = garminData.find(item => item.date === date);
+              if (garminItem) dataPoint.garmin_sleep = garminItem.sleep_hours || 0;
+            }
+            
+            combinedData.push(dataPoint);
           });
           
           return (
             <BarChart data={combinedData}>
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis dataKey="date" />
-              <YAxis domain={[0, 'dataMax + 2']} />
-              <Tooltip />
+              <YAxis yAxisId="left" domain={[0, 'dataMax + 2']} tickFormatter={(value) => `${value}h`} />
+              <Tooltip formatter={(value) => [`${value} hours`, null]} />
               <Legend />
-              <Bar dataKey="whoop_sleep" name="WHOOP Sleep (hrs)" fill="#9b59b6" />
-              <Bar dataKey="garmin_sleep" name="Garmin Sleep (hrs)" fill="#3498db" />
+              {hasWhoopSleepData && <Bar yAxisId="left" dataKey="whoop_sleep" name="WHOOP Sleep (hrs)" fill="#9b59b6" />}
+              {hasGarminSleepData && <Bar yAxisId="left" dataKey="garmin_sleep" name="Garmin Sleep (hrs)" fill="#3498db" />}
             </BarChart>
           );
         }
@@ -3476,33 +3522,50 @@ const BiometricsDashboard = ({ username }) => {
                           )}
                           
                           <Grid item xs={12}>
-                            <Card sx={{ p: 2 }}>
-                              <Typography variant="h6" gutterBottom>Sleep Duration</Typography>
-                              {console.log('Sleep Duration Chart Data:', filteredData.map(item => ({
-                                date: item.date,
-                                total_sleep_seconds: item.total_sleep_seconds,
-                                sleep_hours: item.sleep_hours,
-                                deep_sleep: item.deep_sleep,
-                                light_sleep: item.light_sleep,
-                                rem_sleep: item.rem_sleep,
-                                awake_time: item.awake_time,
-                                inBed_time: item.inBed_time,
-                                total_in_bed_seconds: item.total_in_bed_seconds
-                              })))}
-                              <ResponsiveContainer width="100%" height={300}>
-                                <BarChart data={filteredData}>
-                                  <CartesianGrid strokeDasharray="3 3" />
-                                  <XAxis dataKey="date" />
-                                  <YAxis domain={[0, 'dataMax + 2']} />
-                                  <Tooltip />
-                                  <Legend />
-                                  <Bar dataKey="sleep_hours" name="Total Sleep" fill="#8e44ad" />
-                                  <Bar dataKey="deep_sleep" name="Deep Sleep" fill="#2c3e50" />
-                                  <Bar dataKey="light_sleep" name="Light Sleep" fill="#16a085" />
-                                  <Bar dataKey="rem_sleep" name="REM Sleep" fill="#3498db" />
-                                  <Bar dataKey="awake_time" name="Awake Time" fill="#e74c3c" />
+                            <Card sx={{ p: 2, boxShadow: '0 4px 20px rgba(0,0,0,0.1)', borderRadius: '12px' }}>
+                              <Typography variant="h6" sx={{ mb: 2, fontWeight: 600 }}>Sleep Duration</Typography>
+                              <ResponsiveContainer width="100%" height={350}>
+                                <BarChart 
+                                  data={filteredData} 
+                                  margin={{ top: 10, right: 30, left: 20, bottom: 30 }}
+                                  barSize={20}
+                                  barGap={2}
+                                >
+                                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.1)" />
+                                  <XAxis 
+                                    dataKey="date" 
+                                    axisLine={{ stroke: '#e0e0e0' }}
+                                    tickLine={false}
+                                  />
+                                  <YAxis 
+                                    yAxisId="left"
+                                    tickFormatter={(value) => `${value}h`}
+                                    domain={[0, dataMax => Math.ceil(dataMax * 1.1)]}
+                                    axisLine={{ stroke: '#e0e0e0' }}
+                                    tickLine={false}
+                                  />
+                                  <Tooltip 
+                                    formatter={(value) => [`${value} hours`, null]}
+                                    labelFormatter={(label) => `Date: ${label}`}
+                                    contentStyle={{ 
+                                      backgroundColor: 'rgba(255, 255, 255, 0.9)', 
+                                      borderRadius: '8px', 
+                                      boxShadow: '0 4px 20px rgba(0,0,0,0.15)',
+                                      border: 'none',
+                                      padding: '10px'
+                                    }}
+                                  />
+                                  <Legend 
+                                    verticalAlign="bottom" 
+                                    wrapperStyle={{ paddingTop: '15px' }}
+                                  />
+                                  <Bar yAxisId="left" dataKey="sleep_hours" name="Sleep Hours" fill="#3498db" />
+                                  <Bar yAxisId="left" dataKey="deep_sleep" name="Deep Sleep" fill="#2c3e50" radius={[4, 4, 0, 0]} />
+                                  <Bar yAxisId="left" dataKey="light_sleep" name="Light Sleep" fill="#16a085" radius={[4, 4, 0, 0]} />
+                                  <Bar yAxisId="left" dataKey="rem_sleep" name="REM Sleep" fill="#3498db" radius={[4, 4, 0, 0]} />
+                                  <Bar yAxisId="left" dataKey="awake_time" name="Awake Time" fill="#e74c3c" radius={[4, 4, 0, 0]} />
                                   {filteredData.some(item => item.inBed_time > 0) && (
-                                    <Bar dataKey="inBed_time" name="Total In Bed" fill="#34495e" />
+                                    <Bar yAxisId="left" dataKey="inBed_time" name="Total In Bed" fill="#34495e" radius={[4, 4, 0, 0]} />
                                   )}
                                 </BarChart>
                               </ResponsiveContainer>

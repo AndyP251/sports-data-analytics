@@ -186,22 +186,43 @@ def sync_biometric_data(request):
         athlete = request.user.athlete
         active_sources = []
         
+        # Get data from request body
+        try:
+            body_data = json.loads(request.body.decode('utf-8'))
+            source = body_data.get('source')
+            force_refresh = body_data.get('force_refresh', False)
+            logger.info(f"Sync requested with source={source}, force_refresh={force_refresh}")
+        except json.JSONDecodeError:
+            source = None
+            force_refresh = False
+            logger.info("No body data provided, using defaults")
+        
         # Check for active sources directly from credentials
         if hasattr(athlete, 'garmin_credentials'):
             active_sources.append('garmin')
             
         if hasattr(athlete, 'whoop_credentials'):
             active_sources.append('whoop')
-            
-            if not active_sources:
+        
+        if not active_sources:
+            return JsonResponse({
+                'success': False,
+                'error': 'No active sources found'
+            }, status=400)
+        
+        # Filter sources if a specific one was requested
+        if source:
+            if source in active_sources:
+                active_sources = [source]
+            else:
                 return JsonResponse({
                     'success': False,
-                    'error': 'No active sources found'
+                    'error': f'Source {source} is not active'
                 }, status=400)
 
-        # Initialize sync service and sync data
+        # Initialize sync service and sync data with force_refresh parameter
         sync_service = DataSyncService(athlete)
-        success = sync_service.sync_specific_sources(active_sources)
+        success = sync_service.sync_specific_sources(active_sources, force_refresh=force_refresh)
         
         # Include source-specific error messages if available
         source_errors = {}

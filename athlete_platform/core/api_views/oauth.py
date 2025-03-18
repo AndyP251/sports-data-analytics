@@ -50,30 +50,24 @@ class WhoopOAuthView(WhoopOAuthBaseView):
         logger.debug(f"WHOOP OAuth Settings - Client Secret exists: {bool(self.client_secret)}")
         logger.debug(f"WHOOP OAuth Settings - Redirect URI: {self.redirect_uri}")
 
-        # Check if the client provided a state parameter
-        client_state = request.GET.get('clientState')
-        if client_state:
-            logger.debug(f"Using client-provided state: {client_state}")
-            state = client_state
-        else:
-            # Generate a random state for CSRF protection
-            import secrets
-            state = secrets.token_urlsafe(16)
+        # Generate a state parameter that is exactly 8 characters as required by WHOOP
+        import secrets
+        import string
+        # Create an 8-character state (WHOOP requirement)
+        state = ''.join(secrets.choice(string.ascii_letters + string.digits) for _ in range(8))
             
         # Store the state in session
         request.session['oauth_state'] = state
         
-        # Use OAuth2Session to create the authorization URL according to spec
-        oauth = OAuth2Session(
-            client_id=self.client_id,
-            redirect_uri=self.redirect_uri,
-            scope=self.scope
-        )
-        
-        # Let the library properly construct the URL with all needed parameters
-        authorization_url, _ = oauth.authorization_url(
-            self.auth_url,
-            state=state,
+        # Manually construct the authorization URL to avoid CORS issues
+        # This bypasses the library's URL construction which might be causing the CORS error
+        authorization_url = (
+            f"{self.auth_url}?"
+            f"client_id={self.client_id}&"
+            f"redirect_uri={self.redirect_uri}&"
+            f"response_type=code&"
+            f"scope={self.scope}&"
+            f"state={state}"
         )
 
         logger.debug(f"Redirecting to WHOOP authorization URL: {authorization_url}")

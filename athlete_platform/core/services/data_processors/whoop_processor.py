@@ -58,7 +58,7 @@ class WhoopProcessor(BaseDataProcessor):
             recovery_data = daily_stats.get('recovery_data', {}) or {}
             cycle_data = daily_stats.get('cycle_data', {}) or {}
             workout_data = daily_stats.get('workout_data', []) or []
-            user_profile = daily_stats.get('user_profile', {}) or {}
+            user_profile = raw_data.get('user_profile', {}) or {}
             
             # If no recovery data in main structure, try to get from cycle data
             if not recovery_data and cycle_data:
@@ -66,7 +66,7 @@ class WhoopProcessor(BaseDataProcessor):
             
             sleep_score = self._safe_get(sleep_data, 'score', {})
             sleep_summary = self._safe_get(sleep_score, 'stage_summary', {})
-            sleep_needed = self._safe_get(sleep_data, 'sleep_needed', {})
+            sleep_needed = self._safe_get(sleep_score, 'sleep_needed', {})
             cycle_score = self._safe_get(cycle_data, 'score', {})
             cycle_recovery = self._safe_get(cycle_data, 'recovery', {})
 
@@ -82,12 +82,12 @@ class WhoopProcessor(BaseDataProcessor):
                 # Score / Summary Sleep Metrics
                 'sleep_disturbances': self._safe_get(sleep_summary, 'disturbance_count', 0),
                 'sleep_cycle_count': self._safe_get(sleep_summary, 'sleep_cycle_count', 0),
-                'deep_sleep_seconds': self._safe_get(sleep_needed, 'total_slow_wave_sleep_time_milli', 0),
-                'rem_sleep_seconds': self._safe_get(sleep_needed, 'total_rem_sleep_time_milli', 0),
-                'light_sleep_seconds': self._safe_get(sleep_needed, 'total_light_sleep_time_milli', 0),
-                'no_data_seconds': self._safe_get(sleep_needed, 'total_no_data_time_milli', 0),
-                'awake_seconds': self._safe_get(sleep_needed, 'total_awake_time_milli', 0),
-                'total_in_bed_seconds': self._safe_get(sleep_needed, 'total_in_bed_time_milli', 0),
+                'deep_sleep_seconds': self._safe_get(sleep_summary, 'total_slow_wave_sleep_time_milli', 0),
+                'rem_sleep_seconds': self._safe_get(sleep_summary, 'total_rem_sleep_time_milli', 0),
+                'light_sleep_seconds': self._safe_get(sleep_summary, 'total_light_sleep_time_milli', 0),
+                'no_data_seconds': self._safe_get(sleep_summary, 'total_no_data_time_milli', 0),
+                'awake_seconds': self._safe_get(sleep_summary, 'total_awake_time_milli', 0),
+                'total_in_bed_seconds': self._safe_get(sleep_summary, 'total_in_bed_time_milli', 0),
                 # Score / Sleep Needed
                 'baseline_sleep_seconds': self._safe_get(sleep_needed, 'baseline_milli', 0),
                 'need_from_sleep_debt_seconds': self._safe_get(sleep_needed, 'need_from_sleep_debt_milli', 0),
@@ -104,9 +104,9 @@ class WhoopProcessor(BaseDataProcessor):
                 # Cycle Data
                 'start_time': self._safe_get(cycle_data, 'start', str(datetime.now())),
                 'strain': self._safe_get(cycle_score, 'strain', 0),
-                'kilojoules': self._safe_get(cycle_data, 'kilojoule', 0),
-                'average_heart_rate': self._safe_get(cycle_data, 'average_heart_rate', 0),
-                'max_heart_rate': self._safe_get(cycle_data, 'max_heart_rate', 0),
+                'kilojoules': self._safe_get(cycle_score, 'kilojoule', 0),
+                'average_heart_rate': self._safe_get(cycle_score, 'average_heart_rate', 0),
+                'max_heart_rate': self._safe_get(cycle_score, 'max_heart_rate', 0),
                 # Cycle / Recovery
                 'user_calibrating_cycle': self._safe_get(cycle_recovery, 'user_calibrating', False),
                 'recovery_score': self._safe_get(cycle_recovery, 'recovery_score', 0),

@@ -70,10 +70,17 @@ class WhoopOAuthView(WhoopOAuthBaseView):
             scope=self.scope
         )
         
+        # Add specific headers required by WHOOP
+        headers = {
+            'Origin': 'https://idpv2.prod.whoop.com',
+            'Referer': 'https://idpv2.prod.whoop.com/'
+        }
+        
         # Let the library properly construct the URL with all needed parameters
         authorization_url, _ = oauth.authorization_url(
             self.auth_url,
             state=state,
+            headers=headers
         )
 
         logger.debug(f"Redirecting to WHOOP authorization URL: {authorization_url}")

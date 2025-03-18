@@ -122,7 +122,7 @@ function PricingPage() {
                 <div className="card-header">
                   <h3>Team Standard</h3>
                   <div className="price">
-                    <span className="amount">${activeTab === 'annual' ? '2,000' : '200'}</span>
+                    <span className="amount">${activeTab === 'annual' ? '1,800' : '200'}</span>
                     <span className="period">/{activeTab === 'annual' ? 'year' : 'month'}</span>
                   </div>
                   <p className="subtitle">Perfect for teams up to 20 athletes</p>

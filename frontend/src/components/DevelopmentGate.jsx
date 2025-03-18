@@ -9,6 +9,13 @@ const DevelopmentGate = () => {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
+    // Check if we should clear the dev access (for example, after logout)
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.has('force_clear')) {
+      console.log('Clearing development access gate cached token.');
+      localStorage.removeItem('devAccess');
+    }
+
     const getCsrfToken = async () => {
       try {
         setIsLoading(true);

@@ -37,6 +37,31 @@ const Login = ({ setIsAuthenticated }) => {
   const [loadingTeams, setLoadingTeams] = useState(false)
 
   useEffect(() => {
+    // Check if the user is actually authenticated on the server
+    const verifyAuth = async () => {
+      try {
+        const response = await fetch('/api/verify-auth/', {
+          method: 'GET',
+          credentials: 'include',
+        });
+        
+        if (!response.ok) {
+          // If server says user is not authenticated, clear local storage
+          localStorage.removeItem('isAuthenticated');
+          localStorage.removeItem('isCoachAuthenticated');
+          setIsAuthenticated(false);
+        }
+      } catch (error) {
+        console.error("Error verifying authentication:", error);
+        // On error, assume not authenticated
+        localStorage.removeItem('isAuthenticated');
+        localStorage.removeItem('isCoachAuthenticated');
+        setIsAuthenticated(false);
+      }
+    };
+    
+    verifyAuth();
+    
     // Get CSRF token on component mount
     const getCsrfToken = async () => {
       try {

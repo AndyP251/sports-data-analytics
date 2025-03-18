@@ -934,9 +934,20 @@ const BiometricsDashboard = ({ username }) => {
 
       if (response.ok) {
         // Clear all auth-related data
-        localStorage.clear();  // Or specifically remove items you want to clear
-        // Redirect to the homepage instead of login
-        window.location.href = '/';  // Root URL is the homepage
+        localStorage.removeItem('isAuthenticated');
+        localStorage.removeItem('isCoachAuthenticated');
+        localStorage.removeItem('devAccess'); // Remove development gate access
+        
+        // Clear session storage
+        sessionStorage.clear();
+        
+        // Clear cookies by setting their expiration to past date
+        document.cookie.split(";").forEach(function(c) {
+          document.cookie = c.replace(/^ +/, "").replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/");
+        });
+        
+        // Redirect to the homepage with force_clear parameter
+        window.location.href = '/?force_clear=1';  // Root URL is the homepage
       } else {
         console.error('Logout failed:', response.status, response.statusText);
         const errorMsg = 'Logout failed';

@@ -204,19 +204,45 @@ const CoachDashboard = () => {
 
   const handleLogout = async () => {
     try {
+      // Get CSRF token if available
+      const csrfToken = document.cookie.split('; ')
+        .find(row => row.startsWith('csrftoken='))
+        ?.split('=')[1];
+
+      const headers = {
+        'Content-Type': 'application/json',
+      };
+
+      if (csrfToken) {
+        headers['X-CSRFToken'] = csrfToken;
+        headers['X-CSRF-Token'] = csrfToken;
+      }
+
       const response = await fetch('/api/logout/', {
         method: 'POST',
         credentials: 'include',
-        headers: {
-          'Content-Type': 'application/json',
-        }
+        headers: headers,
+        body: JSON.stringify({})  // Empty body but needed for POST
       });
       
       if (response.ok) {
-        // Redirect to login page after successful logout
-        window.location.href = '/login';
+        // Clear all auth-related data
+        localStorage.removeItem('isAuthenticated');
+        localStorage.removeItem('isCoachAuthenticated');
+        localStorage.removeItem('devAccess'); // Remove development gate access
+        
+        // Clear session storage
+        sessionStorage.clear();
+        
+        // Clear cookies by setting their expiration to past date
+        document.cookie.split(";").forEach(function(c) {
+          document.cookie = c.replace(/^ +/, "").replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/");
+        });
+        
+        // Redirect to the homepage with force_clear parameter
+        window.location.href = '/?force_clear=1';
       } else {
-        console.error('Logout failed');
+        console.error('Logout failed:', response.status, response.statusText);
       }
     } catch (error) {
       console.error('Error during logout:', error);

@@ -76,6 +76,7 @@ import AccountCircleIcon from '@mui/icons-material/AccountCircle';
 import AddIcon from '@mui/icons-material/Add';
 import CloseIcon from '@mui/icons-material/Close';
 import ArrowForwardIosIcon from '@mui/icons-material/ArrowForwardIos';
+import RefreshIcon from '@mui/icons-material/Refresh';
 
 // Modern, professional color palette
 const colors = {
@@ -642,7 +643,7 @@ const BiometricsDashboard = ({ username }) => {
     }
   };
 
-  const syncData = async (specificSource = null) => {
+  const syncData = async (specificSource = null, forceRefresh = false) => {
     // Safely validate the specificSource parameter
     const isValidSource = specificSource && 
                          (typeof specificSource === 'string' || 
@@ -663,9 +664,16 @@ const BiometricsDashboard = ({ username }) => {
                          (typeof specificSource === 'string' ? specificSource : specificSource.id) :
                          null;
       
-      const requestBody = sourceToSync ? { source: sourceToSync } : {};
+      const requestBody = {
+        ...(sourceToSync ? { source: sourceToSync } : {}),
+        force_refresh: forceRefresh
+      };
       
       console.log('Syncing with request body:', requestBody);
+      
+      if (forceRefresh) {
+        addSyncMessage('Performing force refresh - this may take longer than a normal sync...', 'info');
+      }
       
       const response = await fetch('/api/biometrics/sync/', {
         method: 'POST',
@@ -767,6 +775,43 @@ const BiometricsDashboard = ({ username }) => {
         const lightSleepHours = (item.light_sleep_seconds || 0) / 3600;
         const remSleepHours = (item.rem_sleep_seconds || 0) / 3600;
         const awakeHours = (item.awake_seconds || 0) / 3600;
+        const inBedHours = (item.total_in_bed_seconds || 0) / 3600;
+        
+        // Debug unusual sleep values
+        if (sleepHours > 24) {
+          console.warn(`Unusually high sleep hours detected: ${sleepHours} hours (${item.total_sleep_seconds} seconds) for date ${item.date}`);
+          console.log('Raw item data:', item);
+        }
+        
+        // Determine if the data is in milliseconds (values would be ~1000x larger than expected)
+        // Most reasonable sleep values should be between 0-12 hours
+        const isMilliseconds = item.total_sleep_seconds > 50000 || 
+                               item.deep_sleep_seconds > 20000 || 
+                               item.light_sleep_seconds > 20000 || 
+                               item.rem_sleep_seconds > 20000;
+
+        // Apply appropriate conversion factor
+        const conversionFactor = isMilliseconds ? 3600000 : 3600;
+
+        // Convert values using the correct factor
+        const fixedSleepHours = (item.total_sleep_seconds || 0) / conversionFactor;
+        const fixedDeepSleepHours = (item.deep_sleep_seconds || 0) / conversionFactor;
+        const fixedLightSleepHours = (item.light_sleep_seconds || 0) / conversionFactor;
+        const fixedRemSleepHours = (item.rem_sleep_seconds || 0) / conversionFactor;
+        const fixedAwakeHours = (item.awake_seconds || 0) / conversionFactor;
+        const fixedInBedHours = (item.total_in_bed_seconds || 0) / conversionFactor;
+
+        // Log the conversion for debugging
+        if (isMilliseconds) {
+          console.log(`Converting from milliseconds for date ${item.date}:`);
+          console.log(`Sleep hours adjusted from ${sleepHours} to ${fixedSleepHours}`);
+          console.log(`Using conversion factor: ${conversionFactor}`);
+        }
+        
+        // Add additional logging for debugging
+        if (fixedSleepHours !== sleepHours) {
+          console.log(`Sleep hours fixed from ${sleepHours} to ${fixedSleepHours} for date ${item.date}`);
+        }
 
         // Format date as MM/DD for display
         let formattedDate;
@@ -783,11 +828,12 @@ const BiometricsDashboard = ({ username }) => {
           date: formattedDate, // Use formatted date for display
 
           // Sleep metrics (in hours)
-          sleep_hours: roundToTwo(sleepHours),
-          deep_sleep: roundToTwo(deepSleepHours),
-          light_sleep: roundToTwo(lightSleepHours),
-          rem_sleep: roundToTwo(remSleepHours),
-          awake_time: roundToTwo(awakeHours),
+          sleep_hours: roundToTwo(fixedSleepHours),
+          deep_sleep: roundToTwo(fixedDeepSleepHours),
+          light_sleep: roundToTwo(fixedLightSleepHours),
+          rem_sleep: roundToTwo(fixedRemSleepHours),
+          awake_time: roundToTwo(fixedAwakeHours),
+          inBed_time: roundToTwo(fixedInBedHours),
 
           // Heart rate metrics (rounded to 2 decimal places)
           resting_heart_rate: roundToTwo(item.resting_heart_rate || 0),
@@ -799,6 +845,9 @@ const BiometricsDashboard = ({ username }) => {
           distance: roundToTwo((item.total_distance_meters || 0) / 1000), // Convert to km and round
           total_calories: roundToTwo(item.total_calories || 0),
           active_calories: roundToTwo(item.active_calories || 0),
+          
+          // If source is WHOOP, convert kilojoules to calories (1 kilojoule = 0.239 kilocalories)
+          whoop_calories: item.source === 'whoop' && item.kilojoules ? roundToTwo(item.kilojoules * 0.239) : 0,
 
           // Stress metrics
           stress_level: roundToTwo(item.average_stress_level || 0),
@@ -1674,9 +1723,9 @@ const BiometricsDashboard = ({ username }) => {
           <BarChart data={data}>
             <CartesianGrid strokeDasharray="3 3" />
             <XAxis dataKey="date" />
-            <YAxis domain={[0, 'dataMax + 2']} />
-            <Tooltip />
-            <Bar dataKey="sleep_hours" name="Sleep Hours" fill="#3498db" />
+            <YAxis yAxisId="left" domain={[0, 'dataMax + 2']} tickFormatter={(value) => `${value}h`} />
+            <Tooltip formatter={(value) => [`${value} hours`, 'Sleep']} />
+            <Bar yAxisId="left" dataKey="sleep_hours" name="Sleep Hours" fill="#3498db" />
           </BarChart>
         )
       },
@@ -1712,35 +1761,45 @@ const BiometricsDashboard = ({ username }) => {
           const whoopData = getSourceSpecificData(data, 'whoop');
           const garminData = getSourceSpecificData(data, 'garmin');
           
+          // Check if each source has actual sleep data
+          const hasWhoopSleepData = whoopData.some(item => item.sleep_hours > 0);
+          const hasGarminSleepData = garminData.some(item => item.sleep_hours > 0);
+          
           // Combine data into a single format for the chart
           const combinedData = [];
           
-          // Process all unique dates
-          const allDates = [...new Set([
-            ...whoopData.map(item => item.date),
-            ...garminData.map(item => item.date)
-          ])].sort();
+          // Process all unique dates from sources that have data
+          const datesToInclude = [];
+          if (hasWhoopSleepData) datesToInclude.push(...whoopData.map(item => item.date));
+          if (hasGarminSleepData) datesToInclude.push(...garminData.map(item => item.date));
+          
+          const allDates = [...new Set(datesToInclude)].sort();
           
           allDates.forEach(date => {
-            const whoopItem = whoopData.find(item => item.date === date);
-            const garminItem = garminData.find(item => item.date === date);
+            const dataPoint = { date };
             
-            combinedData.push({
-              date,
-              'whoop_sleep': whoopItem?.sleep_hours || 0,
-              'garmin_sleep': garminItem?.sleep_hours || 0
-            });
+            if (hasWhoopSleepData) {
+              const whoopItem = whoopData.find(item => item.date === date);
+              if (whoopItem) dataPoint.whoop_sleep = whoopItem.sleep_hours || 0;
+            }
+            
+            if (hasGarminSleepData) {
+              const garminItem = garminData.find(item => item.date === date);
+              if (garminItem) dataPoint.garmin_sleep = garminItem.sleep_hours || 0;
+            }
+            
+            combinedData.push(dataPoint);
           });
           
           return (
             <BarChart data={combinedData}>
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis dataKey="date" />
-              <YAxis domain={[0, 'dataMax + 2']} />
-              <Tooltip />
+              <YAxis yAxisId="left" domain={[0, 'dataMax + 2']} tickFormatter={(value) => `${value}h`} />
+              <Tooltip formatter={(value) => [`${value} hours`, null]} />
               <Legend />
-              <Bar dataKey="whoop_sleep" name="WHOOP Sleep (hrs)" fill="#9b59b6" />
-              <Bar dataKey="garmin_sleep" name="Garmin Sleep (hrs)" fill="#3498db" />
+              {hasWhoopSleepData && <Bar yAxisId="left" dataKey="whoop_sleep" name="WHOOP Sleep (hrs)" fill="#9b59b6" />}
+              {hasGarminSleepData && <Bar yAxisId="left" dataKey="garmin_sleep" name="Garmin Sleep (hrs)" fill="#3498db" />}
             </BarChart>
           );
         }
@@ -2064,30 +2123,39 @@ const BiometricsDashboard = ({ username }) => {
               <Radar 
                 name="Sleep Efficiency" 
                 dataKey="sleep_efficiency" 
-                stroke="#8884d8" 
-                fill="#8884d8" 
-                fillOpacity={0.6} 
+                stroke="#3498db" 
+                fill="#3498db" 
+                fillOpacity={0.4} 
               />
               {recentData[0]?.sleep_performance && (
                 <Radar 
                   name="Sleep Performance" 
                   dataKey="sleep_performance" 
-                  stroke="#82ca9d" 
-                  fill="#82ca9d" 
-                  fillOpacity={0.6} 
+                  stroke="#8e44ad" 
+                  fill="#8e44ad" 
+                  fillOpacity={0.4} 
+                />
+              )}
+              {recentData[0]?.sleep_consistency && (
+                <Radar 
+                  name="Sleep Consistency" 
+                  dataKey="sleep_consistency" 
+                  stroke="#2ecc71" 
+                  fill="#2ecc71" 
+                  fillOpacity={0.4} 
                 />
               )}
               {recentData[0]?.rem_sleep_percentage && (
                 <Radar 
                   name="REM Sleep %" 
                   dataKey="rem_sleep_percentage" 
-                  stroke="#ffc658" 
-                  fill="#ffc658" 
-                  fillOpacity={0.6} 
+                  stroke="#f39c12" 
+                  fill="#f39c12" 
+                  fillOpacity={0.4} 
                 />
               )}
               <Legend />
-              <Tooltip />
+              <Tooltip formatter={(value) => [`${value}%`, null]} />
             </RadarChart>
           );
         }
@@ -3092,7 +3160,7 @@ const BiometricsDashboard = ({ username }) => {
                       <Button
                         variant="contained"
                         color="primary"
-                        onClick={syncData}
+                        onClick={() => syncData(null, false)}
                         disabled={loading}
                         startIcon={<SyncIcon />}
                         className="sync-button"
@@ -3100,6 +3168,20 @@ const BiometricsDashboard = ({ username }) => {
                       >
                         Sync Latest Data
                       </Button>
+                      
+                      {devMode && (
+                        <Button
+                          variant="contained"
+                          color="secondary"
+                          onClick={() => syncData(null, true)}
+                          disabled={loading}
+                          startIcon={<RefreshIcon />}
+                          className="force-refresh-button"
+                          sx={{ borderRadius: '30px' }}
+                        >
+                          Force Refresh
+                        </Button>
+                      )}
                       
                       <Button
                         variant="outlined"
@@ -3372,12 +3454,26 @@ const BiometricsDashboard = ({ username }) => {
                       variant="outlined"
                       size="small"
                       startIcon={<SyncIcon />}
-                      onClick={() => syncData(selectedDataSource)}
+                      onClick={() => syncData(selectedDataSource, false)}
                       disabled={loading}
                       sx={{ borderRadius: '8px' }}
                     >
                       Refresh Data
                     </Button>
+                    
+                    {devMode && (
+                      <Button
+                        variant="outlined"
+                        size="small"
+                        color="secondary"
+                        startIcon={<RefreshIcon />}
+                        onClick={() => syncData(selectedDataSource, true)}
+                        disabled={loading}
+                        sx={{ borderRadius: '8px', ml: 1 }}
+                      >
+                        Force Refresh
+                      </Button>
+                    )}
                   </Box>
                   
                   <Box sx={{ 
@@ -3425,31 +3521,144 @@ const BiometricsDashboard = ({ username }) => {
                                   <BarChart data={filteredData}>
                                     <CartesianGrid strokeDasharray="3 3" />
                                     <XAxis dataKey="date" />
-                                    <YAxis domain={[0, 100]} />
-                                    <Tooltip />
+                                    <YAxis yAxisId="left" domain={[0, 100]} tickFormatter={(value) => `${value}%`} />
+                                    <Tooltip formatter={(value) => [`${value}%`, null]} />
                                     <Legend />
-                                    <Bar dataKey="sleep_efficiency" name="Sleep Efficiency" fill="#3498DB" />
-                                    <Bar dataKey="sleep_consistency" name="Sleep Consistency" fill="#F1C40F" />
-                                    <Bar dataKey="sleep_performance" name="Sleep Performance" fill="#27AE60" />
+                                    <Bar yAxisId="left" dataKey="sleep_efficiency" name="Sleep Efficiency" fill="#3498DB" radius={[4, 4, 0, 0]} />
+                                    <Bar yAxisId="left" dataKey="sleep_consistency" name="Sleep Consistency" fill="#2ecc71" radius={[4, 4, 0, 0]} />
+                                    <Bar yAxisId="left" dataKey="sleep_performance" name="Sleep Performance" fill="#8e44ad" radius={[4, 4, 0, 0]} />
                                   </BarChart>
                                 </ResponsiveContainer>
                               </Card>
                             </Grid>
                           )}
                           
-                          <Grid item xs={12}>
-                            <Card sx={{ p: 2 }}>
-                              <Typography variant="h6" gutterBottom>Sleep Duration</Typography>
-                              <ResponsiveContainer width="100%" height={300}>
-                                <BarChart data={filteredData}>
+                          <Grid item xs={12} md={6}>
+                            <Card sx={{ p: 2, boxShadow: '0 4px 20px rgba(0,0,0,0.1)', borderRadius: '12px', height: '100%' }}>
+                              <Typography variant="h6" sx={{ mb: 2, fontWeight: 600 }}>Sleep Composition</Typography>
+                              <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+                                <ResponsiveContainer width="100%" height={280}>
+                                  <PieChart>
+                                    <Pie
+                                      data={[
+                                        { 
+                                          name: 'Deep Sleep', 
+                                          value: filteredData.length > 0 ? filteredData[0].deep_sleep || 0 : 0,
+                                          fill: '#2c3e50'
+                                        },
+                                        { 
+                                          name: 'Light Sleep', 
+                                          value: filteredData.length > 0 ? filteredData[0].light_sleep || 0 : 0,
+                                          fill: '#16a085'
+                                        },
+                                        { 
+                                          name: 'REM Sleep', 
+                                          value: filteredData.length > 0 ? filteredData[0].rem_sleep || 0 : 0,
+                                          fill: '#3498db'
+                                        },
+                                        { 
+                                          name: 'Awake', 
+                                          value: filteredData.length > 0 ? filteredData[0].awake_time || 0 : 0,
+                                          fill: '#e74c3c'
+                                        }
+                                      ]}
+                                      cx="50%"
+                                      cy="50%"
+                                      labelLine={false}
+                                      outerRadius={100}
+                                      innerRadius={60}
+                                      fill="#8884d8"
+                                      dataKey="value"
+                                      nameKey="name"
+                                      label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                                    >
+                                    </Pie>
+                                    <Tooltip formatter={(value) => [`${value.toFixed(1)} hours`, null]} />
+                                  </PieChart>
+                                </ResponsiveContainer>
+                                <Box sx={{ mt: 'auto', textAlign: 'center', pt: 2 }}>
+                                  <Typography variant="subtitle2" color="text.secondary">
+                                    Most recent sleep composition breakdown
+                                  </Typography>
+                                </Box>
+                              </Box>
+                            </Card>
+                          </Grid>
+                          
+                          <Grid item xs={12} md={6}>
+                            <Card sx={{ p: 2, boxShadow: '0 4px 20px rgba(0,0,0,0.1)', borderRadius: '12px', height: '100%' }}>
+                              <Typography variant="h6" sx={{ mb: 2, fontWeight: 600 }}>Sleep Trends</Typography>
+                              <ResponsiveContainer width="100%" height={280}>
+                                <LineChart
+                                  data={filteredData}
+                                  margin={{ top: 10, right: 30, left: 0, bottom: 0 }}
+                                >
                                   <CartesianGrid strokeDasharray="3 3" />
                                   <XAxis dataKey="date" />
-                                  <YAxis />
-                                  <Tooltip />
+                                  <YAxis tickFormatter={(value) => `${value}h`} />
+                                  <Tooltip formatter={(value) => [`${value} hours`, null]} />
                                   <Legend />
-                                  <Bar dataKey="sleep_hours" name="Total Sleep" fill="#8e44ad" />
-                                  <Bar dataKey="deep_sleep" name="Deep Sleep" fill="#2c3e50" />
-                                  <Bar dataKey="rem_sleep" name="REM Sleep" fill="#3498db" />
+                                  <Line 
+                                    type="monotone" 
+                                    dataKey="sleep_hours" 
+                                    name="Total Sleep" 
+                                    stroke="#8e44ad" 
+                                    strokeWidth={2}
+                                    dot={{ r: 4 }} 
+                                  />
+                                  <ReferenceLine y={8} label="Optimal" stroke="#2ecc71" strokeDasharray="3 3" />
+                                  <ReferenceLine y={6} label="Minimum" stroke="#e74c3c" strokeDasharray="3 3" />
+                                </LineChart>
+                              </ResponsiveContainer>
+                            </Card>
+                          </Grid>
+                          
+                          <Grid item xs={12}>
+                            <Card sx={{ p: 2, boxShadow: '0 4px 20px rgba(0,0,0,0.1)', borderRadius: '12px' }}>
+                              <Typography variant="h6" sx={{ mb: 2, fontWeight: 600 }}>Sleep Duration</Typography>
+                              <ResponsiveContainer width="100%" height={350}>
+                                <BarChart 
+                                  data={filteredData} 
+                                  margin={{ top: 10, right: 30, left: 20, bottom: 30 }}
+                                  barSize={20}
+                                  barGap={2}
+                                >
+                                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.1)" />
+                                  <XAxis 
+                                    dataKey="date" 
+                                    axisLine={{ stroke: '#e0e0e0' }}
+                                    tickLine={false}
+                                  />
+                                  <YAxis 
+                                    yAxisId="left"
+                                    tickFormatter={(value) => `${value}h`}
+                                    domain={[0, dataMax => Math.ceil(dataMax * 1.1)]}
+                                    axisLine={{ stroke: '#e0e0e0' }}
+                                    tickLine={false}
+                                  />
+                                  <Tooltip 
+                                    formatter={(value) => [`${value} hours`, null]}
+                                    labelFormatter={(label) => `Date: ${label}`}
+                                    contentStyle={{ 
+                                      backgroundColor: 'rgba(255, 255, 255, 0.9)', 
+                                      borderRadius: '8px', 
+                                      boxShadow: '0 4px 20px rgba(0,0,0,0.15)',
+                                      border: 'none',
+                                      padding: '10px'
+                                    }}
+                                  />
+                                  <Legend 
+                                    verticalAlign="bottom" 
+                                    wrapperStyle={{ paddingTop: '15px' }}
+                                  />
+                                  <Bar yAxisId="left" dataKey="sleep_hours" name="Total Sleep" fill="#8e44ad" radius={[4, 4, 0, 0]} />
+                                  <Bar yAxisId="left" dataKey="deep_sleep" name="Deep Sleep" fill="#2c3e50" radius={[4, 4, 0, 0]} />
+                                  <Bar yAxisId="left" dataKey="light_sleep" name="Light Sleep" fill="#16a085" radius={[4, 4, 0, 0]} />
+                                  <Bar yAxisId="left" dataKey="rem_sleep" name="REM Sleep" fill="#3498db" radius={[4, 4, 0, 0]} />
+                                  <Bar yAxisId="left" dataKey="awake_time" name="Awake Time" fill="#e74c3c" radius={[4, 4, 0, 0]} />
+                                  {filteredData.some(item => item.inBed_time > 0) && (
+                                    <Bar yAxisId="left" dataKey="inBed_time" name="Total In Bed" fill="#34495e" radius={[4, 4, 0, 0]} />
+                                  )}
                                 </BarChart>
                               </ResponsiveContainer>
                             </Card>
@@ -3502,11 +3711,29 @@ const BiometricsDashboard = ({ username }) => {
                                 <AreaChart data={filteredData}>
                                   <CartesianGrid strokeDasharray="3 3" />
                                   <XAxis dataKey="date" />
-                                  <YAxis />
-                                  <Tooltip />
+                                  <YAxis yAxisId="left" />
+                                  <Tooltip formatter={(value, name) => [
+                                    `${Math.round(value)} kcal`, 
+                                    name.includes('WHOOP') ? 'WHOOP Calories' : name
+                                  ]} />
                                   <Legend />
-                                  <Area type="monotone" dataKey="total_calories" name="Total Calories" stroke="#27AE60" fill="#27AE60" fillOpacity={0.3} />
-                                  <Area type="monotone" dataKey="active_calories" name="Active Calories" stroke="#3498DB" fill="#3498DB" fillOpacity={0.3} />
+                                  <Area yAxisId="left" type="monotone" dataKey="total_calories" name="Total Calories" stroke="#27AE60" fill="#27AE60" fillOpacity={0.3} />
+                                  <Area yAxisId="left" type="monotone" dataKey="active_calories" name="Active Calories" stroke="#3498DB" fill="#3498DB" fillOpacity={0.3} />
+                                  
+                                  {/* Only show WHOOP calories if WHOOP is an active source */}
+                                  {activeSources && activeSources.some(source => 
+                                    source.id === 'whoop' || source === 'whoop'
+                                  ) && (
+                                    <Area 
+                                      yAxisId="left"
+                                      type="monotone" 
+                                      dataKey="whoop_calories" 
+                                      name="WHOOP Calories" 
+                                      stroke="#8E44AD" 
+                                      fill="#8E44AD" 
+                                      fillOpacity={0.3} 
+                                    />
+                                  )}
                                 </AreaChart>
                               </ResponsiveContainer>
                             </Card>
@@ -4013,18 +4240,36 @@ const BiometricsDashboard = ({ username }) => {
                             )}
                             
                             <Box sx={{ mt: 3, display: 'flex', justifyContent: 'space-between' }}>
-                              <Button
-                                startIcon={<SyncIcon />}
-                                variant="outlined"
-                                size="small"
-                                onClick={() => syncData(source.id || source)}
-                                sx={{ 
-                                  borderRadius: '20px',
-                                  fontSize: '0.75rem'
-                                }}
-                              >
-                                Sync
-                              </Button>
+                              <Box sx={{ display: 'flex', gap: 1 }}>
+                                <Button
+                                  startIcon={<SyncIcon />}
+                                  variant="outlined"
+                                  size="small"
+                                  onClick={() => syncData(source.id || source, false)}
+                                  sx={{ 
+                                    borderRadius: '20px',
+                                    fontSize: '0.75rem'
+                                  }}
+                                >
+                                  Sync
+                                </Button>
+                                
+                                {devMode && (
+                                  <Button
+                                    startIcon={<RefreshIcon />}
+                                    variant="outlined"
+                                    size="small"
+                                    color="secondary"
+                                    onClick={() => syncData(source.id || source, true)}
+                                    sx={{ 
+                                      borderRadius: '20px',
+                                      fontSize: '0.75rem'
+                                    }}
+                                  >
+                                    Force
+                                  </Button>
+                                )}
+                              </Box>
                               
                               <Button
                                 startIcon={<DeleteOutlineIcon />}

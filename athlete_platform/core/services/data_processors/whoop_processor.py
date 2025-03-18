@@ -202,6 +202,14 @@ class WhoopProcessor(BaseDataProcessor):
                 date_str = date_value.isoformat().split('T')[0]  # Get just the date part
             else:
                 date_str = str(date_value)
+
+            # Calculate total sleep seconds
+            deep_sleep_seconds = self._safe_get(processed_data, 'deep_sleep_seconds', 0)
+            rem_sleep_seconds = self._safe_get(processed_data, 'rem_sleep_seconds', 0)
+            light_sleep_seconds = self._safe_get(processed_data, 'light_sleep_seconds', 0)
+            awake_seconds = self._safe_get(processed_data, 'awake_seconds', 0)
+            total_sleep_seconds = deep_sleep_seconds + rem_sleep_seconds + light_sleep_seconds - awake_seconds
+
             
             # Extract values from processed data with sensible defaults
             fields_map = {
@@ -212,9 +220,10 @@ class WhoopProcessor(BaseDataProcessor):
                 'respiratory_rate': self._safe_get(processed_data, 'respiratory_rate', 0),
                 'sleep_disturbances': self._safe_get(processed_data, 'sleep_disturbances', 0),
                 'sleep_cycle_count': self._safe_get(processed_data, 'sleep_cycle_count', 0),
-                'deep_sleep_seconds': self._safe_get(processed_data, 'deep_sleep_seconds', 0),
-                'rem_sleep_seconds': self._safe_get(processed_data, 'rem_sleep_seconds', 0),
-                'light_sleep_seconds': self._safe_get(processed_data, 'light_sleep_seconds', 0),
+                'total_sleep_seconds': total_sleep_seconds,
+                'deep_sleep_seconds': deep_sleep_seconds,
+                'rem_sleep_seconds': rem_sleep_seconds,
+                'light_sleep_seconds': light_sleep_seconds,
                 'no_data_seconds': self._safe_get(processed_data, 'no_data_seconds', 0),
                 'awake_seconds': self._safe_get(processed_data, 'awake_seconds', 0),
                 'total_in_bed_seconds': self._safe_get(processed_data, 'total_in_bed_seconds', 0),

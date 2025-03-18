@@ -92,23 +92,42 @@ class WhoopCollector(BaseDataCollector):
 
     def make_request(self, method: str, url: str, params: dict = None) -> Optional[Dict]:
         """Make an authenticated request to the WHOOP API"""
-        try:
-            response = requests.request(
-                method,
-                url,
-                headers=self._get_headers(),
-                params=params
-            )
-            
-            if response.status_code == 200:
-                return response.json()
-            else:
-                logger.error(f"API request failed: {response.status_code} - {response.text}")
+        max_retries = 3
+        retry_delay = 2  # Initial delay in seconds
+        retry_count = 0
+        
+        while retry_count <= max_retries:
+            try:
+                response = requests.request(
+                    method,
+                    url,
+                    headers=self._get_headers(),
+                    params=params
+                )
+                
+                if response.status_code == 200:
+                    return response.json()
+                elif response.status_code == 429:
+                    # Rate limit hit, implement backoff
+                    retry_count += 1
+                    if retry_count <= max_retries:
+                        wait_time = retry_delay * (2 ** (retry_count - 1))  # Exponential backoff
+                        logger.warning(f"Rate limit hit (429). Retrying in {wait_time} seconds. Attempt {retry_count}/{max_retries}")
+                        import time
+                        time.sleep(wait_time)
+                        continue
+                    else:
+                        logger.error(f"Rate limit exceeded after {max_retries} retries.")
+                        return None
+                else:
+                    logger.error(f"API request failed: {response.status_code} - {response.text}")
+                    return None
+                
+            except Exception as e:
+                logger.error(f"Error making API request: {e}")
                 return None
-            
-        except Exception as e:
-            logger.error(f"Error making API request: {e}")
-            return None
+        
+        return None
 
     def _get_all_records(self, url: str, params: dict = None) -> List[Dict]:
         """Get all records with pagination support"""
@@ -227,6 +246,7 @@ class WhoopCollector(BaseDataCollector):
     def _get_detailed_workouts(self, workout_records: List[Dict]) -> List[Dict]:
         """Get detailed data for each workout"""
         detailed_workouts = []
+        
         for workout in workout_records:
             if workout_id := workout.get('id'):
                 detail = self.make_request(

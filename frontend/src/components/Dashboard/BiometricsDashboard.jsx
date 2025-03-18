@@ -3348,29 +3348,15 @@ const BiometricsDashboard = ({ username }) => {
                       >
                         <MenuItem value="all">All Sources</MenuItem>
                         {activeSources && Array.isArray(activeSources) && activeSources.map((source) => {
-                          // Make sure source is a string
-                          const sourceStr = String(source || '');
+                          // Make sure source is a string or get the id if it's an object
+                          const sourceStr = typeof source === 'object' ? source.id : String(source || '');
                           
-                          // Skip displaying if we have no data for this source
-                          const hasData = biometricData.some(item => {
-                            // Make sure item.source is also handled safely
-                            const itemSource = String(item.source || '');
-                            return itemSource.toLowerCase() === sourceStr.toLowerCase();
-                          });
-                          
-                          // For WHOOP, also check if we have data with WHOOP-specific fields
-                          const isWhoopAndHasData = 
-                            sourceStr.toLowerCase() === 'whoop' && 
-                            getWhoopData().length > 0;
-                            
-                          if (hasData || isWhoopAndHasData) {
-                            return (
-                              <MenuItem key={sourceStr} value={sourceStr}>
-                                {sourceStr.charAt(0).toUpperCase() + sourceStr.slice(1)}
-                              </MenuItem>
-                            );
-                          }
-                          return null;
+                          // Always show connected sources in the dropdown instead of filtering
+                          return (
+                            <MenuItem key={sourceStr} value={sourceStr}>
+                              {sourceStr.charAt(0).toUpperCase() + sourceStr.slice(1)}
+                            </MenuItem>
+                          );
                         })}
                       </Select>
                     </FormControl>

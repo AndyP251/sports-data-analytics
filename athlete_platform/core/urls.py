@@ -13,7 +13,7 @@ from .api_views.auth import (
 from .api_views.coach_auth import (
     coach_login_view, coach_register_view, check_coach_auth
 )
-from .views import dashboard_data, sync_biometric_data, get_biometric_data, get_current_user, activate_source, get_garmin_profiles, get_raw_biometric_data, active_sources, verify_dev_password, get_db_info, generate_insights, get_insight_categories, get_insight_trends, get_recommendations, submit_insight_feedback, get_teams, get_team_athletes, disconnect_source, frontend_view
+from .views import dashboard_data, sync_biometric_data, get_biometric_data, get_current_user, activate_source, get_garmin_profiles, get_raw_biometric_data, active_sources, verify_dev_password, get_db_info, generate_insights, get_insight_categories, get_insight_trends, get_recommendations, submit_insight_feedback, get_teams, get_team_athletes, disconnect_source, frontend_view, team_biometric_summary, position_biometric_summary, position_athletes_data, athlete_biometric_data, biometric_comparison_by_position, training_optimization, sync_team_data
 from .api_views.oauth import (
     WhoopOAuthView, WhoopCallbackView, WhoopWebhookView
 )
@@ -36,7 +36,7 @@ urlpatterns = [
     path('api/teams/', get_teams, name='get_teams'),
     path('api/team-athletes/<str:team_id>/', get_team_athletes, name='get_team_athletes'),
     
-    # Dashboard data
+    # Athlete Dashboard data
     path('api/dashboard/', dashboard_data, name='dashboard_data'),
     path('api/dashboard/data/', views.dashboard_data, name='dashboard_data'),
     path('api/biometrics/sync/', sync_biometric_data, name='sync_biometric_data'),
@@ -51,6 +51,7 @@ urlpatterns = [
     path('api/biometrics/active-sources/', active_sources, name='active_sources'),
     path('api/verify-dev-password/', verify_dev_password, name='verify-dev-password'),
     path('api/biometrics/db-info/', get_db_info, name='get_db_info'), #DEBUGGING ENDPOINT
+    
     # AI Insights endpoints
     path('api/insights/generate/', generate_insights, name='generate_insights'),
     path('api/insights/categories/', get_insight_categories, name='get_insight_categories'),
@@ -62,6 +63,15 @@ urlpatterns = [
     path('api/oauth/whoop/authorize', WhoopOAuthView.as_view(), name='whoop-oauth'),
     path('api/oauth/whoop/callback', WhoopCallbackView.as_view(), name='whoop-callback'),
     path('api/webhooks/whoop', WhoopWebhookView.as_view(), name='whoop-webhook'),
+    
+    # Coach data API endpoints
+    path('api/coach/team-biometrics/', team_biometric_summary, name='team_biometric_summary'),
+    path('api/coach/position-biometrics/', position_biometric_summary, name='position_biometric_summary'),
+    path('api/coach/position/<str:position>/athletes/', position_athletes_data, name='position_athletes_data'),
+    path('api/coach/athlete/<str:athlete_id>/biometrics/', athlete_biometric_data, name='athlete_biometric_data'),
+    path('api/coach/position-comparison/', biometric_comparison_by_position, name='biometric_comparison_by_position'),
+    path('api/coach/training-optimization/', training_optimization, name='training_optimization'),
+    path('api/coach/sync-team-data/', sync_team_data, name='sync_team_data'),
     
     # Catch-all route for React frontend
     # This must be the last route to ensure API routes are handled correctly

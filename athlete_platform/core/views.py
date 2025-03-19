@@ -4,7 +4,7 @@ from django.contrib.auth import login, logout
 from django.contrib import messages
 from .forms import CustomUserCreationForm
 from .utils.s3_utils import S3Utils
-from .models import Athlete, CoreBiometricData, create_biometric_data, get_athlete_biometrics, Team
+from .models import Athlete, CoreBiometricData, create_biometric_data, get_athlete_biometrics, Team, Coach, User
 from django.http import JsonResponse, HttpResponse
 from django.views.decorators.http import require_POST, require_http_methods
 from datetime import datetime
@@ -38,6 +38,8 @@ from .ai_insights import (
     get_recommendations_for_athlete, 
     get_insight_trends_for_athlete
 )
+from .services.coach_data_sync_service import CoachDataSyncService
+from .permissions import IsCoach
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -599,60 +601,235 @@ def verify_dev_password(request):
             status=500
         )
 
-@api_view(['GET'])
+@api_view(['GET', 'POST'])
 @permission_classes([IsAuthenticated])
 def get_db_info(request):
-    """Diagnostic endpoint to check database state for biometric data"""
+    """
+    Debug endpoint to get raw database information.
+    For coaches, allows querying CoreBiometricData for specific athletes
+    """
+    from .models import CoreBiometricData, Athlete, Coach
+    from django.utils import timezone
+    import datetime
+    import json
+    
+    is_coach = False
+    coach = None
+    
+    # Check if user is a coach - check both possible attributes
     try:
-        # Get all sources and counts
-        from django.db.models import Count
-        
-        # Overall source distribution
-        all_sources = CoreBiometricData.objects.values('source').annotate(count=Count('id'))
-        
-        # User's source distribution
-        user_sources = CoreBiometricData.objects.filter(
-            athlete=request.user.athlete
-        ).values('source').annotate(count=Count('id'))
-        
-        # Check for Garmin processing issues
-        garmin_files_in_s3 = 0
-        
+        if hasattr(request.user, 'coach_profile'):
+            coach = request.user.coach_profile
+            is_coach = True
+        elif hasattr(request.user, 'coach'):
+            coach = request.user.coach
+            
+        # Add debug logging
+        logger.debug(f"User: {request.user}, is_coach: {is_coach}, coach object: {coach}")
+            
+    except Exception as e:
+        logger.error(f"Error checking coach status: {e}")
+        # Not a coach, use default permission logic
+        if not request.user.is_staff and not (hasattr(request.user, 'role') and request.user.role == 'ADMIN'):
+            return Response({"error": "Access denied. This endpoint is for administrators only."}, status=403)
+    
+    if request.method == 'POST' and is_coach and coach:
+        # Coach-specific POST request to get CoreBiometricData for team athletes
         try:
-            from .utils.s3_utils import S3Utils
-            s3_utils = S3Utils()
-            garmin_path = f'accounts/{request.user.id}/biometric-data/garmin'
-            garmin_files = s3_utils.list_objects(garmin_path)
-            garmin_files_in_s3 = len(garmin_files)
+            # Get request data
+            post_data = request.data
+            athlete_ids = post_data.get('athlete_ids', [])
+            days = int(post_data.get('days', 7))
+            team_id = post_data.get('team_id')
+            
+            if not athlete_ids and not team_id:
+                return Response({"error": "No athlete IDs or team ID provided"}, status=400)
+            
+            # Calculate date range
+            end_date = timezone.now().date()
+            start_date = end_date - datetime.timedelta(days=days)
+            
+            # Get athletes that belong to this coach's team
+            # Try different ways to access coach athletes
+            coach_athletes = []
+            coach_athlete_ids = []
+            
+            # First, try to get team from coach
+            coach_team = None
+            if coach.team:
+                coach_team = coach.team
+            elif team_id:
+                try:
+                    coach_team = Team.objects.get(id=team_id)
+                except Team.DoesNotExist:
+                    pass
+            
+            # If we have a team, try to get athletes from athletes_array first
+            if coach_team and hasattr(coach_team, 'athletes_array') and coach_team.athletes_array:
+                # Get all user IDs from athletes_array
+                user_ids = coach_team.athletes_array
+                
+                # Look up athletes by user relationship instead of direct ID match
+                coach_athletes = Athlete.objects.filter(user__id__in=user_ids)
+                coach_athlete_ids = [str(athlete.id) for athlete in coach_athletes]
+                logger.debug(f"Found {len(coach_athlete_ids)} athlete objects through user relationship")
+            
+            # If we didn't get athlete IDs from the athletes_array, try other methods
+            if not coach_athlete_ids:
+                # Try using the coach.athletes ManyToMany field
+                if hasattr(coach, 'athletes'):
+                    coach_athletes = coach.athletes.all()
+                    coach_athlete_ids = [str(athlete.id) for athlete in coach_athletes]
+                    
+                # If that didn't work, try getting athletes by team relation
+                if not coach_athletes and coach_team:
+                    try:
+                        coach_athletes = Athlete.objects.filter(team=coach_team)
+                        coach_athlete_ids = [str(athlete.id) for athlete in coach_athletes]
+                    except Exception as e:
+                        logger.error(f"Error getting athletes by team: {e}")
+                        
+                # Last resort - try getting athletes by user's team association
+                if not coach_athletes and coach_team:
+                    try:
+                        # Get user IDs who are on this team
+                        team_user_ids = User.objects.filter(team=coach_team, role='ATHLETE').values_list('id', flat=True)
+                        # Find athletes with these users
+                        coach_athletes = Athlete.objects.filter(user__id__in=team_user_ids)
+                        coach_athlete_ids = [str(athlete.id) for athlete in coach_athletes]
+                        logger.debug(f"Found {len(coach_athlete_ids)} athlete objects through user-team relationship")
+                    except Exception as e:
+                        logger.error(f"Error getting athletes by user-team relationship: {e}")
+            
+            # Debug log the found athletes
+            logger.debug(f"Coach {coach.user.username} has {len(coach_athlete_ids)} athletes: {coach_athlete_ids}")
+            
+            # If we found athletes through query but the athletes_array is empty or different,
+            # update the athletes_array
+            if coach_team and coach_athletes and hasattr(coach_team, 'athletes_array'):
+                coach_team_athlete_ids = [str(athlete.id) for athlete in coach_athletes]
+                if set(coach_team_athlete_ids) != set(coach_team.athletes_array or []):
+                    coach_team.athletes_array = coach_team_athlete_ids
+                    coach_team.save(update_fields=['athletes_array'])
+                    logger.info(f"Updated team {coach_team.name} athletes_array with {len(coach_team_athlete_ids)} athletes")
+            
+            # If still no athletes, try allowing all the requested athlete IDs for now
+            # (this is a temporary fallback for debugging)
+            if not coach_athlete_ids and request.user.is_staff:
+                logger.warning(f"No athletes found through normal methods, allowing access to all requested athletes for staff user")
+                coach_athlete_ids = athlete_ids
+            
+            # Filter athlete IDs to only include those on the coach's team
+            valid_athlete_ids = []
+            
+            # If we were given specific athlete IDs, filter them
+            if athlete_ids:
+                valid_athlete_ids = [aid for aid in athlete_ids if aid in coach_athlete_ids]
+            else:
+                # Otherwise use all the coach's athlete IDs
+                valid_athlete_ids = coach_athlete_ids
+            
+            if not valid_athlete_ids:
+                return Response({"error": "No valid athlete IDs found. The requested athletes may not belong to your team."}, status=400)
+            
+            # Query biometric data
+            biometric_data = {}
+            
+            for athlete_id in valid_athlete_ids:
+                try:
+                    # First try direct lookup by ID
+                    try:
+                        athlete = Athlete.objects.get(id=athlete_id)
+                    except Athlete.DoesNotExist:
+                        # If that fails, try looking up by User ID relationship
+                        try:
+                            user = User.objects.get(id=athlete_id)
+                            athlete = Athlete.objects.get(user=user)
+                            logger.info(f"Found athlete {athlete.id} through User ID {user.id}")
+                        except (User.DoesNotExist, Athlete.DoesNotExist):
+                            logger.warning(f"Could not find Athlete model for ID {athlete_id}")
+                            continue
+                    
+                    # Get biometric data for this athlete in the date range
+                    data_points = CoreBiometricData.objects.filter(
+                        athlete=athlete,
+                        date__range=[start_date, end_date]
+                    ).order_by('date')
+                    
+                    if data_points.exists():
+                        # Convert to list of dicts for JSON serialization
+                        athlete_data = []
+                        for point in data_points:
+                            point_dict = {
+                                'date': point.date.isoformat(),
+                                'resting_heart_rate': point.resting_heart_rate,
+                                'max_heart_rate': point.max_heart_rate,
+                                'min_heart_rate': point.min_heart_rate,
+                                'hrv_ms': point.hrv_ms,
+                                'recovery_score': point.recovery_score,
+                                'total_sleep_seconds': point.total_sleep_seconds,
+                                'deep_sleep_seconds': point.deep_sleep_seconds,
+                                'light_sleep_seconds': point.light_sleep_seconds,
+                                'rem_sleep_seconds': point.rem_sleep_seconds,
+                                'total_steps': point.total_steps,
+                                'total_distance_meters': point.total_distance_meters,
+                                'average_heart_rate': point.average_heart_rate,
+                                'strain': point.strain,
+                                'source': point.source
+                            }
+                            athlete_data.append(point_dict)
+                        
+                        biometric_data[athlete_id] = athlete_data
+                except Athlete.DoesNotExist:
+                    # Skip this athlete ID
+                    pass
+            
+            return Response({
+                "status": "success",
+                "data": biometric_data,
+                "message": f"Retrieved biometric data for {len(biometric_data)} athletes",
+                "date_range": {
+                    "start": start_date.isoformat(),
+                    "end": end_date.isoformat()
+                }
+            })
+            
         except Exception as e:
-            logger.error(f"Error checking S3: {e}")
+            import traceback
+            traceback.print_exc()
+            return Response({"error": str(e)}, status=500)
+    
+    # Original implementation for GET requests or non-coach users
+    try:
+        # Get model stats
+        model_stats = {
+            "CoreBiometricData": CoreBiometricData.objects.count(),
+            "Athlete": Athlete.objects.count(),
+        }
         
-        # Check sync service state
-        sync_service = DataSyncService(request.user.athlete)
-        active_sources = sync_service.active_sources
+        # For staff, include additional information
+        if request.user.is_staff:
+            latest_data = CoreBiometricData.objects.order_by('-created_at').first()
+            latest_info = "No data" if latest_data is None else {
+                "athlete": str(latest_data.athlete),
+                "date": latest_data.date.isoformat(),
+                "created_at": latest_data.created_at.isoformat()
+            }
+            
+            model_stats["latest_data"] = latest_info
         
-        return JsonResponse({
-            'success': True,
-            'database': {
-                'all_sources': list(all_sources),
-                'user_sources': list(user_sources),
-                'total_records': CoreBiometricData.objects.count(),
-                'user_records': CoreBiometricData.objects.filter(athlete=request.user.athlete).count()
-            },
-            's3': {
-                'garmin_files': garmin_files_in_s3
-            },
-            'sync_service': {
-                'active_sources': active_sources,
-                'processors': [type(p).__name__ for p in sync_service.processors]
+        return Response({
+            "model_stats": model_stats,
+            "user_info": {
+                "username": request.user.username,
+                "is_staff": request.user.is_staff,
+                "is_coach": is_coach
             }
         })
     except Exception as e:
-        logger.error(f"Error in get_db_info: {e}", exc_info=True)
-        return JsonResponse({
-            'success': False,
-            'error': str(e)
-        }, status=500)
+        import traceback
+        traceback.print_exc()
+        return Response({"error": str(e)}, status=500)
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
@@ -977,4 +1154,291 @@ def get_team_athletes(request, team_id):
     except Exception as e:
         logger.error(f"Error getting team athletes: {e}")
         return Response({"error": f"Error retrieving team athletes: {str(e)}"}, status=500)
+
+# Coach Data API Views
+@api_view(['GET'])
+@permission_classes([IsAuthenticated, IsCoach])
+def team_biometric_summary(request):
+    """Get team-level biometric data summary"""
+    try:
+        days = int(request.query_params.get('days', 7))
+        # Get coach object safely
+        coach = None
+        if hasattr(request.user, 'coach_profile'):
+            coach = request.user.coach_profile
+        elif hasattr(request.user, 'coach'):
+            coach = request.user.coach
+        
+        service = CoachDataSyncService(coach=coach)
+        summary = service.get_team_biometric_summary(days=days)
+        
+        return Response(summary)
+    except Exception as e:
+        return Response({
+            'error': str(e),
+            'message': 'Failed to retrieve team biometric summary'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated, IsCoach])
+def position_biometric_summary(request):
+    """Get position-based biometric data summary"""
+    try:
+        days = int(request.query_params.get('days', 7))
+        # Get coach object safely
+        coach = None
+        if hasattr(request.user, 'coach_profile'):
+            coach = request.user.coach_profile
+        elif hasattr(request.user, 'coach'):
+            coach = request.user.coach
+        
+        service = CoachDataSyncService(coach=coach)
+        summary = service.get_position_biometric_summary(days=days)
+        
+        return Response(summary)
+    except Exception as e:
+        return Response({
+            'error': str(e),
+            'message': 'Failed to retrieve position biometric summary'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated, IsCoach])
+def position_athletes_data(request, position):
+    """Get detailed data for all athletes in a specific position"""
+    try:
+        days = int(request.query_params.get('days', 7))
+        # Get coach object safely
+        coach = None
+        if hasattr(request.user, 'coach_profile'):
+            coach = request.user.coach_profile
+        elif hasattr(request.user, 'coach'):
+            coach = request.user.coach
+        
+        service = CoachDataSyncService(coach=coach)
+        data = service.get_position_athletes_data(position=position, days=days)
+        
+        return Response(data)
+    except Exception as e:
+        return Response({
+            'error': str(e),
+            'message': f'Failed to retrieve data for position: {position}'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated, IsCoach])
+def athlete_biometric_data(request, athlete_id):
+    """Get detailed biometric data for a specific athlete"""
+    try:
+        days = int(request.query_params.get('days', 7))
+        # Get coach object safely
+        coach = None
+        if hasattr(request.user, 'coach_profile'):
+            coach = request.user.coach_profile
+        elif hasattr(request.user, 'coach'):
+            coach = request.user.coach
+        
+        service = CoachDataSyncService(coach=coach)
+        data = service.get_athlete_biometric_data(athlete_id=athlete_id, days=days)
+        
+        if not data:
+            return Response({
+                'message': 'No data found or athlete not on your team'
+            }, status=status.HTTP_404_NOT_FOUND)
+            
+        return Response(data)
+    except Exception as e:
+        return Response({
+            'error': str(e),
+            'message': f'Failed to retrieve data for athlete: {athlete_id}'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated, IsCoach])
+def biometric_comparison_by_position(request):
+    """Get comparison of biometric metrics across different positions"""
+    try:
+        days = int(request.query_params.get('days', 30))
+        # Get coach object safely
+        coach = None
+        if hasattr(request.user, 'coach_profile'):
+            coach = request.user.coach_profile
+        elif hasattr(request.user, 'coach'):
+            coach = request.user.coach
+        
+        service = CoachDataSyncService(coach=coach)
+        data = service.get_biometric_comparison_by_position(days=days)
+        
+        return Response(data)
+    except Exception as e:
+        return Response({
+            'error': str(e),
+            'message': 'Failed to retrieve biometric comparison data'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated, IsCoach])
+def training_optimization(request):
+    """Get training optimization recommendations"""
+    try:
+        position = request.query_params.get('position', None)
+        # Get coach object safely
+        coach = None
+        if hasattr(request.user, 'coach_profile'):
+            coach = request.user.coach_profile
+        elif hasattr(request.user, 'coach'):
+            coach = request.user.coach
+        
+        service = CoachDataSyncService(coach=coach)
+        data = service.get_training_optimization_data(position=position)
+        
+        return Response(data)
+    except Exception as e:
+        return Response({
+            'error': str(e),
+            'message': 'Failed to retrieve training optimization data'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated, IsCoach])
+def sync_team_data(request):
+    """Trigger a sync of biometric data for all athletes on the team"""
+    try:
+        days = int(request.data.get('days', 7))
+        force_refresh = request.data.get('force_refresh', False)
+        team_id = request.data.get('team_id', None)
+        athlete_ids = request.data.get('athlete_ids', [])
+        
+        # Add extensive logging
+        logger.info(f"Sync team data requested by user: {request.user.username}")
+        logger.info(f"Request data: days={days}, force_refresh={force_refresh}, team_id={team_id}, athlete_ids: {len(athlete_ids)}")
+        
+        # Get coach object safely
+        coach = None
+        if hasattr(request.user, 'coach_profile'):
+            coach = request.user.coach_profile
+            logger.info(f"Found coach via coach_profile: {coach.id if coach else 'None'}")
+        elif hasattr(request.user, 'coach'):
+            coach = request.user.coach
+            logger.info(f"Found coach via coach attr: {coach.id if coach else 'None'}")
+        
+        # Add debug logging to inspect coach user
+        logger.info(f"User: {request.user}, has coach_profile: {hasattr(request.user, 'coach_profile')}, has coach attr: {hasattr(request.user, 'coach')}")
+        
+        if not coach:
+            logger.error(f"No coach object found for user {request.user.username}")
+            return Response({
+                'message': 'User is not a coach'
+            }, status=status.HTTP_403_FORBIDDEN)
+        
+        # Try to find team if not already set
+        coach_team = None
+        if coach.team:
+            coach_team = coach.team
+        elif team_id:
+            try:
+                from .models import Team
+                coach_team = Team.objects.get(id=team_id)
+                logger.info(f"Found team by ID: {coach_team.name} ({coach_team.id})")
+                
+                # Update coach with this team if not set
+                if not coach.team:
+                    coach.team = coach_team
+                    coach.save()
+                    logger.info(f"Updated coach with team: {coach_team.name}")
+            except Exception as e:
+                logger.error(f"Failed to set team for coach: {e}")
+        
+        # Log team information
+        if coach_team:
+            logger.info(f"Coach team: {coach_team.name} ({coach_team.id})")
+        else:
+            logger.info(f"Coach has no team assigned")
+            return Response({
+                'message': 'No team found for coach'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Try different ways to get athletes
+        athletes = []
+        athlete_ids_to_sync = []
+        
+        # First check team's athletes_array if available
+        if hasattr(coach_team, 'athletes_array') and coach_team.athletes_array:
+            athlete_ids_to_sync = coach_team.athletes_array
+            logger.info(f"Found {len(athlete_ids_to_sync)} athlete IDs in team's athletes_array")
+            
+            # Load athlete objects
+            try:
+                athletes = list(Athlete.objects.filter(id__in=athlete_ids_to_sync))
+                logger.info(f"Loaded {len(athletes)} athlete objects from athletes_array")
+            except Exception as e:
+                logger.error(f"Error loading athletes from athletes_array: {e}")
+        
+        # If no athletes found in athletes_array, try using coach.athletes ManyToMany first
+        if not athletes and hasattr(coach, 'athletes') and coach.athletes.count() > 0:
+            athletes = list(coach.athletes.all())
+            athlete_ids_to_sync = [str(athlete.id) for athlete in athletes]
+            logger.info(f"Found {len(athletes)} athletes via coach.athletes")
+            
+        # If no athletes found and coach has a team, try getting by team
+        if not athletes and coach_team:
+            from .models import Athlete
+            team_athletes = Athlete.objects.filter(team=coach_team)
+            athletes = list(team_athletes)
+            athlete_ids_to_sync = [str(athlete.id) for athlete in athletes]
+            logger.info(f"Found {len(athletes)} athletes via team {coach_team.name}")
+            
+            # If we found athletes but the coach.athletes ManyToMany is empty, populate it
+            if athletes and hasattr(coach, 'athletes'):
+                try:
+                    coach.athletes.add(*athletes)
+                    logger.info(f"Added {len(athletes)} athletes to coach.athletes from team")
+                except Exception as e:
+                    logger.error(f"Error adding team athletes to coach: {e}")
+        
+        # If specific athlete_ids were provided and either:
+        # 1. We found no athletes via other methods, or
+        # 2. The provided IDs are a subset of the team's athlete IDs
+        if athlete_ids and (not athletes or all(aid in athlete_ids_to_sync for aid in athlete_ids)):
+            try:
+                from .models import Athlete
+                specified_athletes = Athlete.objects.filter(id__in=athlete_ids)
+                if specified_athletes.exists():
+                    logger.info(f"Using {specified_athletes.count()} specifically requested athletes")
+                    athletes = list(specified_athletes)
+                    athlete_ids_to_sync = athlete_ids
+            except Exception as e:
+                logger.error(f"Error finding specifically requested athletes: {e}")
+        
+        # Update team's athletes_array if needed
+        if coach_team and athletes and hasattr(coach_team, 'athletes_array'):
+            athlete_ids_from_objects = [str(a.id) for a in athletes]
+            if set(athlete_ids_from_objects) != set(coach_team.athletes_array or []):
+                coach_team.athletes_array = athlete_ids_from_objects
+                coach_team.save(update_fields=['athletes_array'])
+                logger.info(f"Updated team {coach_team.name} athletes_array with {len(athlete_ids_from_objects)} athletes")
+        
+        if not athletes:
+            logger.error(f"No athletes found for coach {coach.user.username}, team: {coach_team}")
+            return Response({
+                'message': 'No athletes found or sync failed'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        logger.info(f"Found {len(athletes)} athletes to sync")
+        
+        service = CoachDataSyncService(coach=coach)
+        success = service.sync_team_biometric_data(days=days, force_refresh=force_refresh)
+        
+        if success:
+            return Response({'message': f'Team data sync initiated successfully for {len(athletes)} athletes'})
+        else:
+            return Response({
+                'message': 'No athletes found or sync failed'
+            }, status=status.HTTP_400_BAD_REQUEST)
+    except Exception as e:
+        logger.error(f"Error in sync_team_data: {e}", exc_info=True)
+        return Response({
+            'error': str(e),
+            'message': 'Failed to sync team data'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 

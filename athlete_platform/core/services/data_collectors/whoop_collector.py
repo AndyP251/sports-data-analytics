@@ -11,6 +11,9 @@ from django.core.cache import cache
 from django.conf import settings
 import json
 import time
+import random
+import asyncio
+from asgiref.sync import sync_to_async
 
 logger = logging.getLogger(__name__)
 
@@ -19,12 +22,15 @@ class WhoopCollector(BaseDataCollector):
     BASE_URL = "https://api.prod.whoop.com/developer/v1"
     RATE_LIMIT_KEY_PREFIX = "whoop_rate_limit_"
     RATE_LIMIT_WINDOW = 60  # 1 minute window
-    MAX_REQUESTS_PER_WINDOW = 60  # WHOOP's rate limit
+    MAX_REQUESTS_PER_WINDOW = 45  # WHOOP's rate limit (reduced to be safe)
     
     def __init__(self, athlete: Athlete):
         self.athlete = athlete
         self.access_token = None
         self.s3_utils = S3Utils()
+        self.request_count = 0
+        self.rate_limited = False
+        self.rate_limit_reset_time = 0
 
     def authenticate(self) -> bool:
         """Authenticate with Whoop API"""
@@ -96,48 +102,54 @@ class WhoopCollector(BaseDataCollector):
             logger.error("No access token available for authorization headers")
             return None
 
+    async def async_wait(self, seconds):
+        """Non-blocking wait function using asyncio"""
+        await asyncio.sleep(seconds)
+
+    def wait_for_rate_limit(self):
+        """Wait for rate limit to expire using a non-blocking approach"""
+        if not self.rate_limited:
+            return
+            
+        current_time = int(time.time())
+        if current_time < self.rate_limit_reset_time:
+            wait_time = self.rate_limit_reset_time - current_time
+            logger.info(f"Waiting for {wait_time} seconds for rate limit to reset...")
+            
+            # Use asyncio to wait without blocking the thread
+            asyncio.run(self.async_wait(wait_time + 2))  # Add 2 seconds buffer
+            
+            # Reset rate limiting after wait
+            self.rate_limited = False
+            self.request_count = 0
+            logger.info("Rate limit cooldown complete, resuming data collection")
+
     def make_request(self, method: str, url: str, params: dict = None) -> Optional[Dict]:
         """Make an authenticated request to the WHOOP API with non-blocking rate limiting"""
         max_retries = 3
         retry_count = 0
         
+        # If rate limited, wait for the cooldown to complete
+        if self.rate_limited:
+            self.wait_for_rate_limit()
+            
+        # Check if we need to reset the rate limit - doing this at the instance level
+        if self.request_count >= self.MAX_REQUESTS_PER_WINDOW:
+            logger.warning(f"Max request count reached ({self.request_count}/{self.MAX_REQUESTS_PER_WINDOW}). Implementing rate limit cooldown.")
+            self.rate_limited = True
+            self.rate_limit_reset_time = int(time.time()) + self.RATE_LIMIT_WINDOW
+            self.wait_for_rate_limit()
+            
         while retry_count <= max_retries:
             try:
-                # Check rate limit before making request
-                rate_limit_key = f"{self.RATE_LIMIT_KEY_PREFIX}{self.athlete.user.id}"
-                rate_limit_data = cache.get(rate_limit_key)
-                
-                current_time = int(time.time())
-                
-                if rate_limit_data:
-                    # Parse the cached data
-                    count, window_start = rate_limit_data
+                # Add jitter to requests to avoid bursts
+                if retry_count > 0:
+                    jitter = random.uniform(0.1, 0.5)
+                    backoff_time = (2 ** retry_count) + jitter
+                    logger.info(f"Applying backoff strategy on attempt {retry_count}/{max_retries} with jitter ({backoff_time:.2f}s).")
                     
-                    # Check if we're still in the same time window
-                    time_elapsed = current_time - window_start
-                    
-                    if time_elapsed < self.RATE_LIMIT_WINDOW:
-                        # We're in the same window, check if we've hit the limit
-                        if count >= self.MAX_REQUESTS_PER_WINDOW:
-                            # We've hit the limit, need to wait or retry
-                            wait_time = self.RATE_LIMIT_WINDOW - time_elapsed
-                            logger.warning(f"Rate limit reached. Would need to wait {wait_time} seconds. Attempt {retry_count}/{max_retries}")
-                            retry_count += 1
-                            if retry_count <= max_retries:
-                                # Don't actually sleep, just try again on next iteration
-                                continue
-                            else:
-                                logger.error(f"Rate limit exceeded after {max_retries} retries.")
-                                return None
-                        else:
-                            # Update the count in the current window
-                            cache.set(rate_limit_key, (count + 1, window_start), self.RATE_LIMIT_WINDOW)
-                    else:
-                        # Window has expired, start a new one
-                        cache.set(rate_limit_key, (1, current_time), self.RATE_LIMIT_WINDOW)
-                else:
-                    # No rate limit data yet, create it
-                    cache.set(rate_limit_key, (1, current_time), self.RATE_LIMIT_WINDOW)
+                    # Use asyncio to implement a non-blocking backoff
+                    asyncio.run(self.async_wait(backoff_time))
                 
                 # Make the actual request
                 response = requests.request(
@@ -147,25 +159,36 @@ class WhoopCollector(BaseDataCollector):
                     params=params
                 )
                 
+                # Increment the request counter
+                self.request_count += 1
+                
                 if response.status_code == 200:
                     return response.json()
                 elif response.status_code == 429:
-                    # Rate limit hit from WHOOP API
+                    # Rate limit hit from WHOOP API - implement global cooldown
+                    logger.warning(f"Rate limit hit (429). Implementing rate limit cooldown.")
+                    self.rate_limited = True
+                    self.rate_limit_reset_time = int(time.time()) + self.RATE_LIMIT_WINDOW
+                    
+                    # Wait for rate limit to expire
+                    self.wait_for_rate_limit()
+                    
+                    # Try again after waiting
                     retry_count += 1
-                    if retry_count <= max_retries:
-                        wait_time = 2 ** retry_count  # Exponential backoff
-                        logger.warning(f"Rate limit hit (429). Will retry after backoff. Attempt {retry_count}/{max_retries}")
-                        # Don't sleep, just continue the loop
-                        continue
-                    else:
-                        logger.error(f"Rate limit exceeded after {max_retries} retries.")
-                        return None
+                    continue
                 else:
                     logger.error(f"API request failed: {response.status_code} - {response.text}")
+                    # For server errors (5xx), retry with backoff
+                    if 500 <= response.status_code < 600 and retry_count < max_retries:
+                        retry_count += 1
+                        continue
                     return None
                 
             except Exception as e:
                 logger.error(f"Error making API request: {e}")
+                retry_count += 1
+                if retry_count <= max_retries:
+                    continue
                 return None
         
         return None
@@ -468,13 +491,22 @@ class WhoopCollector(BaseDataCollector):
                 date_range.append(current_date)
                 current_date += timedelta(days=1)
             
-            # Collect data for each day
+            # Reset rate limit tracking for fresh collection
+            self.request_count = 0
+            self.rate_limited = False
+            
+            # Collect data for each day - prioritize more recent data
+            # by reversing the date range (newest first)
             results = []
-            for current_date in date_range:
+            for current_date in reversed(date_range):
                 date_str = current_date.strftime('%Y-%m-%d')
                 logger.info(f"Collecting WHOOP data for {date_str}")
                 
                 try:
+                    # If we're rate limited, wait for the cooldown instead of skipping
+                    if self.rate_limited:
+                        self.wait_for_rate_limit()
+                    
                     # Collect daily data
                     sleep_data = self._get_data_for_date(current_date, 'sleep')
                     recovery_data = self._get_data_for_date(current_date, 'recovery')
@@ -504,10 +536,10 @@ class WhoopCollector(BaseDataCollector):
                             'date': date_str,
                             'daily_stats': {
                                 'date': date_str,
-                                'sleep_data': {},
-                                'recovery_data': {},
-                                'cycle_data': {},
-                                'workout_data': []
+                                'sleep_data': sleep_data or {},
+                                'recovery_data': recovery_data or {},
+                                'cycle_data': cycle_data or {},
+                                'workout_data': workout_data or []
                             },
                             'user_profile': user_profile or {}
                         }
@@ -518,9 +550,17 @@ class WhoopCollector(BaseDataCollector):
                     results.append({
                         'date': date_str,
                         'daily_stats': {
-                            'date': date_str
-                        }
+                            'date': date_str,
+                            'sleep_data': {},
+                            'recovery_data': {},
+                            'cycle_data': {},
+                            'workout_data': []
+                        },
+                        'error': str(e)
                     })
+            
+            # Sort results back to chronological order
+            results.sort(key=lambda x: x['date'])
             
             logger.info(f"Completed WHOOP data collection for {self.athlete.user.username}, collected {len(results)} days")
             return results

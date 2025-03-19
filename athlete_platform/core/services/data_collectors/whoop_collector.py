@@ -7,13 +7,19 @@ from core.models import Athlete
 import logging
 import requests
 from django.core.signing import Signer
+from django.core.cache import cache
+from django.conf import settings
 import json
+import time
 
 logger = logging.getLogger(__name__)
 
 class WhoopCollector(BaseDataCollector):
     """Collector for Whoop data"""
     BASE_URL = "https://api.prod.whoop.com/developer/v1"
+    RATE_LIMIT_KEY_PREFIX = "whoop_rate_limit_"
+    RATE_LIMIT_WINDOW = 60  # 1 minute window
+    MAX_REQUESTS_PER_WINDOW = 60  # WHOOP's rate limit
     
     def __init__(self, athlete: Athlete):
         self.athlete = athlete
@@ -91,13 +97,49 @@ class WhoopCollector(BaseDataCollector):
             return None
 
     def make_request(self, method: str, url: str, params: dict = None) -> Optional[Dict]:
-        """Make an authenticated request to the WHOOP API"""
+        """Make an authenticated request to the WHOOP API with non-blocking rate limiting"""
         max_retries = 3
-        retry_delay = 2  # Initial delay in seconds
         retry_count = 0
         
         while retry_count <= max_retries:
             try:
+                # Check rate limit before making request
+                rate_limit_key = f"{self.RATE_LIMIT_KEY_PREFIX}{self.athlete.user.id}"
+                rate_limit_data = cache.get(rate_limit_key)
+                
+                current_time = int(time.time())
+                
+                if rate_limit_data:
+                    # Parse the cached data
+                    count, window_start = rate_limit_data
+                    
+                    # Check if we're still in the same time window
+                    time_elapsed = current_time - window_start
+                    
+                    if time_elapsed < self.RATE_LIMIT_WINDOW:
+                        # We're in the same window, check if we've hit the limit
+                        if count >= self.MAX_REQUESTS_PER_WINDOW:
+                            # We've hit the limit, need to wait or retry
+                            wait_time = self.RATE_LIMIT_WINDOW - time_elapsed
+                            logger.warning(f"Rate limit reached. Would need to wait {wait_time} seconds. Attempt {retry_count}/{max_retries}")
+                            retry_count += 1
+                            if retry_count <= max_retries:
+                                # Don't actually sleep, just try again on next iteration
+                                continue
+                            else:
+                                logger.error(f"Rate limit exceeded after {max_retries} retries.")
+                                return None
+                        else:
+                            # Update the count in the current window
+                            cache.set(rate_limit_key, (count + 1, window_start), self.RATE_LIMIT_WINDOW)
+                    else:
+                        # Window has expired, start a new one
+                        cache.set(rate_limit_key, (1, current_time), self.RATE_LIMIT_WINDOW)
+                else:
+                    # No rate limit data yet, create it
+                    cache.set(rate_limit_key, (1, current_time), self.RATE_LIMIT_WINDOW)
+                
+                # Make the actual request
                 response = requests.request(
                     method,
                     url,
@@ -108,13 +150,12 @@ class WhoopCollector(BaseDataCollector):
                 if response.status_code == 200:
                     return response.json()
                 elif response.status_code == 429:
-                    # Rate limit hit, implement backoff
+                    # Rate limit hit from WHOOP API
                     retry_count += 1
                     if retry_count <= max_retries:
-                        wait_time = retry_delay * (2 ** (retry_count - 1))  # Exponential backoff
-                        logger.warning(f"Rate limit hit (429). Retrying in {wait_time} seconds. Attempt {retry_count}/{max_retries}")
-                        import time
-                        time.sleep(wait_time)
+                        wait_time = 2 ** retry_count  # Exponential backoff
+                        logger.warning(f"Rate limit hit (429). Will retry after backoff. Attempt {retry_count}/{max_retries}")
+                        # Don't sleep, just continue the loop
                         continue
                     else:
                         logger.error(f"Rate limit exceeded after {max_retries} retries.")

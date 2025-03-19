@@ -368,6 +368,377 @@ const biometricStyles = `
   .view-profile-btn:hover {
     text-decoration: underline;
   }
+  
+  /* Dev Mode Styles */
+  .dev-mode-toggle {
+    display: flex;
+    align-items: center;
+    margin-right: 20px;
+  }
+  
+  .toggle-label {
+    margin-right: 10px;
+    color: #9e9e9e;
+  }
+  
+  .toggle-label span.active {
+    color: #ffffff;
+    font-weight: 600;
+  }
+  
+  .switch {
+    position: relative;
+    display: inline-block;
+    width: 44px;
+    height: 24px;
+  }
+  
+  .switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+  }
+  
+  .slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: #444;
+    transition: .3s;
+  }
+  
+  .slider:before {
+    position: absolute;
+    content: "";
+    height: 18px;
+    width: 18px;
+    left: 3px;
+    bottom: 3px;
+    background-color: white;
+    transition: .3s;
+  }
+  
+  input:checked + .slider {
+    background-color: #007bff;
+  }
+  
+  input:checked + .slider:before {
+    transform: translateX(20px);
+  }
+  
+  .slider.round {
+    border-radius: 34px;
+  }
+  
+  .slider.round:before {
+    border-radius: 50%;
+  }
+  
+  /* Raw Data Styles */
+  .raw-data-section {
+    background-color: #1e1e1e;
+    border-radius: 12px;
+    padding: 20px;
+    margin-top: 20px;
+  }
+  
+  .raw-data-player-select {
+    margin-bottom: 20px;
+  }
+  
+  .player-selector {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 10px;
+  }
+  
+  .player-select-btn {
+    padding: 8px 15px;
+    background-color: #333;
+    color: #e0e0e0;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  
+  .player-select-btn:hover {
+    background-color: #444;
+  }
+  
+  .player-select-btn.active {
+    background-color: #007bff;
+    color: white;
+  }
+  
+  .raw-data-display {
+    background-color: #2a2a2a;
+    border-radius: 8px;
+    padding: 15px;
+  }
+  
+  .raw-data-json {
+    background-color: #1a1a1a;
+    padding: 15px;
+    border-radius: 5px;
+    color: #e0e0e0;
+    font-family: monospace;
+    font-size: 13px;
+    overflow-x: auto;
+    max-height: 500px;
+    overflow-y: auto;
+  }
+  
+  .loading-data {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 50px 0;
+    color: #9e9e9e;
+  }
+  
+  .loading-data .mini-spinner {
+    margin-bottom: 15px;
+  }
+  
+  /* Section Actions Styles */
+  .section-actions {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+  }
+  
+  .action-button {
+    padding: 8px 16px;
+    background-color: #333;
+    color: #e0e0e0;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: all 0.2s ease;
+  }
+  
+  .action-button:hover {
+    background-color: #444;
+  }
+  
+  .sync-button {
+    background-color: #2b5797;
+  }
+  
+  .sync-button:hover {
+    background-color: #3666ad;
+  }
+  
+  /* Position Comparison Styles */
+  .position-comparison-section,
+  .training-optimization-section {
+    margin-top: 30px;
+    padding-top: 20px;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+  }
+  
+  .api-endpoint-note {
+    font-size: 13px;
+    color: #9e9e9e;
+    margin-bottom: 15px;
+  }
+  
+  .api-endpoint-note code {
+    background-color: #2a2a2a;
+    padding: 2px 5px;
+    border-radius: 4px;
+    font-family: monospace;
+  }
+  
+  .notable-differences {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 15px;
+    margin-top: 15px;
+  }
+  
+  .difference-card {
+    background-color: #2a2a2a;
+    border-radius: 8px;
+    padding: 15px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+  }
+  
+  .difference-card h5 {
+    margin: 0 0 10px 0;
+    color: #ffffff;
+    font-size: 16px;
+  }
+  
+  .difference-percent {
+    font-size: 14px;
+    font-weight: 600;
+    color: #ff9800;
+    margin: 5px 0;
+  }
+  
+  .position-comparison {
+    display: flex;
+    justify-content: space-between;
+    margin: 10px 0;
+    background-color: #333;
+    border-radius: 5px;
+    padding: 8px;
+  }
+  
+  .comparison-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 48%;
+  }
+  
+  .comparison-item.highest .position-value {
+    color: #4caf50;
+  }
+  
+  .comparison-item.lowest .position-value {
+    color: #f44336;
+  }
+  
+  .position-name {
+    font-size: 13px;
+    color: #e0e0e0;
+    margin-bottom: 5px;
+  }
+  
+  .position-value {
+    font-size: 16px;
+    font-weight: 600;
+  }
+  
+  .insight {
+    font-size: 13px;
+    color: #bdbdbd;
+    font-style: italic;
+    margin: 10px 0 0 0;
+    line-height: 1.4;
+  }
+  
+  /* Training Optimization Styles */
+  .position-selector {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 15px 0;
+  }
+  
+  .position-opt-btn {
+    padding: 6px 12px;
+    background-color: #333;
+    color: #e0e0e0;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 13px;
+    transition: all 0.2s;
+  }
+  
+  .position-opt-btn:hover {
+    background-color: #444;
+  }
+  
+  .position-opt-btn.active {
+    background-color: #007bff;
+    color: white;
+  }
+  
+  .optimization-placeholder {
+    background-color: #2a2a2a;
+    border-radius: 8px;
+    padding: 15px;
+  }
+  
+  .placeholder-recommendations {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 15px;
+    margin-top: 15px;
+  }
+  
+  .recommendation-card {
+    background-color: #333;
+    border-radius: 8px;
+    padding: 15px;
+    border-left: 4px solid;
+  }
+  
+  .recommendation-card.high {
+    border-left-color: #f44336;
+  }
+  
+  .recommendation-card.medium {
+    border-left-color: #ff9800;
+  }
+  
+  .recommendation-card.low {
+    border-left-color: #4caf50;
+  }
+  
+  .recommendation-header {
+    display: flex;
+    align-items: center;
+    margin-bottom: 10px;
+  }
+  
+  .priority-indicator {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    margin-right: 8px;
+  }
+  
+  .priority-indicator.high {
+    background-color: #f44336;
+  }
+  
+  .priority-indicator.medium {
+    background-color: #ff9800;
+  }
+  
+  .priority-indicator.low {
+    background-color: #4caf50;
+  }
+  
+  .recommendation-card h5 {
+    margin: 0;
+    font-size: 15px;
+    color: #ffffff;
+  }
+  
+  .recommendation-card p {
+    font-size: 13px;
+    color: #e0e0e0;
+    margin: 5px 0 10px 0;
+    line-height: 1.4;
+  }
+  
+  .metrics-involved {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    margin-top: 10px;
+  }
+  
+  .metric-tag {
+    padding: 4px 8px;
+    background-color: rgba(255, 255, 255, 0.1);
+    border-radius: 20px;
+    font-size: 12px;
+    color: #e0e0e0;
+  }
 `;
 
 const CoachDashboard = () => {
@@ -389,6 +760,12 @@ const CoachDashboard = () => {
   const [selectedPosition, setSelectedPosition] = useState(null);
   const [positionPlayersData, setPositionPlayersData] = useState([]);
   const [playerDataByPosition, setPlayerDataByPosition] = useState({});
+  const [devMode, setDevMode] = useState(true); // Dev mode on by default
+  const [rawPlayerData, setRawPlayerData] = useState({});
+  const [selectedRawPlayer, setSelectedRawPlayer] = useState(null);
+  const [positionComparisonData, setPositionComparisonData] = useState(null);
+  const [optimizationPosition, setOptimizationPosition] = useState(null);
+  const [trainingOptimizationData, setTrainingOptimizationData] = useState(null);
   const menuRef = useRef(null);
 
   const positions = {
@@ -468,9 +845,13 @@ const CoachDashboard = () => {
   // Effect to fetch biometric data when team tab is selected
   useEffect(() => {
     if (activeTab === 'team' && coachInfo.athletes.length > 0) {
-      fetchTeamBiometricData();
+      if (devMode) {
+        fetchRealBiometricData();
+      } else {
+        fetchTeamBiometricData();
+      }
     }
-  }, [activeTab, coachInfo.athletes]);
+  }, [activeTab, coachInfo.athletes, devMode]);
 
   // Prepare chart data
   const positionChartData = {
@@ -828,6 +1209,333 @@ const CoachDashboard = () => {
     setMenuOpen(!menuOpen);
   };
 
+  // Toggle dev mode
+  const toggleDevMode = () => {
+    const newDevMode = !devMode;
+    setDevMode(newDevMode);
+    
+    // If switching to dev mode, fetch real data
+    if (newDevMode && activeTab === 'team') {
+      fetchRealBiometricData();
+    } else if (!newDevMode && activeTab === 'team') {
+      // If switching to mock mode, generate mock data
+      fetchTeamBiometricData();
+    }
+    
+    // If switching from dev mode and we're on the raw data tab, switch to team tab
+    if (!newDevMode && activeTab === 'raw-data') {
+      setActiveTab('team');
+    }
+  };
+
+  // Helper function to get cookie by name
+  const getCookie = (name) => {
+    const value = `; ${document.cookie}`;
+    const parts = value.split(`; ${name}=`);
+    if (parts.length === 2) return parts.pop().split(';').shift();
+    return null;
+  };
+
+  // Ensure we have a valid CSRF token
+  const ensureCSRFToken = async () => {
+    // Try to get the existing CSRF token
+    let csrftoken = getCookie('csrftoken');
+    
+    // If there's no token, get one by making a GET request to an endpoint that sets CSRF cookies
+    if (!csrftoken) {
+      console.log("No CSRF token found, fetching a new one...");
+      try {
+        // Make a GET request to a Django view that sets the CSRF cookie
+        await fetch('/api/verify-dev-password/', {
+          method: 'GET',
+          credentials: 'include',
+        });
+        
+        // Try to get the token again
+        csrftoken = getCookie('csrftoken');
+        console.log("New CSRF token obtained:", csrftoken ? "Yes" : "No");
+      } catch (error) {
+        console.error("Error obtaining CSRF token:", error);
+      }
+    }
+    
+    return csrftoken;
+  };
+
+  // Update the fetchRealBiometricData function to use proper authentication
+  const fetchRealBiometricData = async () => {
+    setLoadingBiometrics(true);
+    
+    // Initialize data structures
+    const playersByPosition = {
+      'FORWARD': [],
+      'MIDFIELDER': [],
+      'DEFENDER': [],
+      'GOALKEEPER': [],
+      'Unknown': []
+    };
+    
+    const metricsByPosition = {
+      'FORWARD': { count: 0, resting_hr: 0, hrv_ms: 0, recovery_score: 0, sleep_hours: 0, steps: 0 },
+      'MIDFIELDER': { count: 0, resting_hr: 0, hrv_ms: 0, recovery_score: 0, sleep_hours: 0, steps: 0 },
+      'DEFENDER': { count: 0, resting_hr: 0, hrv_ms: 0, recovery_score: 0, sleep_hours: 0, steps: 0 },
+      'GOALKEEPER': { count: 0, resting_hr: 0, hrv_ms: 0, recovery_score: 0, sleep_hours: 0, steps: 0 },
+      'Unknown': { count: 0, resting_hr: 0, hrv_ms: 0, recovery_score: 0, sleep_hours: 0, steps: 0 }
+    };
+    
+    // Track raw data from API
+    const allPlayerData = {};
+    
+    try {
+      // Ensure we have a valid CSRF token
+      const csrfToken = await ensureCSRFToken();
+      
+      if (!csrfToken) {
+        console.error("Failed to obtain CSRF token");
+        setLoadingBiometrics(false);
+        return;
+      }
+
+      const headers = {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': csrfToken,
+        'X-CSRF-TOKEN': csrfToken,
+        'CSRF-Token': csrfToken
+      };
+      
+      // Try to fetch position summary data from new API endpoint
+      const positionResponse = await fetch('/api/coach/position-biometrics/?days=7', {
+        method: 'GET',
+        credentials: 'include',
+        headers
+      });
+      
+      if (positionResponse.ok) {
+        const positionData = await positionResponse.json();
+        console.log('Position biometric data:', positionData);
+        
+        // Transform API data to the format our UI expects
+        const teamBiometricAverages = {};
+        
+        for (const [position, data] of Object.entries(positionData)) {
+          if (data.athletes_with_data > 0) {
+            const metrics = data.metrics || {};
+            
+            teamBiometricAverages[position] = {
+              count: data.athletes_with_data,
+              resting_hr: metrics.resting_heart_rate?.avg || null,
+              hrv_ms: metrics.hrv_ms?.avg || null,
+              recovery_score: metrics.recovery_score?.avg || null,
+              sleep_hours: metrics.sleep_hours?.avg || null,
+              steps: metrics.total_steps?.avg || null
+            };
+          }
+        }
+        
+        // Now fetch detailed data for each position to populate player cards
+        for (const position of Object.keys(positionData)) {
+          try {
+            const detailResponse = await fetch(`/api/coach/position/${position}/athletes/?days=7`, {
+              method: 'GET',
+              credentials: 'include',
+              headers
+            });
+            
+            if (detailResponse.ok) {
+              const detailData = await detailResponse.json();
+              console.log(`Position ${position} detail data:`, detailData);
+              
+              // Extract individual player data
+              const athletes = detailData.athletes || [];
+              for (const athlete of athletes) {
+                // Store raw data for dev mode
+                if (athlete.athlete.name) {
+                  allPlayerData[athlete.athlete.name] = athlete;
+                }
+                
+                // Extract athlete metrics
+                const averages = athlete.averages || {};
+                
+                playersByPosition[position].push({
+                  id: athlete.athlete.id,
+                  firstName: athlete.athlete.name.split(' ')[0] || '',
+                  lastName: athlete.athlete.name.split(' ').slice(1).join(' ') || '',
+                  username: athlete.athlete.name,
+                  position: position,
+                  restingHeartRate: averages.resting_heart_rate || generateMockMetric(position, 'restingHeartRate'),
+                  hrv: averages.hrv_ms || generateMockMetric(position, 'hrv'),
+                  recoveryScore: averages.recovery_score || generateMockMetric(position, 'recoveryScore'),
+                  sleepHours: averages.sleep_hours || generateMockMetric(position, 'sleepHours'),
+                  steps: averages.total_steps || generateMockMetric(position, 'steps'),
+                  maxHeartRate: averages.max_heart_rate || generateMockMetric(position, 'maxHeartRate'),
+                  vo2max: averages.vo2_max || generateMockMetric(position, 'vo2max'),
+                  trainingLoad: averages.training_load || generateMockMetric(position, 'trainingLoad'),
+                  fatigue: averages.fatigue_score || generateMockMetric(position, 'fatigue'),
+                  readiness: averages.readiness_score || generateMockMetric(position, 'readiness')
+                });
+              }
+            }
+          } catch (error) {
+            console.error(`Error fetching details for position ${position}:`, error);
+          }
+        }
+        
+        // Update state with the real data
+        setTeamBiometricData(teamBiometricAverages);
+        setPlayerDataByPosition(playersByPosition);
+        setRawPlayerData(allPlayerData);
+        
+      } else {
+        console.warn(`Failed to fetch position summary: ${positionResponse.status}`);
+        // Fall back to mock data
+        fetchTeamBiometricData();
+      }
+    } catch (error) {
+      console.error('Error fetching real biometric data:', error);
+      // Fall back to mock data on error
+      fetchTeamBiometricData();
+    } finally {
+      setLoadingBiometrics(false);
+    }
+  };
+  
+  // Update the syncTeamData function to use proper authentication
+  const syncTeamData = async () => {
+    if (!devMode) return;
+    
+    try {
+      // Ensure we have a valid CSRF token
+      const csrfToken = await ensureCSRFToken();
+      
+      if (!csrfToken) {
+        console.error("Failed to obtain CSRF token");
+        return;
+      }
+  
+      const headers = {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': csrfToken,
+        'X-CSRF-TOKEN': csrfToken,
+        'CSRF-Token': csrfToken
+      };
+      
+      const response = await fetch('/api/coach/sync-team-data/', {
+        method: 'POST',
+        credentials: 'include',
+        headers,
+        body: JSON.stringify({ days: 7, force_refresh: true })
+      });
+      
+      console.log('Sync response status:', response.status);
+      
+      if (response.ok) {
+        const data = await response.json();
+        console.log('Sync response data:', data);
+        // Success! Now refresh the data
+        fetchRealBiometricData();
+      } else {
+        console.warn(`Failed to sync team data: ${response.status}`);
+        const errorText = await response.text();
+        console.error('Error response:', errorText);
+      }
+    } catch (error) {
+      console.error('Error syncing team data:', error);
+    }
+  };
+
+  // Update the fetchPositionComparison function to use proper authentication
+  const fetchPositionComparison = async () => {
+    try {
+      // Ensure we have a valid CSRF token
+      const csrfToken = await ensureCSRFToken();
+      
+      if (!csrfToken) {
+        console.error("Failed to obtain CSRF token");
+        return;
+      }
+  
+      const headers = {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': csrfToken,
+        'X-CSRF-TOKEN': csrfToken,
+        'CSRF-Token': csrfToken
+      };
+      
+      const response = await fetch('/api/coach/position-comparison/', {
+        method: 'GET',
+        credentials: 'include',
+        headers
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        console.log('Position comparison data:', data);
+        setPositionComparisonData(data);
+      } else {
+        console.warn('Failed to fetch position comparison data');
+        const errorText = await response.text();
+        console.error('Error response:', errorText);
+      }
+    } catch (error) {
+      console.error('Error fetching position comparison data:', error);
+    }
+  };
+
+  // Update the fetchTrainingOptimization function to use proper authentication
+  const fetchTrainingOptimization = async (position) => {
+    try {
+      // Ensure we have a valid CSRF token
+      const csrfToken = await ensureCSRFToken();
+      
+      if (!csrfToken) {
+        console.error("Failed to obtain CSRF token");
+        return;
+      }
+  
+      const headers = {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': csrfToken,
+        'X-CSRF-TOKEN': csrfToken,
+        'CSRF-Token': csrfToken
+      };
+      
+      // Build the URL with query parameters if position is provided
+      let url = '/api/coach/training-optimization/';
+      if (position) {
+        url += `?position=${encodeURIComponent(position)}`;
+      }
+      
+      const response = await fetch(url, {
+        method: 'GET',
+        credentials: 'include',
+        headers
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        console.log('Training optimization data:', data);
+        setTrainingOptimizationData(data);
+        setOptimizationPosition(position);
+      } else {
+        console.warn('Failed to fetch training optimization data');
+        const errorText = await response.text();
+        console.error('Error response:', errorText);
+      }
+    } catch (error) {
+      console.error('Error fetching training optimization data:', error);
+    }
+  };
+
+  // Function to format raw data for display
+  const formatRawData = (data) => {
+    if (!data) return 'No data available';
+    try {
+      return JSON.stringify(data, null, 2);
+    } catch (e) {
+      return 'Error formatting data';
+    }
+  };
+
   if (loading) {
     return (
       <div className="loading-container">
@@ -869,6 +1577,21 @@ const CoachDashboard = () => {
                 </div>
               </div>
             </div>
+          </div>
+          
+          {/* Dev Mode Toggle */}
+          <div className="dev-mode-toggle">
+            <div className="toggle-label">
+              <span className={devMode ? 'active' : ''}>Dev Mode</span>
+            </div>
+            <label className="switch">
+              <input 
+                type="checkbox" 
+                checked={devMode} 
+                onChange={toggleDevMode}
+              />
+              <span className="slider round"></span>
+            </label>
           </div>
           
           {/* Hamburger Menu */}
@@ -963,6 +1686,14 @@ const CoachDashboard = () => {
         >
           Events
         </div>
+        {devMode && (
+          <div 
+            className={`dashboard-tab ${activeTab === 'raw-data' ? 'active' : ''}`}
+            onClick={() => setActiveTab('raw-data')}
+          >
+            Raw Data
+          </div>
+        )}
         {selectedAthlete && (
           <div 
             className={`dashboard-tab ${activeTab === 'athlete-detail' ? 'active' : ''}`}
@@ -1029,6 +1760,16 @@ const CoachDashboard = () => {
           <div className="tab-content">
             <div className="section-header">
               <h2>Team Overview</h2>
+              {devMode && (
+                <div className="section-actions">
+                  <button className="action-button" onClick={fetchRealBiometricData}>
+                    Refresh Data
+                  </button>
+                  <button className="action-button sync-button" onClick={syncTeamData}>
+                    Sync Team Data
+                  </button>
+                </div>
+              )}
             </div>
 
             <div className="charts-container">
@@ -1334,6 +2075,161 @@ const CoachDashboard = () => {
                 <button className="invite-connect-btn">Invite to Connect Data</button>
               </div>
             </div>
+          </div>
+        )}
+
+        {/* Raw Data Tab - Only visible in Dev Mode */}
+        {activeTab === 'raw-data' && devMode && (
+          <div className="tab-content">
+            <div className="section-header">
+              <h2>Raw Player Data</h2>
+              <div className="section-actions">
+                <button className="action-button" onClick={fetchRealBiometricData}>
+                  Refresh Data
+                </button>
+                <button className="action-button sync-button" onClick={syncTeamData}>
+                  Sync Team Data
+                </button>
+              </div>
+            </div>
+
+            {loadingBiometrics ? (
+              <div className="loading-data">
+                <div className="mini-spinner"></div>
+                <p>Loading raw biometric data...</p>
+              </div>
+            ) : Object.keys(rawPlayerData).length === 0 ? (
+              <div className="empty-state">
+                <div className="empty-icon">📊</div>
+                <h3>No raw data available</h3>
+                <p>No biometric data could be fetched from the API. Try using the Sync Team Data button to manually trigger a sync.</p>
+              </div>
+            ) : (
+              <div className="raw-data-section">
+                <div className="raw-data-player-select">
+                  <h3>Select Athlete</h3>
+                  <div className="player-selector">
+                    {Object.keys(rawPlayerData).map(username => (
+                      <button
+                        key={username}
+                        className={`player-select-btn ${selectedRawPlayer === username ? 'active' : ''}`}
+                        onClick={() => setSelectedRawPlayer(username)}
+                      >
+                        {username}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                
+                {selectedRawPlayer && (
+                  <div className="raw-data-display">
+                    <h3>Data for {selectedRawPlayer}</h3>
+                    <pre className="raw-data-json">
+                      {formatRawData(rawPlayerData[selectedRawPlayer])}
+                    </pre>
+                  </div>
+                )}
+                
+                {/* Position Comparison Section */}
+                <div className="position-comparison-section">
+                  <h3>Position Comparison Data</h3>
+                  <p className="api-endpoint-note">This data comes from the <code>/api/coach/position-comparison/</code> endpoint</p>
+                  
+                  <button 
+                    className="action-button"
+                    onClick={() => fetchPositionComparison()}
+                  >
+                    Load Position Comparison
+                  </button>
+                  
+                  {positionComparisonData && (
+                    <div className="comparison-data">
+                      <h4>Notable Differences Between Positions</h4>
+                      {positionComparisonData.notable_differences && 
+                       positionComparisonData.notable_differences.length > 0 ? (
+                        <div className="notable-differences">
+                          {positionComparisonData.notable_differences.map((diff, idx) => (
+                            <div key={idx} className="difference-card">
+                              <h5>{diff.metric.replace('_', ' ').toUpperCase()}</h5>
+                              <p className="difference-percent">{diff.difference_percent}% difference</p>
+                              <div className="position-comparison">
+                                <div className="comparison-item highest">
+                                  <span className="position-name">{diff.highest_position}</span>
+                                  <span className="position-value">{diff.highest_value}</span>
+                                </div>
+                                <div className="comparison-item lowest">
+                                  <span className="position-name">{diff.lowest_position}</span>
+                                  <span className="position-value">{diff.lowest_value}</span>
+                                </div>
+                              </div>
+                              <p className="insight">{diff.insight}</p>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p>No significant differences found between positions</p>
+                      )}
+                    </div>
+                  )}
+                </div>
+                
+                {/* Training Optimization Section */}
+                <div className="training-optimization-section">
+                  <h3>Training Optimization</h3>
+                  <p className="api-endpoint-note">This data comes from the <code>/api/coach/training-optimization/</code> endpoint</p>
+                  
+                  <div className="position-selector">
+                    <button 
+                      className={`position-opt-btn ${optimizationPosition === null ? 'active' : ''}`}
+                      onClick={() => fetchTrainingOptimization(null)}
+                    >
+                      All Positions
+                    </button>
+                    {Object.keys(playerDataByPosition)
+                      .filter(pos => playerDataByPosition[pos].length > 0)
+                      .map(pos => (
+                        <button 
+                          key={pos}
+                          className={`position-opt-btn ${optimizationPosition === pos ? 'active' : ''}`}
+                          onClick={() => fetchTrainingOptimization(pos)}
+                        >
+                          {pos}
+                        </button>
+                      ))
+                    }
+                  </div>
+                  
+                  {trainingOptimizationData && (
+                    <div className="optimization-data">
+                      <h4>Recommendations for {trainingOptimizationData.position}</h4>
+                      {trainingOptimizationData.status === 'scaffold' ? (
+                        <div className="optimization-placeholder">
+                          <p>{trainingOptimizationData.message}</p>
+                          <div className="placeholder-recommendations">
+                            {trainingOptimizationData.recommendations?.map((rec, idx) => (
+                              <div key={idx} className={`recommendation-card ${rec.priority}`}>
+                                <div className="recommendation-header">
+                                  <span className={`priority-indicator ${rec.priority}`}></span>
+                                  <h5>{rec.title}</h5>
+                                </div>
+                                <p>{rec.description}</p>
+                                <div className="metrics-involved">
+                                  {rec.metrics_involved.map(metric => (
+                                    <span key={metric} className="metric-tag">{metric}</span>
+                                  ))}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ) : (
+                        <p>{trainingOptimizationData.message}</p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>

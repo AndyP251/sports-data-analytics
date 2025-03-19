@@ -38,6 +38,8 @@ from .ai_insights import (
     get_recommendations_for_athlete, 
     get_insight_trends_for_athlete
 )
+from .services.coach_data_sync_service import CoachDataSyncService
+from .permissions import IsCoach
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -977,4 +979,180 @@ def get_team_athletes(request, team_id):
     except Exception as e:
         logger.error(f"Error getting team athletes: {e}")
         return Response({"error": f"Error retrieving team athletes: {str(e)}"}, status=500)
+
+# Coach Data API Views
+@api_view(['GET'])
+@permission_classes([IsAuthenticated, IsCoach])
+def team_biometric_summary(request):
+    """Get team-level biometric data summary"""
+    try:
+        days = int(request.query_params.get('days', 7))
+        # Get coach object safely
+        coach = None
+        if hasattr(request.user, 'coach_profile'):
+            coach = request.user.coach_profile
+        elif hasattr(request.user, 'coach'):
+            coach = request.user.coach
+        
+        service = CoachDataSyncService(coach=coach)
+        summary = service.get_team_biometric_summary(days=days)
+        
+        return Response(summary)
+    except Exception as e:
+        return Response({
+            'error': str(e),
+            'message': 'Failed to retrieve team biometric summary'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated, IsCoach])
+def position_biometric_summary(request):
+    """Get position-based biometric data summary"""
+    try:
+        days = int(request.query_params.get('days', 7))
+        # Get coach object safely
+        coach = None
+        if hasattr(request.user, 'coach_profile'):
+            coach = request.user.coach_profile
+        elif hasattr(request.user, 'coach'):
+            coach = request.user.coach
+        
+        service = CoachDataSyncService(coach=coach)
+        summary = service.get_position_biometric_summary(days=days)
+        
+        return Response(summary)
+    except Exception as e:
+        return Response({
+            'error': str(e),
+            'message': 'Failed to retrieve position biometric summary'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated, IsCoach])
+def position_athletes_data(request, position):
+    """Get detailed data for all athletes in a specific position"""
+    try:
+        days = int(request.query_params.get('days', 7))
+        # Get coach object safely
+        coach = None
+        if hasattr(request.user, 'coach_profile'):
+            coach = request.user.coach_profile
+        elif hasattr(request.user, 'coach'):
+            coach = request.user.coach
+        
+        service = CoachDataSyncService(coach=coach)
+        data = service.get_position_athletes_data(position=position, days=days)
+        
+        return Response(data)
+    except Exception as e:
+        return Response({
+            'error': str(e),
+            'message': f'Failed to retrieve data for position: {position}'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated, IsCoach])
+def athlete_biometric_data(request, athlete_id):
+    """Get detailed biometric data for a specific athlete"""
+    try:
+        days = int(request.query_params.get('days', 7))
+        # Get coach object safely
+        coach = None
+        if hasattr(request.user, 'coach_profile'):
+            coach = request.user.coach_profile
+        elif hasattr(request.user, 'coach'):
+            coach = request.user.coach
+        
+        service = CoachDataSyncService(coach=coach)
+        data = service.get_athlete_biometric_data(athlete_id=athlete_id, days=days)
+        
+        if not data:
+            return Response({
+                'message': 'No data found or athlete not on your team'
+            }, status=status.HTTP_404_NOT_FOUND)
+            
+        return Response(data)
+    except Exception as e:
+        return Response({
+            'error': str(e),
+            'message': f'Failed to retrieve data for athlete: {athlete_id}'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated, IsCoach])
+def biometric_comparison_by_position(request):
+    """Get comparison of biometric metrics across different positions"""
+    try:
+        days = int(request.query_params.get('days', 30))
+        # Get coach object safely
+        coach = None
+        if hasattr(request.user, 'coach_profile'):
+            coach = request.user.coach_profile
+        elif hasattr(request.user, 'coach'):
+            coach = request.user.coach
+        
+        service = CoachDataSyncService(coach=coach)
+        data = service.get_biometric_comparison_by_position(days=days)
+        
+        return Response(data)
+    except Exception as e:
+        return Response({
+            'error': str(e),
+            'message': 'Failed to retrieve biometric comparison data'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated, IsCoach])
+def training_optimization(request):
+    """Get training optimization recommendations"""
+    try:
+        position = request.query_params.get('position', None)
+        # Get coach object safely
+        coach = None
+        if hasattr(request.user, 'coach_profile'):
+            coach = request.user.coach_profile
+        elif hasattr(request.user, 'coach'):
+            coach = request.user.coach
+        
+        service = CoachDataSyncService(coach=coach)
+        data = service.get_training_optimization_data(position=position)
+        
+        return Response(data)
+    except Exception as e:
+        return Response({
+            'error': str(e),
+            'message': 'Failed to retrieve training optimization data'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated, IsCoach])
+def sync_team_data(request):
+    """Trigger a sync of biometric data for all athletes on the team"""
+    try:
+        days = int(request.data.get('days', 7))
+        force_refresh = request.data.get('force_refresh', False)
+        # Get coach object safely
+        coach = None
+        if hasattr(request.user, 'coach_profile'):
+            coach = request.user.coach_profile
+        elif hasattr(request.user, 'coach'):
+            coach = request.user.coach
+        
+        # Add debug logging to inspect coach user
+        logger.debug(f"User: {request.user}, has coach attr: {hasattr(request.user, 'coach')}")
+        
+        service = CoachDataSyncService(coach=coach)
+        success = service.sync_team_biometric_data(days=days, force_refresh=force_refresh)
+        
+        if success:
+            return Response({'message': 'Team data sync initiated successfully'})
+        else:
+            return Response({
+                'message': 'No athletes found or sync failed'
+            }, status=status.HTTP_400_BAD_REQUEST)
+    except Exception as e:
+        return Response({
+            'error': str(e),
+            'message': 'Failed to sync team data'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 

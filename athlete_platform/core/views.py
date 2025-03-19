@@ -637,7 +637,7 @@ def get_db_info(request):
         # Coach-specific POST request to get CoreBiometricData for team athletes
         try:
             # Get request data
-            post_data = json.loads(request.body)
+            post_data = request.data
             athlete_ids = post_data.get('athlete_ids', [])
             days = int(post_data.get('days', 7))
             team_id = post_data.get('team_id')
@@ -737,8 +737,18 @@ def get_db_info(request):
             
             for athlete_id in valid_athlete_ids:
                 try:
-                    # Get the athlete
-                    athlete = Athlete.objects.get(id=athlete_id)
+                    # First try direct lookup by ID
+                    try:
+                        athlete = Athlete.objects.get(id=athlete_id)
+                    except Athlete.DoesNotExist:
+                        # If that fails, try looking up by User ID relationship
+                        try:
+                            user = User.objects.get(id=athlete_id)
+                            athlete = Athlete.objects.get(user=user)
+                            logger.info(f"Found athlete {athlete.id} through User ID {user.id}")
+                        except (User.DoesNotExist, Athlete.DoesNotExist):
+                            logger.warning(f"Could not find Athlete model for ID {athlete_id}")
+                            continue
                     
                     # Get biometric data for this athlete in the date range
                     data_points = CoreBiometricData.objects.filter(

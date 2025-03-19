@@ -1324,57 +1324,10 @@ const CoachDashboard = () => {
         'CSRF-Token': csrfToken
       };
       
-      // First attempt a direct database query using core_biometric_data table
-      // This is a custom approach to bypass the 404 issues with standard endpoints
-      try {
-        console.log("Attempting to fetch data directly from CoreBiometricData...");
-        
-        // Get all athlete IDs from the team athletes in the coachInfo
-        const athletes = coachInfo.team_athletes || [];
-        const athleteIds = athletes.map(athlete => athlete.id);
-        
-        if (athleteIds.length === 0) {
-          console.warn("No athlete IDs available");
-          setSyncError("No athletes found in the team roster");
-          setLoadingBiometrics(false);
-          return;
-        }
-        
-        console.log(`Attempting to fetch biometric data for ${athleteIds.length} athletes`);
-        
-        // Use a special endpoint to directly query the database
-        const dbDataResponse = await fetch('/api/biometrics/db-info/', {
-          method: 'POST',
-          credentials: 'include',
-          headers,
-          body: JSON.stringify({
-            athlete_ids: athleteIds,
-            days: 7,
-            team_id: coachInfo.team_id // Include team_id to help server identify athletes
-          })
-        });
-        
-        if (dbDataResponse.ok) {
-          const dbData = await dbDataResponse.json();
-          console.log(`Successfully fetched CoreBiometricData for ${Object.keys(dbData.data || {}).length} athletes`);
-          
-          // Process the data from CoreBiometricData
-          if (dbData && dbData.data && Object.keys(dbData.data).length > 0) {
-            processCoreBiometricData(dbData.data);
-            return;
-          } else {
-            console.warn("No CoreBiometricData found, falling back to position query");
-          }
-        } else {
-          console.warn(`Failed to fetch CoreBiometricData: ${dbDataResponse.status}`);
-          const errorText = await dbDataResponse.text();
-          console.error("CoreBiometricData error:", errorText);
-        }
-      } catch (dbError) {
-        console.error("Error fetching from CoreBiometricData:", dbError);
-      }
+      // Skip the problematic db-info endpoint and go directly to position biometrics endpoint
+      console.log("Fetching data from position-biometrics endpoint");
       
-      // If direct database query fails, fall back to position biometrics endpoint
+      // Use position biometrics endpoint
       const response = await fetch('/api/coach/position-biometrics/?days=7', {
         method: 'GET',
         credentials: 'include',
@@ -1983,77 +1936,10 @@ const CoachDashboard = () => {
     const mockCounter = {value: 0};
     const realCounter = {value: 0};
     
-    // First attempt a direct database query using CoreBiometricData table
-    try {
-      console.log("Attempting to fetch data directly from CoreBiometricData...");
-      
-      // Get all athlete IDs
-      const athleteIds = athletes.map(athlete => athlete.id);
-      
-      // Use the db-info endpoint to query the database directly
-      const dbDataResponse = await fetch('/api/biometrics/db-info/', {
-        method: 'POST',
-        credentials: 'include',
-        headers,
-        body: JSON.stringify({
-          athlete_ids: athleteIds,
-          days: 7,
-          team_id: coachInfo.team_id
-        })
-      });
-      
-      if (dbDataResponse.ok) {
-        const dbData = await dbDataResponse.json();
-        
-        if (dbData && dbData.data && Object.keys(dbData.data).length > 0) {
-          console.log(`CoreBiometricData found for ${Object.keys(dbData.data).length} athletes`);
-          
-          // Update raw player data with data from CoreBiometricData
-          for (const athleteId in dbData.data) {
-            const athlete = athletes.find(a => a.id === athleteId);
-            if (athlete) {
-              const formattedData = {
-                athlete: athlete,
-                source: 'api',
-                message: `Real data from CoreBiometricData for ${athlete.username}`,
-                data: dbData.data[athleteId]
-              };
-              
-              newRawPlayerData[athlete.username] = formattedData;
-              athletesWithData.push(athlete.username);
-              realCounter.value++;
-            }
-          }
-          
-          // If we've found data for all athletes in CoreBiometricData, skip individual fetches
-          if (Object.keys(dbData.data).length === athletes.length) {
-            setRawPlayerData(newRawPlayerData);
-            setPlayerList(athletesWithData);
-            
-            if (athletesWithData.length > 0 && !selectedRawPlayer) {
-              setSelectedRawPlayer(athletesWithData[0]);
-            }
-            
-            alert(`Successfully retrieved real data for ${realCounter.value} athletes from CoreBiometricData table!`);
-            return;
-          }
-        } else {
-          console.warn("No CoreBiometricData found, falling back to individual athlete endpoints");
-        }
-      } else {
-        console.warn(`Failed to fetch CoreBiometricData: ${dbDataResponse.status}`);
-      }
-    } catch (dbError) {
-      console.error("Error fetching from CoreBiometricData:", dbError);
-    }
+    console.log("Skipping CoreBiometricData fetch and going directly to individual athlete data");
     
-    // If we didn't get data for all athletes from CoreBiometricData, fall back to individual fetching
+    // Fetch data for each athlete directly from their individual endpoints
     for (const athlete of athletes) {
-      // Skip athletes we already have data for
-      if (newRawPlayerData[athlete.username]) {
-        continue;
-      }
-      
       const position = athlete.position || 'UNKNOWN';
       console.log(`Fetching data for athlete: ${athlete.username}, position: ${position}`);
       
@@ -2938,11 +2824,11 @@ const CoachDashboard = () => {
               <div style={{ marginBottom: "15px", color: "#e0e0e0", fontSize: "14px", lineHeight: "1.5" }}>
                 <p><strong>Data Fetch Methods:</strong></p>
                 <ul style={{ paddingLeft: "20px" }}>
-                  <li><strong>Direct Fetch:</strong> First attempts to query CoreBiometricData directly from the database, then falls back to athlete API endpoints with mock data generation. This is the recommended method.</li>
-                  <li><strong>Fetch Team Data:</strong> Similar to Direct Fetch but focuses on position-based data aggregation first.</li>
-                  <li><strong>Sync Team Data:</strong> Attempts to sync team data via <code>/api/coach/sync-team-data/</code> (currently failing with No Athletes error).</li>
+                  <li><strong>Direct Fetch:</strong> Fetches data for each athlete individually using their specific endpoints with mock data generation as fallback. This is the recommended method.</li>
+                  <li><strong>Fetch Team Data:</strong> Uses position-based data aggregation from the position endpoints.</li>
+                  <li><strong>Sync Team Data:</strong> Attempts to sync team data via <code>/api/coach/sync-team-data/</code> endpoint.</li>
                 </ul>
-                <p><strong>CoreBiometricData Integration:</strong> Both Direct Fetch and Fetch Team Data now query the CoreBiometricData table directly through the <code>/api/biometrics/db-info/</code> endpoint when fetching actual athlete data from the database.</p>
+                <p><strong>Data Integration:</strong> Both Direct Fetch and Fetch Team Data now use the standard athlete and position endpoints to retrieve data, avoiding the deprecated debugging endpoints.</p>
               </div>
               
               <div style={{ marginBottom: "15px" }}>
@@ -2966,34 +2852,36 @@ const CoachDashboard = () => {
                   onClick={async () => {
                     try {
                       const csrfToken = await ensureCSRFToken();
-                      const athleteIds = coachInfo.team_athletes.map(athlete => athlete.id);
+                      const athletes = coachInfo.team_athletes;
                       
-                      console.log(`Using ${athleteIds.length} athlete IDs from team_athletes for direct DB query`);
+                      if (!athletes || athletes.length === 0) {
+                        alert("No athletes available");
+                        return;
+                      }
                       
-                      const response = await fetch('/api/biometrics/db-info/', {
-                        method: 'POST',
+                      console.log(`Fetching individual data for ${athletes.length} athletes`);
+                      
+                      // Use the first athlete as a sample
+                      const sampleAthlete = athletes[0];
+                      const response = await fetch(`/api/coach/athlete/${sampleAthlete.id}/biometrics/?days=7`, {
+                        method: 'GET',
                         credentials: 'include',
                         headers: {
                           'Content-Type': 'application/json',
                           'X-CSRFToken': csrfToken
-                        },
-                        body: JSON.stringify({
-                          athlete_ids: athleteIds,
-                          days: 7,
-                          team_id: coachInfo.team_id
-                        })
+                        }
                       });
                       
                       if (response.ok) {
                         const data = await response.json();
-                        console.log("CoreBiometricData Query Results:", data);
-                        alert(`Query successful! Found data for ${Object.keys(data.data || {}).length} athletes.`);
+                        console.log(`Data for athlete ${sampleAthlete.username}:`, data);
+                        alert(`Successfully fetched data for ${sampleAthlete.username}. Check console for details.`);
                       } else {
-                        console.error("Failed to query CoreBiometricData:", response.status);
-                        alert(`Failed to query CoreBiometricData: ${response.status}`);
+                        console.error(`Failed to fetch data for athlete ${sampleAthlete.username}:`, response.status);
+                        alert(`Failed to fetch athlete data: ${response.status}`);
                       }
                     } catch (error) {
-                      console.error("Error querying CoreBiometricData:", error);
+                      console.error("Error fetching athlete data:", error);
                       alert(`Error: ${error.message}`);
                     }
                   }}

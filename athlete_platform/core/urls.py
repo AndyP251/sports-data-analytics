@@ -36,7 +36,7 @@ urlpatterns = [
     path('api/teams/', get_teams, name='get_teams'),
     path('api/team-athletes/<str:team_id>/', get_team_athletes, name='get_team_athletes'),
     
-    # Dashboard data
+    # Athlete Dashboard data
     path('api/dashboard/', dashboard_data, name='dashboard_data'),
     path('api/dashboard/data/', views.dashboard_data, name='dashboard_data'),
     path('api/biometrics/sync/', sync_biometric_data, name='sync_biometric_data'),
@@ -51,6 +51,7 @@ urlpatterns = [
     path('api/biometrics/active-sources/', active_sources, name='active_sources'),
     path('api/verify-dev-password/', verify_dev_password, name='verify-dev-password'),
     path('api/biometrics/db-info/', get_db_info, name='get_db_info'), #DEBUGGING ENDPOINT
+    
     # AI Insights endpoints
     path('api/insights/generate/', generate_insights, name='generate_insights'),
     path('api/insights/categories/', get_insight_categories, name='get_insight_categories'),

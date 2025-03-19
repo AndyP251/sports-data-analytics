@@ -118,7 +118,37 @@ class CoachDataSyncService:
         if not self.team:
             return []
             
-        return Athlete.objects.filter(team=self.team)
+        # First check the athletes_array field for IDs
+        if hasattr(self.team, 'athletes_array') and self.team.athletes_array:
+            try:
+                # Get athletes by IDs in the athletes_array
+                athlete_ids = self.team.athletes_array
+                logger.info(f"Using athletes_array with {len(athlete_ids)} athletes for team {self.team.name}")
+                
+                # Convert string IDs to UUID and query
+                athletes = Athlete.objects.filter(id__in=athlete_ids)
+                
+                # If we found all the athletes, return them
+                if athletes.count() == len(athlete_ids):
+                    return athletes
+                    
+                # If not all athletes were found, log a warning
+                logger.warning(f"Only found {athletes.count()} of {len(athlete_ids)} athletes from athletes_array")
+            except Exception as e:
+                logger.error(f"Error getting athletes from athletes_array: {e}")
+        
+        # Fallback to the traditional relation
+        athletes = Athlete.objects.filter(team=self.team)
+        
+        # If we got athletes through the relation but not through the array,
+        # update the athletes_array to keep it in sync
+        if athletes.exists() and (not hasattr(self.team, 'athletes_array') or not self.team.athletes_array):
+            try:
+                self.team.update_athletes_array()
+            except Exception as e:
+                logger.error(f"Error updating athletes_array: {e}")
+            
+        return athletes
         
     def get_athletes_by_position(self, position: str = None) -> List[Athlete]:
         """Get athletes filtered by position if provided"""

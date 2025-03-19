@@ -158,9 +158,54 @@ class Team(models.Model):
     logo = models.ImageField(upload_to='team_logos/', null=True, blank=True)
     created_at = models.DateTimeField(default=timezone.now)
     updated_at = models.DateTimeField(auto_now=True)
+    athletes_array = models.JSONField(
+        default=list,
+        help_text="Array of athlete IDs associated with this team, used for data syncing"
+    )
 
     def __str__(self):
         return self.name
+        
+    def update_athletes_array(self):
+        """Update the athletes_array field based on actual athlete associations"""
+        try:
+            # Get all athletes with this team
+            team_athletes = Athlete.objects.filter(team=self)
+            
+            # Create array of athlete IDs
+            athlete_ids = [str(athlete.id) for athlete in team_athletes]
+            
+            # Update the field
+            self.athletes_array = athlete_ids
+            self.save(update_fields=['athletes_array', 'updated_at'])
+            
+            logger.info(f"Updated team {self.name} athletes_array with {len(athlete_ids)} athletes")
+            return True
+        except Exception as e:
+            logger.error(f"Error updating athletes_array for team {self.name}: {e}")
+            return False
+            
+    def add_athlete_to_array(self, athlete_id):
+        """Add an athlete ID to the athletes_array if not already present"""
+        if not self.athletes_array:
+            self.athletes_array = []
+            
+        athlete_id_str = str(athlete_id)
+        if athlete_id_str not in self.athletes_array:
+            self.athletes_array.append(athlete_id_str)
+            self.save(update_fields=['athletes_array', 'updated_at'])
+            logger.info(f"Added athlete {athlete_id} to team {self.name} athletes_array")
+        
+    def remove_athlete_from_array(self, athlete_id):
+        """Remove an athlete ID from the athletes_array"""
+        if not self.athletes_array:
+            return
+            
+        athlete_id_str = str(athlete_id)
+        if athlete_id_str in self.athletes_array:
+            self.athletes_array.remove(athlete_id_str)
+            self.save(update_fields=['athletes_array', 'updated_at'])
+            logger.info(f"Removed athlete {athlete_id} from team {self.name} athletes_array")
 
 class CoachCode(models.Model):
     """
@@ -317,14 +362,48 @@ class Athlete(models.Model):
     emergency_phone = models.CharField(max_length=15, blank=True)
     created_at = models.DateTimeField(default=timezone.now)
     updated_at = models.DateTimeField(auto_now=True)
+    
+    # Track the previous team to detect changes
+    _original_team_id = None
 
     def __str__(self):
         return f"{self.user.username} - {self.team.name if self.team else 'No Team'}"
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Store the original team ID when instance is initialized
+        self._original_team_id = self.team_id if self.team_id else None
+
     def save(self, *args, **kwargs):
         if not self.id and self.user:
             self.id = self.user.id
+            
+        # Check if team has changed
+        team_changed = self.team_id != self._original_team_id
+        
+        # Save the athlete first
         super().save(*args, **kwargs)
+        
+        # Update team's athletes_array if team is set
+        if self.team and (team_changed or not self._original_team_id):
+            try:
+                # Add this athlete to the new team's array
+                self.team.add_athlete_to_array(self.id)
+            except Exception as e:
+                logger.error(f"Error updating team athletes_array for athlete {self.id}: {e}")
+        
+        # If team was changed from a previous team, remove from previous team's array
+        if team_changed and self._original_team_id:
+            try:
+                old_team = Team.objects.get(id=self._original_team_id)
+                old_team.remove_athlete_from_array(self.id)
+            except Team.DoesNotExist:
+                pass
+            except Exception as e:
+                logger.error(f"Error removing athlete {self.id} from previous team: {e}")
+        
+        # Update the original team ID
+        self._original_team_id = self.team_id
 
 class WorkoutData(models.Model):
     WORKOUT_TYPES = [

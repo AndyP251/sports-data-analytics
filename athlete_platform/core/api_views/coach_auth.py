@@ -224,6 +224,7 @@ def check_coach_auth(request):
             if coach:
                 # Get all team members directly from the User model
                 team_athletes = []
+                athlete_ids = []
                 if coach.team:
                     # Get all users who have the team field set and are athletes
                     team_users = User.objects.filter(
@@ -235,6 +236,7 @@ def check_coach_auth(request):
                     
                     # Format basic data about each team athlete
                     for user in team_users:
+                        athlete_ids.append(str(user.id))
                         team_athletes.append({
                             'id': str(user.id),
                             'username': user.username,
@@ -242,6 +244,35 @@ def check_coach_auth(request):
                             'position': user.position or 'Unknown',
                             'data_permissions': user.data_permissions
                         })
+                    
+                    # Update the team's athletes_array with these IDs
+                    try:
+                        if athlete_ids and hasattr(coach.team, 'athletes_array'):
+                            # Check if the team's athletes_array differs from what we found
+                            if set(athlete_ids) != set(coach.team.athletes_array):
+                                coach.team.athletes_array = athlete_ids
+                                coach.team.save(update_fields=['athletes_array'])
+                                debug_log(f"Updated team {coach.team.name} athletes_array with {len(athlete_ids)} athletes", DebugLevel.MEDIUM)
+                        
+                        # Update the coach.athletes ManyToMany field if there's a mismatch
+                        if hasattr(coach, 'athletes'):
+                            # Get actual athlete objects
+                            from ..models import Athlete
+                            
+                            # Find athlete objects by user relationship instead of direct ID match
+                            athletes = Athlete.objects.filter(user__id__in=athlete_ids)
+                            debug_log(f"Found {athletes.count()} athlete objects for {len(athlete_ids)} user IDs", DebugLevel.MEDIUM)
+                            
+                            # Check if the existing athlete set matches what we found
+                            current_athlete_ids = set(str(a.id) for a in coach.athletes.all())
+                            if set(str(a.id) for a in athletes) != current_athlete_ids:
+                                # Clear and add the athletes
+                                coach.athletes.clear()
+                                if athletes.exists():
+                                    coach.athletes.add(*athletes)
+                                debug_log(f"Updated coach {coach.user.username} athletes with {athletes.count()} athletes", DebugLevel.MEDIUM)
+                    except Exception as e:
+                        debug_log(f"Error updating athletes associations: {e}", DebugLevel.EXTREME)
                 
                 return JsonResponse({
                     'username': request.user.username,

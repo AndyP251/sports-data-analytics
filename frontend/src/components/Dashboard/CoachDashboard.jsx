@@ -514,26 +514,56 @@ const biometricStyles = `
   }
   
   .action-button {
-    padding: 8px 16px;
-    background-color: #333;
-    color: #e0e0e0;
+    margin-left: 10px;
+    padding: 6px 12px;
+    border-radius: 4px;
+    background-color: #2b5797;
+    color: white;
     border: none;
-    border-radius: 5px;
     cursor: pointer;
     font-size: 14px;
-    transition: all 0.2s ease;
+    transition: background-color 0.2s ease;
   }
   
   .action-button:hover {
-    background-color: #444;
+    background-color: #1e3a6e;
   }
   
+  .action-button:disabled {
+    background-color: #62738f;
+    cursor: not-allowed;
+  }
+  
+  /* Special button styles */
   .sync-button {
-    background-color: #2b5797;
+    background-color: #0c7b93;
   }
   
   .sync-button:hover {
-    background-color: #3666ad;
+    background-color: #096680;
+  }
+  
+  .action-button:first-child {
+    margin-left: 0;
+  }
+  
+  /* Data source indicator */
+  .data-source {
+    display: inline-block;
+    font-size: 12px;
+    padding: 2px 6px;
+    border-radius: 3px;
+    margin-left: 8px;
+  }
+  
+  .data-source.api {
+    background-color: #4caf50;
+    color: white;
+  }
+  
+  .data-source.mock {
+    background-color: #ff9800;
+    color: white;
   }
   
   /* Position Comparison Styles */
@@ -747,7 +777,8 @@ const CoachDashboard = () => {
     team: '',
     team_id: '',
     specialization: '',
-    athletes: []
+    athletes: [],
+    team_athletes: []
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -766,6 +797,7 @@ const CoachDashboard = () => {
   const [positionComparisonData, setPositionComparisonData] = useState(null);
   const [optimizationPosition, setOptimizationPosition] = useState(null);
   const [trainingOptimizationData, setTrainingOptimizationData] = useState(null);
+  const [syncError, setSyncError] = useState(null); // New state for sync error messages
   const menuRef = useRef(null);
 
   const positions = {
@@ -799,7 +831,8 @@ const CoachDashboard = () => {
           team: authData.team || 'No team assigned',
           team_id: authData.team_id || '',
           specialization: authData.specialization || 'Not specified',
-          athletes: authData.team_athletes || []
+          athletes: authData.team_athletes || [],
+          team_athletes: authData.team_athletes || []
         });
         
         setLoading(false);
@@ -833,7 +866,7 @@ const CoachDashboard = () => {
   }, [menuRef]);
 
   // Count positions for the chart
-  coachInfo.athletes.forEach(athlete => {
+  coachInfo.team_athletes.forEach(athlete => {
     const position = athlete.position || 'Unknown';
     if (positions.hasOwnProperty(position)) {
       positions[position]++;
@@ -844,14 +877,15 @@ const CoachDashboard = () => {
 
   // Effect to fetch biometric data when team tab is selected
   useEffect(() => {
-    if (activeTab === 'team' && coachInfo.athletes.length > 0) {
+    if (activeTab === 'team' && coachInfo.team_athletes.length > 0) {
       if (devMode) {
-        fetchRealBiometricData();
+        // Use the direct fetch method instead of fetchRealBiometricData
+        fetchDirectAthleteData();
       } else {
         fetchTeamBiometricData();
       }
     }
-  }, [activeTab, coachInfo.athletes, devMode]);
+  }, [activeTab, coachInfo.team_athletes, devMode]);
 
   // Prepare chart data
   const positionChartData = {
@@ -1264,27 +1298,13 @@ const CoachDashboard = () => {
 
   // Update the fetchRealBiometricData function to use proper authentication
   const fetchRealBiometricData = async () => {
+    if (!coachInfo || !coachInfo.team_id) {
+      console.error("Coach information or team ID not available");
+      return;
+    }
+    
+    setSyncError(null);
     setLoadingBiometrics(true);
-    
-    // Initialize data structures
-    const playersByPosition = {
-      'FORWARD': [],
-      'MIDFIELDER': [],
-      'DEFENDER': [],
-      'GOALKEEPER': [],
-      'Unknown': []
-    };
-    
-    const metricsByPosition = {
-      'FORWARD': { count: 0, resting_hr: 0, hrv_ms: 0, recovery_score: 0, sleep_hours: 0, steps: 0 },
-      'MIDFIELDER': { count: 0, resting_hr: 0, hrv_ms: 0, recovery_score: 0, sleep_hours: 0, steps: 0 },
-      'DEFENDER': { count: 0, resting_hr: 0, hrv_ms: 0, recovery_score: 0, sleep_hours: 0, steps: 0 },
-      'GOALKEEPER': { count: 0, resting_hr: 0, hrv_ms: 0, recovery_score: 0, sleep_hours: 0, steps: 0 },
-      'Unknown': { count: 0, resting_hr: 0, hrv_ms: 0, recovery_score: 0, sleep_hours: 0, steps: 0 }
-    };
-    
-    // Track raw data from API
-    const allPlayerData = {};
     
     try {
       // Ensure we have a valid CSRF token
@@ -1292,6 +1312,7 @@ const CoachDashboard = () => {
       
       if (!csrfToken) {
         console.error("Failed to obtain CSRF token");
+        setSyncError("Authentication error: Failed to obtain security token");
         setLoadingBiometrics(false);
         return;
       }
@@ -1303,115 +1324,323 @@ const CoachDashboard = () => {
         'CSRF-Token': csrfToken
       };
       
-      // Try to fetch position summary data from new API endpoint
-      const positionResponse = await fetch('/api/coach/position-biometrics/?days=7', {
+      // First attempt a direct database query using core_biometric_data table
+      // This is a custom approach to bypass the 404 issues with standard endpoints
+      try {
+        console.log("Attempting to fetch data directly from CoreBiometricData...");
+        
+        // Get all athlete IDs from the team athletes in the coachInfo
+        const athletes = coachInfo.team_athletes || [];
+        const athleteIds = athletes.map(athlete => athlete.id);
+        
+        if (athleteIds.length === 0) {
+          console.warn("No athlete IDs available");
+          setSyncError("No athletes found in the team roster");
+          setLoadingBiometrics(false);
+          return;
+        }
+        
+        console.log(`Attempting to fetch biometric data for ${athleteIds.length} athletes`);
+        
+        // Use a special endpoint to directly query the database
+        const dbDataResponse = await fetch('/api/biometrics/db-info/', {
+          method: 'POST',
+          credentials: 'include',
+          headers,
+          body: JSON.stringify({
+            athlete_ids: athleteIds,
+            days: 7,
+            team_id: coachInfo.team_id // Include team_id to help server identify athletes
+          })
+        });
+        
+        if (dbDataResponse.ok) {
+          const dbData = await dbDataResponse.json();
+          console.log(`Successfully fetched CoreBiometricData for ${Object.keys(dbData.data || {}).length} athletes`);
+          
+          // Process the data from CoreBiometricData
+          if (dbData && dbData.data && Object.keys(dbData.data).length > 0) {
+            processCoreBiometricData(dbData.data);
+            return;
+          } else {
+            console.warn("No CoreBiometricData found, falling back to position query");
+          }
+        } else {
+          console.warn(`Failed to fetch CoreBiometricData: ${dbDataResponse.status}`);
+          const errorText = await dbDataResponse.text();
+          console.error("CoreBiometricData error:", errorText);
+        }
+      } catch (dbError) {
+        console.error("Error fetching from CoreBiometricData:", dbError);
+      }
+      
+      // If direct database query fails, fall back to position biometrics endpoint
+      const response = await fetch('/api/coach/position-biometrics/?days=7', {
         method: 'GET',
         credentials: 'include',
         headers
       });
       
-      if (positionResponse.ok) {
-        const positionData = await positionResponse.json();
-        console.log('Position biometric data:', positionData);
+      if (response.ok) {
+        const data = await response.json();
+        console.log("Position biometric data:", data);
         
-        // Transform API data to the format our UI expects
-        const teamBiometricAverages = {};
-        
-        for (const [position, data] of Object.entries(positionData)) {
-          if (data.athletes_with_data > 0) {
-            const metrics = data.metrics || {};
-            
-            teamBiometricAverages[position] = {
-              count: data.athletes_with_data,
-              resting_hr: metrics.resting_heart_rate?.avg || null,
-              hrv_ms: metrics.hrv_ms?.avg || null,
-              recovery_score: metrics.recovery_score?.avg || null,
-              sleep_hours: metrics.sleep_hours?.avg || null,
-              steps: metrics.total_steps?.avg || null
-            };
-          }
-        }
-        
-        // Now fetch detailed data for each position to populate player cards
-        for (const position of Object.keys(positionData)) {
-          try {
-            const detailResponse = await fetch(`/api/coach/position/${position}/athletes/?days=7`, {
-              method: 'GET',
-              credentials: 'include',
-              headers
-            });
-            
-            if (detailResponse.ok) {
-              const detailData = await detailResponse.json();
-              console.log(`Position ${position} detail data:`, detailData);
+        // Check if we got meaningful data
+        if (data && Object.keys(data).length > 0) {
+          setTeamBiometricData(data);
+          
+          // Fetch athletes for each position
+          for (const position of Object.keys(data)) {
+            try {
+              const athletesResponse = await fetch(`/api/coach/position/${position}/athletes/?days=7`, {
+                method: 'GET',
+                credentials: 'include',
+                headers
+              });
               
-              // Extract individual player data
-              const athletes = detailData.athletes || [];
-              for (const athlete of athletes) {
-                // Store raw data for dev mode
-                if (athlete.athlete.name) {
-                  allPlayerData[athlete.athlete.name] = athlete;
-                }
+              if (athletesResponse.ok) {
+                const athletes = await athletesResponse.json();
                 
-                // Extract athlete metrics
-                const averages = athlete.averages || {};
+                // Update player data for this position
+                setPlayerDataByPosition(prevState => ({
+                  ...prevState,
+                  [position]: athletes
+                }));
                 
-                playersByPosition[position].push({
-                  id: athlete.athlete.id,
-                  firstName: athlete.athlete.name.split(' ')[0] || '',
-                  lastName: athlete.athlete.name.split(' ').slice(1).join(' ') || '',
-                  username: athlete.athlete.name,
-                  position: position,
-                  restingHeartRate: averages.resting_heart_rate || generateMockMetric(position, 'restingHeartRate'),
-                  hrv: averages.hrv_ms || generateMockMetric(position, 'hrv'),
-                  recoveryScore: averages.recovery_score || generateMockMetric(position, 'recoveryScore'),
-                  sleepHours: averages.sleep_hours || generateMockMetric(position, 'sleepHours'),
-                  steps: averages.total_steps || generateMockMetric(position, 'steps'),
-                  maxHeartRate: averages.max_heart_rate || generateMockMetric(position, 'maxHeartRate'),
-                  vo2max: averages.vo2_max || generateMockMetric(position, 'vo2max'),
-                  trainingLoad: averages.training_load || generateMockMetric(position, 'trainingLoad'),
-                  fatigue: averages.fatigue_score || generateMockMetric(position, 'fatigue'),
-                  readiness: averages.readiness_score || generateMockMetric(position, 'readiness')
+                // Store raw data
+                const rawData = {};
+                athletes.forEach(athlete => {
+                  rawData[athlete.username] = {
+                    ...athlete,
+                    source: 'api'
+                  };
                 });
+                
+                setRawPlayerData(prev => ({
+                  ...prev,
+                  ...rawData
+                }));
               }
+            } catch (positionError) {
+              console.error(`Error fetching athletes for position ${position}:`, positionError);
             }
-          } catch (error) {
-            console.error(`Error fetching details for position ${position}:`, error);
           }
+        } else {
+          // No real data available, use mock data
+          console.log("No position data available, using mock data");
+          fetchTeamBiometricData();
         }
-        
-        // Update state with the real data
-        setTeamBiometricData(teamBiometricAverages);
-        setPlayerDataByPosition(playersByPosition);
-        setRawPlayerData(allPlayerData);
-        
       } else {
-        console.warn(`Failed to fetch position summary: ${positionResponse.status}`);
-        // Fall back to mock data
+        console.warn(`Failed to fetch position biometrics: ${response.status}`);
         fetchTeamBiometricData();
       }
     } catch (error) {
-      console.error('Error fetching real biometric data:', error);
-      // Fall back to mock data on error
+      console.error('Error in fetchRealBiometricData:', error);
+      setSyncError(`Error fetching biometric data: ${error.message}`);
+      // Fall back to mock data
       fetchTeamBiometricData();
     } finally {
       setLoadingBiometrics(false);
     }
   };
   
-  // Update the syncTeamData function to use proper authentication
-  const syncTeamData = async () => {
-    if (!devMode) return;
+  // Process data that comes directly from CoreBiometricData table
+  const processCoreBiometricData = (biometricData) => {
+    console.log("Processing CoreBiometricData...");
     
     try {
+      // Initialize data structures
+      const allPlayerData = {};
+      const playersByPosition = {
+        'FORWARD': [],
+        'MIDFIELDER': [],
+        'DEFENDER': [],
+        'GOALKEEPER': [],
+        'Unknown': []
+      };
+      
+      // Track metrics by position for averages
+      const metricsByPosition = {
+        'FORWARD': { count: 0, resting_hr: 0, hrv_ms: 0, recovery_score: 0, sleep_hours: 0, steps: 0 },
+        'MIDFIELDER': { count: 0, resting_hr: 0, hrv_ms: 0, recovery_score: 0, sleep_hours: 0, steps: 0 },
+        'DEFENDER': { count: 0, resting_hr: 0, hrv_ms: 0, recovery_score: 0, sleep_hours: 0, steps: 0 },
+        'GOALKEEPER': { count: 0, resting_hr: 0, hrv_ms: 0, recovery_score: 0, sleep_hours: 0, steps: 0 },
+        'Unknown': { count: 0, resting_hr: 0, hrv_ms: 0, recovery_score: 0, sleep_hours: 0, steps: 0 }
+      };
+      
+      // Process data for each athlete
+      Object.entries(biometricData).forEach(([athleteId, athleteData]) => {
+        // Use team_athletes array instead of athletes array
+        const athlete = coachInfo.team_athletes.find(a => a.id === athleteId);
+        
+        if (!athlete) {
+          console.warn(`Athlete with ID ${athleteId} not found in team_athletes`);
+          return;
+        }
+        
+        const position = athlete.position || 'Unknown';
+        const username = athlete.username;
+        
+        // Calculate averages from the data
+        const averages = {
+          resting_heart_rate: calculateAverage(athleteData, 'resting_heart_rate'),
+          hrv_ms: calculateAverage(athleteData, 'hrv_ms'),
+          recovery_score: calculateAverage(athleteData, 'recovery_score'),
+          sleep_hours: calculateAverage(athleteData, 'total_sleep_seconds') / 3600, // Convert seconds to hours
+          total_steps: calculateAverage(athleteData, 'total_steps'),
+          max_heart_rate: calculateAverage(athleteData, 'max_heart_rate'),
+          vo2_max: 50, // Default value as it might not be in CoreBiometricData
+          training_load: calculateAverage(athleteData, 'strain') * 10, // Scale strain as training load
+          fatigue_score: 100 - (calculateAverage(athleteData, 'recovery_score') || 50),
+          readiness_score: calculateAverage(athleteData, 'recovery_score')
+        };
+        
+        // Prepare daily data
+        const daily_data = athleteData.map(day => ({
+          date: day.date,
+          resting_heart_rate: day.resting_heart_rate,
+          hrv_ms: day.hrv_ms,
+          recovery_score: day.recovery_score,
+          sleep_hours: day.total_sleep_seconds / 3600,
+          steps: day.total_steps,
+          max_heart_rate: day.max_heart_rate,
+          strain: day.strain,
+          // Add other metrics as needed
+        }));
+        
+        // Store raw data for this athlete
+        allPlayerData[username] = {
+          athlete: {
+            id: athleteId,
+            username: username,
+            position: position
+          },
+          averages: averages,
+          daily_data: daily_data,
+          source: 'api',
+          status: "ok",
+          message: "Data loaded from CoreBiometricData table"
+        };
+        
+        // Create player record for the position
+        playersByPosition[position].push({
+          id: athleteId,
+          firstName: username?.split(' ')[0] || '',
+          lastName: username?.split(' ').slice(1).join(' ') || '',
+          username: username,
+          position: position,
+          restingHeartRate: averages.resting_heart_rate || 0,
+          hrv: averages.hrv_ms || 0,
+          recoveryScore: averages.recovery_score || 0,
+          sleepHours: averages.sleep_hours || 0,
+          steps: averages.total_steps || 0,
+          maxHeartRate: averages.max_heart_rate || 0,
+          vo2max: averages.vo2_max || 0,
+          trainingLoad: averages.training_load || 0,
+          fatigue: averages.fatigue_score || 0,
+          readiness: averages.readiness_score || 0
+        });
+        
+        // Add to position metrics for averages
+        metricsByPosition[position].count += 1;
+        if (averages.resting_heart_rate) metricsByPosition[position].resting_hr += averages.resting_heart_rate;
+        if (averages.hrv_ms) metricsByPosition[position].hrv_ms += averages.hrv_ms;
+        if (averages.recovery_score) metricsByPosition[position].recovery_score += averages.recovery_score;
+        if (averages.sleep_hours) metricsByPosition[position].sleep_hours += averages.sleep_hours;
+        if (averages.total_steps) metricsByPosition[position].steps += averages.total_steps;
+      });
+      
+      // Calculate team averages by position
+      const teamBiometricAverages = {};
+      
+      for (const [position, metrics] of Object.entries(metricsByPosition)) {
+        if (metrics.count > 0) {
+          teamBiometricAverages[position] = {
+            count: metrics.count,
+            resting_hr: metrics.count > 0 ? metrics.resting_hr / metrics.count : null,
+            hrv_ms: metrics.count > 0 ? metrics.hrv_ms / metrics.count : null,
+            recovery_score: metrics.count > 0 ? metrics.recovery_score / metrics.count : null,
+            sleep_hours: metrics.count > 0 ? metrics.sleep_hours / metrics.count : null,
+            steps: metrics.count > 0 ? metrics.steps / metrics.count : null
+          };
+        }
+      }
+      
+      console.log("Processed CoreBiometricData:", {
+        teamBiometricAverages,
+        playersByPosition,
+        allPlayerData
+      });
+      
+      // Update state with the processed data
+      setTeamBiometricData(teamBiometricAverages);
+      setPlayerDataByPosition(playersByPosition);
+      setRawPlayerData(allPlayerData);
+      setSyncError(null);
+      
+    } catch (error) {
+      console.error("Error processing CoreBiometricData:", error);
+      fetchTeamBiometricData(); // Fall back to mock data
+    }
+  };
+  
+  // Helper function to calculate average of a specific field in an array of data points
+  const calculateAverage = (dataArray, field) => {
+    if (!dataArray || dataArray.length === 0) return null;
+    
+    const validValues = dataArray
+      .map(item => item[field])
+      .filter(value => value !== null && value !== undefined && !isNaN(value));
+    
+    if (validValues.length === 0) return null;
+    
+    const sum = validValues.reduce((acc, value) => acc + value, 0);
+    return sum / validValues.length;
+  };
+
+  // Update the syncTeamData function to use proper authentication
+  const syncTeamData = async () => {
+    if (!coachInfo || !coachInfo.team_id) {
+      setSyncError("No coach information or team ID available");
+      return;
+    }
+    
+    // Clear any previous error
+    setSyncError(null);
+    setLoadingBiometrics(true);
+    
+    try {
+      // Check if there are any athletes before attempting sync
+      const athletes = coachInfo.team_athletes || [];
+      
+      if (athletes.length === 0) {
+        setSyncError("No athletes assigned to this team. Cannot sync team data without athletes.");
+        setLoadingBiometrics(false);
+        return;
+      }
+      
+      // Get all athlete IDs
+      const athleteIds = athletes.map(athlete => athlete.id);
+      
+      // Log detailed information about athletes for debugging
+      console.log("Attempting to sync data for team:", coachInfo.team_id);
+      console.log(`Found ${athletes.length} athletes to sync`);
+      console.log("First few athletes:", athletes.slice(0, 3).map(a => ({
+        id: a.id,
+        username: a.username,
+        permissions: a.data_permissions
+      })));
+      
       // Ensure we have a valid CSRF token
       const csrfToken = await ensureCSRFToken();
       
       if (!csrfToken) {
         console.error("Failed to obtain CSRF token");
+        setSyncError("Authentication error: Failed to obtain security token");
+        setLoadingBiometrics(false);
         return;
       }
-  
+
       const headers = {
         'Content-Type': 'application/json',
         'X-CSRFToken': csrfToken,
@@ -1419,11 +1648,21 @@ const CoachDashboard = () => {
         'CSRF-Token': csrfToken
       };
       
+      // Include all athlete IDs and team_id in the request
+      const requestBody = {
+        days: 7,
+        force_refresh: true,
+        team_id: coachInfo.team_id,
+        athlete_ids: athleteIds
+      };
+      
+      console.log(`Sending sync request for ${athleteIds.length} athletes with team_id: ${coachInfo.team_id}`);
+      
       const response = await fetch('/api/coach/sync-team-data/', {
         method: 'POST',
         credentials: 'include',
         headers,
-        body: JSON.stringify({ days: 7, force_refresh: true })
+        body: JSON.stringify(requestBody)
       });
       
       console.log('Sync response status:', response.status);
@@ -1431,29 +1670,69 @@ const CoachDashboard = () => {
       if (response.ok) {
         const data = await response.json();
         console.log('Sync response data:', data);
+        setSyncError(null);
         // Success! Now refresh the data
         fetchRealBiometricData();
       } else {
         console.warn(`Failed to sync team data: ${response.status}`);
-        const errorText = await response.text();
+        let errorText = '';
+        
+        try {
+          const errorResponse = await response.json();
+          errorText = JSON.stringify(errorResponse);
+        } catch (e) {
+          // If we can't parse JSON, try to get text
+          errorText = await response.text();
+        }
+        
         console.error('Error response:', errorText);
+        
+        // Display appropriate error message based on status code
+        if (response.status === 400) {
+          if (errorText.includes("No athletes found")) {
+            setSyncError(`No athletes found for this team (Team ID: ${coachInfo.team_id}). The server cannot find the athletes even though the UI shows ${athletes.length} athletes. This may be a server-side issue.`);
+          } else {
+            setSyncError(`Bad request: ${errorText}`);
+          }
+        } else if (response.status === 403) {
+          setSyncError("Permission denied. You may not have the required access level.");
+        } else if (response.status === 500) {
+          setSyncError("Server error. Please try again later or contact support.");
+        } else {
+          setSyncError(`Failed to sync team data: ${response.status} - ${errorText || 'Unknown error'}`);
+        }
       }
     } catch (error) {
       console.error('Error syncing team data:', error);
+      setSyncError(`Error syncing team data: ${error.message}`);
+    } finally {
+      setLoadingBiometrics(false);
     }
   };
 
   // Update the fetchPositionComparison function to use proper authentication
   const fetchPositionComparison = async () => {
+    setSyncError(null); // Clear any previous errors
+    setLoadingBiometrics(true);
+    
     try {
+      // Check if there are any athletes before attempting to fetch data
+      if (coachInfo.athletes.length === 0) {
+        setSyncError("No athletes assigned to this team. Cannot fetch position comparison data.");
+        setLoadingBiometrics(false);
+        return;
+      }
+      
       // Ensure we have a valid CSRF token
       const csrfToken = await ensureCSRFToken();
       
       if (!csrfToken) {
         console.error("Failed to obtain CSRF token");
+        setSyncError("Authentication error: Failed to obtain security token");
+        setLoadingBiometrics(false);
         return;
       }
-  
+
       const headers = {
         'Content-Type': 'application/json',
         'X-CSRFToken': csrfToken,
@@ -1470,28 +1749,62 @@ const CoachDashboard = () => {
       if (response.ok) {
         const data = await response.json();
         console.log('Position comparison data:', data);
+        
+        // Check if we got meaningful data
+        if (!data || !data.notable_differences) {
+          setSyncError("No position comparison data available. You may need to sync team data first.");
+          setLoadingBiometrics(false);
+          return;
+        }
+        
         setPositionComparisonData(data);
       } else {
         console.warn('Failed to fetch position comparison data');
         const errorText = await response.text();
         console.error('Error response:', errorText);
+        
+        // Display appropriate error message based on status code
+        if (response.status === 400) {
+          setSyncError("Bad request: The server couldn't process the position comparison request.");
+        } else if (response.status === 403) {
+          setSyncError("Permission denied. You may not have the required access level.");
+        } else if (response.status === 404) {
+          setSyncError("Position comparison data not found. Try syncing team data first.");
+        } else {
+          setSyncError(`Failed to fetch position comparison data: ${response.status} - ${errorText || 'Unknown error'}`);
+        }
       }
     } catch (error) {
       console.error('Error fetching position comparison data:', error);
+      setSyncError(`Error fetching position comparison data: ${error.message}`);
+    } finally {
+      setLoadingBiometrics(false);
     }
   };
 
   // Update the fetchTrainingOptimization function to use proper authentication
   const fetchTrainingOptimization = async (position) => {
+    setSyncError(null); // Clear any previous errors
+    setLoadingBiometrics(true);
+    
     try {
+      // Check if there are any athletes before attempting to fetch data
+      if (coachInfo.athletes.length === 0) {
+        setSyncError("No athletes assigned to this team. Cannot fetch training optimization data.");
+        setLoadingBiometrics(false);
+        return;
+      }
+      
       // Ensure we have a valid CSRF token
       const csrfToken = await ensureCSRFToken();
       
       if (!csrfToken) {
         console.error("Failed to obtain CSRF token");
+        setSyncError("Authentication error: Failed to obtain security token");
+        setLoadingBiometrics(false);
         return;
       }
-  
+
       const headers = {
         'Content-Type': 'application/json',
         'X-CSRFToken': csrfToken,
@@ -1514,15 +1827,37 @@ const CoachDashboard = () => {
       if (response.ok) {
         const data = await response.json();
         console.log('Training optimization data:', data);
+        
+        // Check if we got meaningful data
+        if (!data || (!data.recommendations && !data.message)) {
+          setSyncError("No training optimization data available. You may need to sync team data first.");
+          setLoadingBiometrics(false);
+          return;
+        }
+        
         setTrainingOptimizationData(data);
         setOptimizationPosition(position);
       } else {
         console.warn('Failed to fetch training optimization data');
         const errorText = await response.text();
         console.error('Error response:', errorText);
+        
+        // Display appropriate error message based on status code
+        if (response.status === 400) {
+          setSyncError("Bad request: The server couldn't process the training optimization request.");
+        } else if (response.status === 403) {
+          setSyncError("Permission denied. You may not have the required access level.");
+        } else if (response.status === 404) {
+          setSyncError("Training optimization data not found. Try syncing team data first.");
+        } else {
+          setSyncError(`Failed to fetch training optimization data: ${response.status} - ${errorText || 'Unknown error'}`);
+        }
       }
     } catch (error) {
       console.error('Error fetching training optimization data:', error);
+      setSyncError(`Error fetching training optimization data: ${error.message}`);
+    } finally {
+      setLoadingBiometrics(false);
     }
   };
 
@@ -1534,6 +1869,450 @@ const CoachDashboard = () => {
     } catch (e) {
       return 'Error formatting data';
     }
+  };
+
+  // Add a function to test direct API access
+  const testApiAccess = async () => {
+    setSyncError(null);
+    setLoadingBiometrics(true);
+    
+    try {
+      // Ensure we have a valid CSRF token
+      const csrfToken = await ensureCSRFToken();
+      
+      if (!csrfToken) {
+        console.error("Failed to obtain CSRF token");
+        setSyncError("Authentication error: Failed to obtain security token");
+        setLoadingBiometrics(false);
+        return;
+      }
+
+      // Make a simple API check to see the raw coach auth data
+      const authResponse = await fetch('/api/check-coach-auth/', {
+        method: 'GET',
+        credentials: 'include',
+        headers: {
+          'X-CSRFToken': csrfToken,
+        }
+      });
+      
+      const authData = await authResponse.json();
+      console.log("Raw auth response:", authData);
+      
+      // Check get team athletes endpoint
+      const teamsResponse = await fetch('/api/teams/', {
+        method: 'GET',
+        credentials: 'include',
+        headers: {
+          'X-CSRFToken': csrfToken,
+        }
+      });
+      
+      const teamsData = await teamsResponse.json();
+      console.log("Teams response:", teamsData);
+      
+      // If team ID exists, try to fetch its athletes
+      if (coachInfo.team_id) {
+        const teamAthletesResponse = await fetch(`/api/team-athletes/${coachInfo.team_id}/`, {
+          method: 'GET',
+          credentials: 'include',
+          headers: {
+            'X-CSRFToken': csrfToken,
+          }
+        });
+        
+        if (teamAthletesResponse.ok) {
+          const teamAthletesData = await teamAthletesResponse.json();
+          console.log(`Athletes for team ${coachInfo.team_id}:`, teamAthletesData);
+        } else {
+          console.error(`Failed to fetch athletes for team ${coachInfo.team_id}:`, teamAthletesResponse.status);
+          const errorText = await teamAthletesResponse.text();
+          console.error("Error response:", errorText);
+        }
+      }
+      
+      setSyncError("API access test completed. Check browser console for results.");
+    } catch (error) {
+      console.error("API access test error:", error);
+      setSyncError(`API access test failed: ${error.message}`);
+    } finally {
+      setLoadingBiometrics(false);
+    }
+  };
+
+  // Add a new function to directly fetch athlete data without using sync-team-data endpoint
+  const fetchDirectAthleteData = async () => {
+    if (!coachInfo || !coachInfo.team_id) {
+      alert("Coach information or team ID not available");
+      return;
+    }
+    
+    // Add debug logs
+    console.log("coachInfo:", coachInfo);
+    console.log("team_athletes property exists:", coachInfo.hasOwnProperty("team_athletes"));
+    console.log("athletes property exists:", coachInfo.hasOwnProperty("athletes"));
+    
+    const athletes = coachInfo.team_athletes || [];
+    
+    // Log the actual content
+    console.log(`Athletes array (${athletes.length}):`, athletes);
+    
+    if (athletes.length === 0) {
+      alert("No athletes assigned to this team");
+      return;
+    }
+    
+    console.log("Attempting to fetch data directly for athletes:", athletes.length);
+    
+    // Get CSRF token
+    const csrfToken = await ensureCSRFToken();
+    if (!csrfToken) {
+      console.error("Failed to obtain CSRF token");
+      alert("Authentication error: Failed to obtain security token");
+      return;
+    }
+    
+    const headers = {
+      'Content-Type': 'application/json',
+      'X-CSRFToken': csrfToken
+    };
+    
+    // Reset data structures
+    const newRawPlayerData = {};
+    const athletesWithData = [];
+    const mockCounter = {value: 0};
+    const realCounter = {value: 0};
+    
+    // First attempt a direct database query using CoreBiometricData table
+    try {
+      console.log("Attempting to fetch data directly from CoreBiometricData...");
+      
+      // Get all athlete IDs
+      const athleteIds = athletes.map(athlete => athlete.id);
+      
+      // Use the db-info endpoint to query the database directly
+      const dbDataResponse = await fetch('/api/biometrics/db-info/', {
+        method: 'POST',
+        credentials: 'include',
+        headers,
+        body: JSON.stringify({
+          athlete_ids: athleteIds,
+          days: 7,
+          team_id: coachInfo.team_id
+        })
+      });
+      
+      if (dbDataResponse.ok) {
+        const dbData = await dbDataResponse.json();
+        
+        if (dbData && dbData.data && Object.keys(dbData.data).length > 0) {
+          console.log(`CoreBiometricData found for ${Object.keys(dbData.data).length} athletes`);
+          
+          // Update raw player data with data from CoreBiometricData
+          for (const athleteId in dbData.data) {
+            const athlete = athletes.find(a => a.id === athleteId);
+            if (athlete) {
+              const formattedData = {
+                athlete: athlete,
+                source: 'api',
+                message: `Real data from CoreBiometricData for ${athlete.username}`,
+                data: dbData.data[athleteId]
+              };
+              
+              newRawPlayerData[athlete.username] = formattedData;
+              athletesWithData.push(athlete.username);
+              realCounter.value++;
+            }
+          }
+          
+          // If we've found data for all athletes in CoreBiometricData, skip individual fetches
+          if (Object.keys(dbData.data).length === athletes.length) {
+            setRawPlayerData(newRawPlayerData);
+            setPlayerList(athletesWithData);
+            
+            if (athletesWithData.length > 0 && !selectedRawPlayer) {
+              setSelectedRawPlayer(athletesWithData[0]);
+            }
+            
+            alert(`Successfully retrieved real data for ${realCounter.value} athletes from CoreBiometricData table!`);
+            return;
+          }
+        } else {
+          console.warn("No CoreBiometricData found, falling back to individual athlete endpoints");
+        }
+      } else {
+        console.warn(`Failed to fetch CoreBiometricData: ${dbDataResponse.status}`);
+      }
+    } catch (dbError) {
+      console.error("Error fetching from CoreBiometricData:", dbError);
+    }
+    
+    // If we didn't get data for all athletes from CoreBiometricData, fall back to individual fetching
+    for (const athlete of athletes) {
+      // Skip athletes we already have data for
+      if (newRawPlayerData[athlete.username]) {
+        continue;
+      }
+      
+      const position = athlete.position || 'UNKNOWN';
+      console.log(`Fetching data for athlete: ${athlete.username}, position: ${position}`);
+      
+      try {
+        // First attempt to get real data from the API
+        const response = await fetch(`/api/coach/athlete/${athlete.id}/biometrics/?days=7`, {
+          method: 'GET',
+          credentials: 'include',
+          headers
+        });
+        
+        if (response.ok) {
+          const data = await response.json();
+          newRawPlayerData[athlete.username] = {
+            athlete: athlete,
+            source: 'api',
+            message: `Real data for ${athlete.username}`,
+            data: data
+          };
+          athletesWithData.push(athlete.username);
+          realCounter.value++;
+        } else {
+          console.warn(`Failed to fetch data for athlete ${athlete.username}: ${response.status}`);
+          
+          // Fallback to using mock data if the API fails
+          const mockData = generateMockAthleteData(athlete);
+          newRawPlayerData[athlete.username] = {
+            athlete: athlete,
+            source: 'mock',
+            message: `Mock data generated for ${athlete.username}`,
+            data: mockData
+          };
+          console.log(`Generated mock data for ${athlete.username}:`, mockData);
+          athletesWithData.push(athlete.username);
+          mockCounter.value++;
+        }
+      } catch (error) {
+        console.error(`Error fetching data for athlete ${athlete.username}:`, error);
+        // Still provide mock data in case of error
+        const mockData = generateMockAthleteData(athlete);
+        newRawPlayerData[athlete.username] = {
+          athlete: athlete,
+          source: 'mock',
+          message: `Mock data generated for ${athlete.username} (after error)`,
+          data: mockData
+        };
+        athletesWithData.push(athlete.username);
+        mockCounter.value++;
+      }
+    }
+    
+    // Update state with collected data
+    setRawPlayerData(newRawPlayerData);
+    setPlayerList(athletesWithData);
+    
+    if (athletesWithData.length > 0 && !selectedRawPlayer) {
+      setSelectedRawPlayer(athletesWithData[0]);
+    }
+    
+    alert(`Direct fetch complete! Real data: ${realCounter.value} athletes, Mock data: ${mockCounter.value} athletes`);
+  };
+
+  // Helper function to generate mock data for all athletes
+  const generateMockDataForAllAthletes = () => {
+    const allPlayerData = {};
+    const playersByPosition = {
+      'FORWARD': [],
+      'MIDFIELDER': [],
+      'DEFENDER': [],
+      'GOALKEEPER': [],
+      'Unknown': []
+    };
+    
+    const metricsByPosition = {
+      'FORWARD': { count: 0, resting_hr: 0, hrv_ms: 0, recovery_score: 0, sleep_hours: 0, steps: 0 },
+      'MIDFIELDER': { count: 0, resting_hr: 0, hrv_ms: 0, recovery_score: 0, sleep_hours: 0, steps: 0 },
+      'DEFENDER': { count: 0, resting_hr: 0, hrv_ms: 0, recovery_score: 0, sleep_hours: 0, steps: 0 },
+      'GOALKEEPER': { count: 0, resting_hr: 0, hrv_ms: 0, recovery_score: 0, sleep_hours: 0, steps: 0 },
+      'Unknown': { count: 0, resting_hr: 0, hrv_ms: 0, recovery_score: 0, sleep_hours: 0, steps: 0 }
+    };
+    
+    // Generate mock data for each athlete
+    // Use team_athletes array instead of athletes array
+    if (!coachInfo || !coachInfo.team_athletes) {
+      console.error("No team_athletes array available in coachInfo");
+      return;
+    }
+    
+    coachInfo.team_athletes.forEach(athlete => {
+      const position = athlete.position || 'Unknown';
+      const mockData = generateMockAthleteData(athlete);
+      const averages = mockData.averages;
+      
+      // Store raw data
+      allPlayerData[athlete.username] = {
+        ...mockData,
+        source: 'mock'
+      };
+      
+      // Create player record
+      playersByPosition[position].push({
+        id: athlete.id,
+        firstName: athlete.username?.split(' ')[0] || '',
+        lastName: athlete.username?.split(' ').slice(1).join(' ') || '',
+        username: athlete.username,
+        position: position,
+        restingHeartRate: averages.resting_heart_rate,
+        hrv: averages.hrv_ms,
+        recoveryScore: averages.recovery_score,
+        sleepHours: averages.sleep_hours,
+        steps: averages.total_steps,
+        maxHeartRate: averages.max_heart_rate,
+        vo2max: averages.vo2_max,
+        trainingLoad: averages.training_load,
+        fatigue: averages.fatigue_score,
+        readiness: averages.readiness_score
+      });
+      
+      // Add to position metrics
+      metricsByPosition[position].count += 1;
+      metricsByPosition[position].resting_hr += averages.resting_heart_rate;
+      metricsByPosition[position].hrv_ms += averages.hrv_ms;
+      metricsByPosition[position].recovery_score += averages.recovery_score;
+      metricsByPosition[position].sleep_hours += averages.sleep_hours;
+      metricsByPosition[position].steps += averages.total_steps;
+    });
+    
+    // Calculate position averages
+    const teamBiometricAverages = {};
+    
+    for (const [position, metrics] of Object.entries(metricsByPosition)) {
+      if (metrics.count > 0) {
+        teamBiometricAverages[position] = {
+          count: metrics.count,
+          resting_hr: metrics.resting_hr / metrics.count,
+          hrv_ms: metrics.hrv_ms / metrics.count,
+          recovery_score: metrics.recovery_score / metrics.count,
+          sleep_hours: metrics.sleep_hours / metrics.count,
+          steps: metrics.steps / metrics.count
+        };
+      }
+    }
+    
+    return {
+      allPlayerData,
+      playersByPosition,
+      teamBiometricAverages
+    };
+  };
+
+  // Add a function to generate realistic mock data for an athlete
+  const generateMockAthleteData = (athlete) => {
+    const { id, username, position } = athlete;
+    
+    // Use the ID as a seed for pseudorandom values
+    const numericSeed = parseInt(id.replace(/[^0-9]/g, '').substring(0, 8), 10) || 123456;
+    const seed = numericSeed / 100000000;
+    
+    // Helper function to generate consistent random values
+    const getRandomValue = (min, max, seedOffset = 0) => {
+      const randomValue = Math.sin(seed + seedOffset) * 10000;
+      return min + (Math.abs(randomValue) % 1) * (max - min);
+    };
+    
+    // Generate position-specific mock data
+    const positionAdjustments = {
+      FORWARD: {
+        resting_heart_rate: 5,  // Higher for forwards
+        hrv_ms: -8,
+        recovery_score: -5,
+        sleep_hours: -0.5,
+        max_heart_rate: 8,
+        vo2_max: 3,
+        training_load: 20,
+        fatigue_score: 10,
+        readiness_score: -5
+      },
+      MIDFIELDER: {
+        resting_heart_rate: 3,
+        hrv_ms: -5,
+        recovery_score: -3,
+        sleep_hours: -0.3,
+        max_heart_rate: 5,
+        vo2_max: 5,
+        training_load: 15,
+        fatigue_score: 8,
+        readiness_score: -3
+      },
+      DEFENDER: {
+        resting_heart_rate: 0,
+        hrv_ms: 0,
+        recovery_score: 0,
+        sleep_hours: 0,
+        max_heart_rate: 0,
+        vo2_max: 0,
+        training_load: 0,
+        fatigue_score: 0,
+        readiness_score: 0
+      },
+      GOALKEEPER: {
+        resting_heart_rate: -3,
+        hrv_ms: 8,
+        recovery_score: 5,
+        sleep_hours: 0.3,
+        max_heart_rate: -5,
+        vo2_max: -2,
+        training_load: -10,
+        fatigue_score: -5,
+        readiness_score: 5
+      }
+    };
+    
+    // Get adjustments for this athlete's position
+    const adjustments = positionAdjustments[position] || positionAdjustments.DEFENDER;
+    
+    // Generate base metrics with some randomness but consistent for the same athlete
+    const baseSleepHours = getRandomValue(6.5, 8.5, 0.1);
+    const baseHRV = getRandomValue(50, 85, 0.2);
+    const baseRestingHR = getRandomValue(52, 65, 0.3);
+    const baseRecoveryScore = getRandomValue(65, 95, 0.4);
+    const baseReadiness = getRandomValue(70, 95, 0.5);
+    
+    // Create mock biometric data
+    const mockBiometricData = {
+      athlete: {
+        id,
+        name: username,
+        position: position || 'Unknown'
+      },
+      averages: {
+        resting_heart_rate: Math.round(baseRestingHR + adjustments.resting_heart_rate),
+        hrv_ms: Math.round(baseHRV + adjustments.hrv_ms),
+        recovery_score: Math.round(baseRecoveryScore + adjustments.recovery_score),
+        sleep_hours: parseFloat((baseSleepHours + adjustments.sleep_hours).toFixed(1)),
+        total_steps: Math.round(getRandomValue(8000, 15000, 0.6)),
+        max_heart_rate: Math.round(getRandomValue(180, 195, 0.7) + adjustments.max_heart_rate),
+        vo2_max: Math.round(getRandomValue(48, 60, 0.8) + adjustments.vo2_max),
+        training_load: Math.round(getRandomValue(250, 350, 0.9) + adjustments.training_load),
+        fatigue_score: Math.round(getRandomValue(30, 70, 1.0) + adjustments.fatigue_score),
+        readiness_score: Math.round(baseReadiness + adjustments.readiness_score)
+      },
+      // Daily data for last 7 days
+      daily_data: Array.from({ length: 7 }, (_, i) => {
+        const dayOffset = i / 10;
+        return {
+          date: new Date(Date.now() - (6 - i) * 86400000).toISOString().split('T')[0],
+          resting_heart_rate: Math.round(baseRestingHR + adjustments.resting_heart_rate + getRandomValue(-3, 3, dayOffset)),
+          hrv_ms: Math.round(baseHRV + adjustments.hrv_ms + getRandomValue(-5, 5, dayOffset + 0.1)),
+          recovery_score: Math.round(baseRecoveryScore + adjustments.recovery_score + getRandomValue(-8, 8, dayOffset + 0.2)),
+          sleep_hours: parseFloat((baseSleepHours + adjustments.sleep_hours + getRandomValue(-0.5, 0.5, dayOffset + 0.3)).toFixed(1)),
+          total_steps: Math.round(getRandomValue(7000, 16000, dayOffset + 0.4)),
+          training_load: i % 2 === 0 ? Math.round(getRandomValue(230, 370, dayOffset + 0.5)) : null // Training days with rest days
+        };
+      }),
+      status: "ok",
+      message: "Mock data generated for " + username
+    };
+    
+    return mockBiometricData;
   };
 
   if (loading) {
@@ -1762,8 +2541,11 @@ const CoachDashboard = () => {
               <h2>Team Overview</h2>
               {devMode && (
                 <div className="section-actions">
+                  <button className="action-button" onClick={fetchDirectAthleteData}>
+                    Direct Fetch
+                  </button>
                   <button className="action-button" onClick={fetchRealBiometricData}>
-                    Refresh Data
+                    Fetch Team Data
                   </button>
                   <button className="action-button sync-button" onClick={syncTeamData}>
                     Sync Team Data
@@ -1771,6 +2553,20 @@ const CoachDashboard = () => {
                 </div>
               )}
             </div>
+
+            {/* Display sync errors if any */}
+            {syncError && (
+              <div className="error-message" style={{
+                backgroundColor: "#2a0000", 
+                color: "#ff6b6b", 
+                padding: "12px", 
+                borderRadius: "8px", 
+                marginBottom: "16px",
+                border: "1px solid #ff6b6b"
+              }}>
+                <strong>Error:</strong> {syncError}
+              </div>
+            )}
 
             <div className="charts-container">
               <div className="chart-card">
@@ -1840,6 +2636,18 @@ const CoachDashboard = () => {
                   <div className="no-biometric-data">
                     <p>No biometric data available.</p>
                     <p>Athletes may not have shared their biometric data or the data has not been uploaded yet.</p>
+                    {coachInfo.athletes.length === 0 && (
+                      <div className="empty-team-notice" style={{
+                        marginTop: "15px", 
+                        padding: "10px", 
+                        backgroundColor: "#2a0000", 
+                        borderRadius: "8px", 
+                        border: "1px solid #ff6b6b"
+                      }}>
+                        <p style={{ color: "#ff6b6b" }}><strong>Notice:</strong> Your team has no athletes assigned.</p>
+                        <p style={{ color: "#ff9e9e", fontSize: "14px" }}>You need to add athletes to your team before you can sync or view biometric data.</p>
+                      </div>
+                    )}
                   </div>
                 ) : (
                   <div className="biometric-metrics-table">
@@ -1925,7 +2733,14 @@ const CoachDashboard = () => {
                               <div className="player-avatar">
                                 {player.firstName?.charAt(0) || ''}{player.lastName?.charAt(0) || ''}
                               </div>
-                              <h4 className="player-name">{player.firstName || ''} {player.lastName || ''}</h4>
+                              <h4 className="player-name">
+                                {player.firstName || ''} {player.lastName || ''}
+                                {rawPlayerData[player.username]?.source && (
+                                  <span className={`data-source ${rawPlayerData[player.username].source}`} style={{fontSize: '10px', marginLeft: '5px', padding: '1px 4px', fontWeight: 'normal'}}>
+                                    {rawPlayerData[player.username].source === 'api' ? 'API' : 'Mock'}
+                                  </span>
+                                )}
+                              </h4>
                             </div>
                             
                             <div className="player-metrics">
@@ -2084,12 +2899,155 @@ const CoachDashboard = () => {
             <div className="section-header">
               <h2>Raw Player Data</h2>
               <div className="section-actions">
+                <button className="action-button" onClick={fetchDirectAthleteData}>
+                  Direct Fetch
+                </button>
                 <button className="action-button" onClick={fetchRealBiometricData}>
-                  Refresh Data
+                  Fetch Team Data
                 </button>
                 <button className="action-button sync-button" onClick={syncTeamData}>
                   Sync Team Data
                 </button>
+              </div>
+            </div>
+
+            {/* Display sync errors if any */}
+            {syncError && (
+              <div className="error-message" style={{
+                backgroundColor: "#2a0000", 
+                color: "#ff6b6b", 
+                padding: "12px", 
+                borderRadius: "8px", 
+                marginBottom: "16px",
+                border: "1px solid #ff6b6b"
+              }}>
+                <strong>Error:</strong> {syncError}
+              </div>
+            )}
+
+            {/* Debug Information Section */}
+            <div className="debug-section" style={{
+              backgroundColor: "#1a1a1a",
+              padding: "15px",
+              borderRadius: "8px",
+              marginBottom: "20px",
+              border: "1px solid #333"
+            }}>
+              <h3 style={{ color: "#4dabf7", marginTop: 0 }}>Debug Information</h3>
+              
+              <div style={{ marginBottom: "15px", color: "#e0e0e0", fontSize: "14px", lineHeight: "1.5" }}>
+                <p><strong>Data Fetch Methods:</strong></p>
+                <ul style={{ paddingLeft: "20px" }}>
+                  <li><strong>Direct Fetch:</strong> First attempts to query CoreBiometricData directly from the database, then falls back to athlete API endpoints with mock data generation. This is the recommended method.</li>
+                  <li><strong>Fetch Team Data:</strong> Similar to Direct Fetch but focuses on position-based data aggregation first.</li>
+                  <li><strong>Sync Team Data:</strong> Attempts to sync team data via <code>/api/coach/sync-team-data/</code> (currently failing with No Athletes error).</li>
+                </ul>
+                <p><strong>CoreBiometricData Integration:</strong> Both Direct Fetch and Fetch Team Data now query the CoreBiometricData table directly through the <code>/api/biometrics/db-info/</code> endpoint when fetching actual athlete data from the database.</p>
+              </div>
+              
+              <div style={{ marginBottom: "15px" }}>
+                <button 
+                  onClick={testApiAccess}
+                  style={{
+                    backgroundColor: "#2b5797",
+                    color: "white",
+                    border: "none",
+                    padding: "8px 16px",
+                    borderRadius: "5px",
+                    cursor: "pointer",
+                    marginBottom: "15px",
+                    marginRight: "10px"
+                  }}
+                >
+                  Test API Access
+                </button>
+                
+                <button 
+                  onClick={async () => {
+                    try {
+                      const csrfToken = await ensureCSRFToken();
+                      const athleteIds = coachInfo.team_athletes.map(athlete => athlete.id);
+                      
+                      console.log(`Using ${athleteIds.length} athlete IDs from team_athletes for direct DB query`);
+                      
+                      const response = await fetch('/api/biometrics/db-info/', {
+                        method: 'POST',
+                        credentials: 'include',
+                        headers: {
+                          'Content-Type': 'application/json',
+                          'X-CSRFToken': csrfToken
+                        },
+                        body: JSON.stringify({
+                          athlete_ids: athleteIds,
+                          days: 7,
+                          team_id: coachInfo.team_id
+                        })
+                      });
+                      
+                      if (response.ok) {
+                        const data = await response.json();
+                        console.log("CoreBiometricData Query Results:", data);
+                        alert(`Query successful! Found data for ${Object.keys(data.data || {}).length} athletes.`);
+                      } else {
+                        console.error("Failed to query CoreBiometricData:", response.status);
+                        alert(`Failed to query CoreBiometricData: ${response.status}`);
+                      }
+                    } catch (error) {
+                      console.error("Error querying CoreBiometricData:", error);
+                      alert(`Error: ${error.message}`);
+                    }
+                  }}
+                  style={{
+                    backgroundColor: "#0C7B93",
+                    color: "white",
+                    border: "none",
+                    padding: "8px 16px",
+                    borderRadius: "5px",
+                    cursor: "pointer",
+                    marginBottom: "15px"
+                  }}
+                >
+                  Query CoreBiometricData
+                </button>
+                
+                <h4 style={{ color: "#e0e0e0", marginBottom: "5px" }}>Team Information:</h4>
+                <pre style={{ 
+                  backgroundColor: "#2a2a2a", 
+                  padding: "10px", 
+                  borderRadius: "5px", 
+                  overflow: "auto",
+                  fontSize: "13px",
+                  fontFamily: "monospace",
+                  color: "#e0e0e0"
+                }}>
+                  {JSON.stringify({
+                    team_name: coachInfo.team,
+                    team_id: coachInfo.team_id,
+                    athlete_count: coachInfo.team_athletes.length,
+                  }, null, 2)}
+                </pre>
+              </div>
+
+              <div>
+                <h4 style={{ color: "#e0e0e0", marginBottom: "5px" }}>Athletes Summary:</h4>
+                <pre style={{ 
+                  backgroundColor: "#2a2a2a", 
+                  padding: "10px", 
+                  borderRadius: "5px", 
+                  overflow: "auto",
+                  fontSize: "13px",
+                  fontFamily: "monospace",
+                  color: "#e0e0e0",
+                  maxHeight: "300px"
+                }}>
+                  {JSON.stringify(coachInfo.team_athletes.map(a => ({
+                    id: a.id,
+                    username: a.username,
+                    email: a.email,
+                    position: a.position,
+                    data_permissions: a.data_permissions
+                  })), null, 2)}
+                </pre>
               </div>
             </div>
 
@@ -2103,6 +3061,11 @@ const CoachDashboard = () => {
                 <div className="empty-icon">📊</div>
                 <h3>No raw data available</h3>
                 <p>No biometric data could be fetched from the API. Try using the Sync Team Data button to manually trigger a sync.</p>
+                {coachInfo.athletes.length === 0 && (
+                  <p className="error-hint" style={{ color: "#ff6b6b", marginTop: "10px" }}>
+                    Note: Your team has no athletes assigned. Please add athletes to your team first.
+                  </p>
+                )}
               </div>
             ) : (
               <div className="raw-data-section">
@@ -2123,7 +3086,27 @@ const CoachDashboard = () => {
                 
                 {selectedRawPlayer && (
                   <div className="raw-data-display">
-                    <h3>Data for {selectedRawPlayer}</h3>
+                    <h3>Data for {selectedRawPlayer}
+                      {rawPlayerData[selectedRawPlayer]?.source && (
+                        <span className={`data-source ${rawPlayerData[selectedRawPlayer].source}`}>
+                          {rawPlayerData[selectedRawPlayer].source === 'api' ? 'API Data' : 'Mock Data'}
+                        </span>
+                      )}
+                    </h3>
+                    
+                    {rawPlayerData[selectedRawPlayer]?.message && (
+                      <div className="data-source-info" style={{
+                        margin: '10px 0',
+                        padding: '8px 12px',
+                        backgroundColor: '#2a2a2a',
+                        borderRadius: '4px',
+                        fontSize: '13px',
+                        color: '#e0e0e0'
+                      }}>
+                        <strong>Source Info:</strong> {rawPlayerData[selectedRawPlayer].message}
+                      </div>
+                    )}
+                    
                     <pre className="raw-data-json">
                       {formatRawData(rawPlayerData[selectedRawPlayer])}
                     </pre>

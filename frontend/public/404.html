@@ -4,10 +4,15 @@
   <meta charset="utf-8">
   <title>Redirecting...</title>
   <script>
-    // Store the URL path to sessionStorage
-    sessionStorage.setItem('redirectPath', window.location.pathname + window.location.search);
-    // Redirect to the root
-    window.location.href = '/';
+    // Don't redirect admin paths
+    if (window.location.pathname.startsWith('/admin')) {
+      // For admin paths, keep the URL as is
+    } else {
+      // Store the URL path to sessionStorage
+      sessionStorage.setItem('redirectPath', window.location.pathname + window.location.search);
+      // Redirect to the root
+      window.location.href = '/';
+    }
   </script>
 </head>
 <body>

@@ -16,14 +16,31 @@ export default defineConfig({
   plugins: [react()],
   server: {
     proxy: {
+      '/admin': {
+        target: process.env.VITE_API_URL || 'http://localhost:8000',
+        changeOrigin: true,
+        secure: false,
+      },
       '/api': {
-        target: process.env.VITE_API_URL || 'http://localhost:8000',  // Default to localhost if env var not set
+        target: process.env.VITE_API_URL || 'http://localhost:8000',
         changeOrigin: true,
         secure: false,
       }
     },
     // Enable history API fallback to support client-side routing
-    historyApiFallback: true,
+    historyApiFallback: {
+      // Don't rewrite requests to /admin
+      rewrites: [
+        { 
+          from: /^\/admin.*/, 
+          to: context => context.parsedUrl.pathname 
+        },
+        { 
+          from: /./, 
+          to: '/index.html' 
+        },
+      ],
+    },
   },
   // Configure build output path
   build: {

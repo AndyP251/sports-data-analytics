@@ -8,8 +8,20 @@
     <script>
       // Check if we have a redirect path stored
       (function() {
+        // If we're on an admin path, don't do any client-side routing
+        if (window.location.pathname.startsWith('/admin')) {
+          return;
+        }
+        
         var redirectPath = sessionStorage.getItem('redirectPath');
         if (redirectPath) {
+          // Don't redirect admin paths
+          if (redirectPath.startsWith('/admin')) {
+            // For admin paths, navigate directly
+            window.location.href = redirectPath;
+            return;
+          }
+          
           // Clear the stored path
           sessionStorage.removeItem('redirectPath');
           // Update the browser history without triggering a page reload

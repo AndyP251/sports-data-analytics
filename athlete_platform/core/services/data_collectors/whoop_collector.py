@@ -107,17 +107,17 @@ class WhoopCollector(BaseDataCollector):
         await asyncio.sleep(seconds)
 
     def wait_for_rate_limit(self):
-        """Wait for rate limit to expire using a non-blocking approach"""
+        """Wait for rate limit to expire"""
         if not self.rate_limited:
             return
-            
+        
         current_time = int(time.time())
         if current_time < self.rate_limit_reset_time:
             wait_time = self.rate_limit_reset_time - current_time
             logger.info(f"Waiting for {wait_time} seconds for rate limit to reset...")
             
-            # Use asyncio to wait without blocking the thread
-            asyncio.run(self.async_wait(wait_time + 2))  # Add 2 seconds buffer
+            # Replace asyncio with a simple sleep
+            time.sleep(wait_time + 2)  # Add 2 seconds buffer
             
             # Reset rate limiting after wait
             self.rate_limited = False

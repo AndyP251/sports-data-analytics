@@ -15,6 +15,7 @@ import json
 import logging
 from enum import IntEnum
 from django.db import transaction, IntegrityError
+from ..services.data_sync_service import DataSyncService
 import uuid
 
 logger = logging.getLogger(__name__)
@@ -54,6 +55,7 @@ def login_view(request):
         data = json.loads(request.body)
         username = data.get('username')
         password = data.get('password')
+        skip_sync = data.get('skip_sync', False)
 
         logger.info(f"Login attempt for username: {username}")
 
@@ -65,8 +67,24 @@ def login_view(request):
         user = authenticate(request, username=username, password=password)
         if user is not None:
             login(request, user)
-            logger.info(f"Successful login for user: {username}")
-            return JsonResponse({'message': 'Login successful'})
+            
+            # Set a flag for frontend to know it should sync after redirect
+            if skip_sync:
+                response_data = {
+                    'success': True,
+                    'message': 'Login successful',
+                    'needs_sync': True
+                }
+            else:
+                # Original sync behavior for backward compatibility
+                sync_service = DataSyncService(user.athlete)
+                sync_service.sync_data()
+                response_data = {
+                    'success': True,
+                    'message': 'Login successful'
+                }
+                
+            return JsonResponse(response_data)
         else:
             logger.warning(f"Failed login attempt for username: {username}")
             return JsonResponse({'error': 'Invalid credentials'}, status=400)

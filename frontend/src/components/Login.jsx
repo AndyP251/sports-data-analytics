@@ -165,9 +165,10 @@ const Login = ({ setIsAuthenticated }) => {
         body: JSON.stringify(requestData)
       })
       
-      const data = await response.json()
-      
+      // Check if response is ok before trying to parse JSON
       if (response.ok) {
+        const data = await response.json()
+        
         if (!isLoginMode) {
           setSuccess('Account created successfully! Please sign in.')
           setFormData({
@@ -209,13 +210,30 @@ const Login = ({ setIsAuthenticated }) => {
           setIsAuthenticated(true)
         }
       } else {
-        // More detailed error handling
-        setError(data.error || data.detail || `${isLoginMode ? 'Login' : 'Registration'} failed`)
-        console.log('Response data:', data) // For debugging
+        // Handle different error response types
+        const contentType = response.headers.get('content-type')
+        
+        if (contentType && contentType.includes('application/json')) {
+          // JSON error response
+          const errorData = await response.json()
+          setError(errorData.error || errorData.detail || `${isLoginMode ? 'Login' : 'Registration'} failed`)
+        } else {
+          // Non-JSON response (like HTML error page from worker timeout)
+          if (response.status === 500 || response.status === 502 || response.status === 504) {
+            setError("Server is busy processing your request. Please try again in a moment.")
+          } else {
+            setError(`${isLoginMode ? 'Login' : 'Registration'} failed with status: ${response.status}`)
+          }
+        }
       }
     } catch (error) {
-      console.error('Request error:', error) // For debugging
-      setError(`${isLoginMode ? 'Login' : 'Registration'} failed: ${error.message}`)
+      // Handle JSON parsing errors and network errors
+      if (error instanceof SyntaxError && error.message.includes('Unexpected token')) {
+        setError("The server is temporarily unavailable. Please try again in a moment.")
+      } else {
+        setError(`${isLoginMode ? 'Login' : 'Registration'} failed: ${error.message}`)
+      }
+      console.error('Request error:', error)
     } finally {
       setIsSubmitting(false)
     }

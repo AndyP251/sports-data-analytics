@@ -462,4 +462,6 @@ SECURE_CONTENT_TYPE_NOSNIFF = True
 X_FRAME_OPTIONS = 'DENY'  # Prevent clickjacking
 
 
+ADMIN_REDIRECT = os.getenv('ADMIN_REDIRECT', 'False');
+
 # print(f"ENCRYPTION_KEY exists: {'ENCRYPTION_KEY' in os.environ}")

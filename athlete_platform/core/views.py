@@ -66,8 +66,18 @@ def frontend_view(request, path=''):
         index_file_path = os.path.join(settings.STATIC_ROOT, 'index.html')
         
         # If in development, use the Vite dev server
-        if settings.DEBUG:
+        if settings.ADMIN_REDIRECT:
             from django.shortcuts import redirect
+            
+            # LOCAL DEVELOPMENT: Special case for admin URLs
+            # This fix only applies to local development, not production
+            if request.path.startswith('/admin'):
+                # For local dev, redirect to Django running on port 8000
+                # This is needed because the catch-all route would otherwise
+                # redirect to Vite on port 5173
+                return HttpResponse(status=404)  # Return 404 to let Django handle it
+                
+            # For all other paths, redirect to Vite dev server
             return redirect('http://localhost:5173' + request.get_full_path())
         
         # Check if the index file exists
@@ -171,14 +181,34 @@ def dashboard_data(request):
         return JsonResponse({'success': False, 'error': str(e)}, status=500)
 
 @receiver(user_logged_in)
-def sync_on_login(sender, user, request, **kwargs):
-    """Trigger sync when user logs in"""
+def sync_on_login(sender, request, user, **kwargs):
+    """Sync data when a user logs in"""
+    # Check if the login request contains the skip_sync parameter
+    if hasattr(request, 'body'):
+        try:
+            # Try to parse the request body as JSON
+            body_data = json.loads(request.body)
+            # If skip_sync is True, just set a flag and return without syncing
+            if body_data.get('skip_sync', False):
+                # Store a flag to indicate that sync is needed later
+                # We'll use the session to store this flag
+                request.session['needs_initial_sync'] = True
+                logger.info(f"Initial sync deferred for user {user.username} - will be performed after dashboard loads")
+                return
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            # If there's an error parsing the JSON, continue with normal sync
+            pass
+    
+    # If we get here, either skip_sync was not set or there was an error parsing the request
+    # Proceed with normal sync behavior
     try:
         if hasattr(user, 'athlete'):
             sync_service = DataSyncService(user.athlete)
             sync_service.sync_data()
+        else:
+            logger.warning(f"No athlete profile found for user {user.id}")
     except Exception as e:
-        logger.error(f"Error syncing data on login: {e}")
+        logger.error(f"Error syncing data on login: {e}", exc_info=True)
 
 @require_http_methods(["POST"])
 @login_required
@@ -1184,7 +1214,18 @@ def team_biometric_summary(request):
 def position_biometric_summary(request):
     """Get position-based biometric data summary"""
     try:
-        days = int(request.query_params.get('days', 7))
+        # Parse and validate parameters
+        days = request.query_params.get('days', 7)
+        try:
+            days = int(days)
+        except (ValueError, TypeError):
+            days = 7
+            
+        if days < 1:
+            days = 1
+        elif days > 90:
+            days = 90
+            
         # Get coach object safely
         coach = None
         if hasattr(request.user, 'coach_profile'):
@@ -1192,14 +1233,51 @@ def position_biometric_summary(request):
         elif hasattr(request.user, 'coach'):
             coach = request.user.coach
         
+        # Make sure coach has a team
+        if not coach or not coach.team:
+            return Response({
+                'message': 'Coach or team not found',
+                'positions': {}
+            }, status=status.HTTP_400_BAD_REQUEST)
+            
         service = CoachDataSyncService(coach=coach)
-        summary = service.get_position_biometric_summary(days=days)
         
-        return Response(summary)
+        try:
+            summary = service.get_position_biometric_summary(days=days)
+            
+            # If summary is empty, return a structured empty response
+            if not summary:
+                return Response({
+                    'message': 'No position data found. Try syncing team data first.',
+                    'positions': {}
+                })
+                
+            # Add global display names and interpretations
+            metric_display_names = {metric: service.METRIC_DISPLAY_NAMES.get(metric, metric.replace('_', ' ').title()) 
+                                   for metric in service.BIOMETRIC_METRICS}
+            
+            metric_interpretations = {metric: service._get_metric_interpretation(metric)
+                                    for metric in service.BIOMETRIC_METRICS}
+            
+            return Response({
+                'positions': summary,
+                'display_names': metric_display_names,
+                'interpretations': metric_interpretations,
+                'days': days
+            })
+        except Exception as e:
+            logger.error(f"Error retrieving position summary: {e}", exc_info=True)
+            # Return a friendly response rather than a 500 error
+            return Response({
+                'message': f"Error retrieving position data: {str(e)}",
+                'positions': {}
+            }, status=status.HTTP_400_BAD_REQUEST)
     except Exception as e:
+        logger.error(f"Error in position_biometric_summary: {e}", exc_info=True)
         return Response({
             'error': str(e),
-            'message': 'Failed to retrieve position biometric summary'
+            'message': 'Failed to retrieve position biometric summary',
+            'positions': {}
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 @api_view(['GET'])
@@ -1207,22 +1285,64 @@ def position_biometric_summary(request):
 def position_athletes_data(request, position):
     """Get detailed data for all athletes in a specific position"""
     try:
-        days = int(request.query_params.get('days', 7))
+        # Parse and validate parameters
+        days = request.query_params.get('days', 7)
+        try:
+            days = int(days)
+        except (ValueError, TypeError):
+            days = 7
+            
+        if days < 1:
+            days = 1
+        elif days > 90:
+            days = 90
+            
         # Get coach object safely
         coach = None
         if hasattr(request.user, 'coach_profile'):
             coach = request.user.coach_profile
         elif hasattr(request.user, 'coach'):
             coach = request.user.coach
+            
+        # Make sure coach has a team
+        if not coach or not coach.team:
+            return Response({
+                'message': 'Coach or team not found',
+                'athletes': [],
+                'position': position,
+                'athlete_count': 0,
+                'athletes_with_data': 0
+            }, status=status.HTTP_400_BAD_REQUEST)
         
         service = CoachDataSyncService(coach=coach)
-        data = service.get_position_athletes_data(position=position, days=days)
         
-        return Response(data)
+        try:
+            data = service.get_position_athletes_data(position=position, days=days)
+            
+            # Ensure athletes is always an array to prevent frontend errors
+            if 'athletes' not in data or data['athletes'] is None:
+                data['athletes'] = []
+            
+            return Response(data)
+        except Exception as e:
+            logger.error(f"Error retrieving position athletes data: {e}", exc_info=True)
+            # Return a friendly response rather than a 500 error
+            return Response({
+                'message': f"Error retrieving position athletes data: {str(e)}",
+                'athletes': [],
+                'position': position,
+                'athlete_count': 0,
+                'athletes_with_data': 0
+            }, status=status.HTTP_400_BAD_REQUEST)
     except Exception as e:
+        logger.error(f"Error in position_athletes_data: {e}", exc_info=True)
         return Response({
             'error': str(e),
-            'message': f'Failed to retrieve data for position: {position}'
+            'message': f'Failed to retrieve data for position: {position}',
+            'athletes': [],
+            'position': position,
+            'athlete_count': 0,
+            'athletes_with_data': 0
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 @api_view(['GET'])
@@ -1230,50 +1350,156 @@ def position_athletes_data(request, position):
 def athlete_biometric_data(request, athlete_id):
     """Get detailed biometric data for a specific athlete"""
     try:
-        days = int(request.query_params.get('days', 7))
+        # Parse and validate parameters
+        days = request.query_params.get('days', 7)
+        try:
+            days = int(days)
+        except (ValueError, TypeError):
+            days = 7
+            
+        if days < 1:
+            days = 1
+        elif days > 90:
+            days = 90
+            
         # Get coach object safely
         coach = None
         if hasattr(request.user, 'coach_profile'):
             coach = request.user.coach_profile
         elif hasattr(request.user, 'coach'):
             coach = request.user.coach
-        
-        service = CoachDataSyncService(coach=coach)
-        data = service.get_athlete_biometric_data(athlete_id=athlete_id, days=days)
-        
-        if not data:
-            return Response({
-                'message': 'No data found or athlete not on your team'
-            }, status=status.HTTP_404_NOT_FOUND)
             
-        return Response(data)
+        # Make sure coach has a team
+        if not coach or not coach.team:
+            return Response({
+                'message': 'Coach or team not found'
+            }, status=status.HTTP_400_BAD_REQUEST)
+            
+        # Get the athlete safely
+        try:
+            from .models import Athlete
+            athlete = Athlete.objects.get(id=athlete_id)
+            
+            # Verify athlete is on the coach's team
+            if athlete.team != coach.team:
+                return Response({
+                    'message': f'Athlete {athlete_id} is not on team {coach.team.id}'
+                }, status=status.HTTP_403_FORBIDDEN)
+                
+        except Athlete.DoesNotExist:
+            return Response({
+                'message': f'Athlete {athlete_id} not found'
+            }, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            logger.error(f"Error finding athlete {athlete_id}: {e}")
+            return Response({
+                'message': f'Error looking up athlete: {str(e)}'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            
+        # Get the biometric data
+        service = CoachDataSyncService(coach=coach)
+        
+        try:
+            data = service.get_athlete_biometric_data(athlete_id=athlete_id, days=days)
+            
+            if not data:
+                return Response({
+                    'message': f'No biometric data found for athlete {athlete_id}',
+                    'athlete_id': athlete_id,
+                    'days': days,
+                    'name': getattr(athlete.user, 'username', 'Unknown') if hasattr(athlete, 'user') else 'Unknown Athlete'
+                })
+                
+            return Response(data)
+        except Exception as e:
+            logger.error(f"Error retrieving athlete biometric data: {e}", exc_info=True)
+            return Response({
+                'message': f'Error retrieving biometric data: {str(e)}',
+                'athlete_id': athlete_id,
+                'days': days
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            
     except Exception as e:
+        logger.error(f"Error in athlete_biometric_data: {e}", exc_info=True)
         return Response({
             'error': str(e),
-            'message': f'Failed to retrieve data for athlete: {athlete_id}'
+            'message': f'Failed to retrieve biometric data for athlete {athlete_id}'
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated, IsCoach])
 def biometric_comparison_by_position(request):
-    """Get comparison of biometric metrics across different positions"""
+    """Get comparative biometric data across positions"""
     try:
-        days = int(request.query_params.get('days', 30))
+        # Parse and validate parameters
+        days = request.query_params.get('days', 30)
+        try:
+            days = int(days)
+        except (ValueError, TypeError):
+            days = 30
+            
+        if days < 1:
+            days = 1
+        elif days > 90:
+            days = 90
+            
         # Get coach object safely
         coach = None
         if hasattr(request.user, 'coach_profile'):
             coach = request.user.coach_profile
         elif hasattr(request.user, 'coach'):
             coach = request.user.coach
-        
+            
+        # Make sure coach has a team
+        if not coach or not coach.team:
+            return Response({
+                'message': 'Coach or team not found',
+                'metrics_compared': {},
+                'notable_differences': []
+            }, status=status.HTTP_400_BAD_REQUEST)
+            
         service = CoachDataSyncService(coach=coach)
-        data = service.get_biometric_comparison_by_position(days=days)
         
-        return Response(data)
+        try:
+            comparison = service.get_biometric_comparison_by_position(days=days)
+            
+            if not comparison:
+                return Response({
+                    'message': 'No comparison data found. Try syncing team data first or ensure athletes have different positions.',
+                    'metrics_compared': {},
+                    'notable_differences': []
+                })
+                
+            # Add display names for each metric
+            for diff in comparison.get('notable_differences', []):
+                metric = diff.get('metric')
+                if metric and 'display_name' not in diff:
+                    diff['display_name'] = service.METRIC_DISPLAY_NAMES.get(
+                        metric, metric.replace('_', ' ').title())
+                
+            return Response({
+                'team_name': coach.team.name,
+                'metrics_compared': comparison.get('metrics_compared', {}),
+                'notable_differences': comparison.get('notable_differences', []),
+                'days': days,
+                'display_names': {m: service.METRIC_DISPLAY_NAMES.get(m, m.replace('_', ' ').title()) 
+                               for m in service.BIOMETRIC_METRICS}
+            })
+        except Exception as e:
+            logger.error(f"Error retrieving position comparison: {e}", exc_info=True)
+            # Return a friendly response rather than a 500 error
+            return Response({
+                'message': f"Error retrieving position comparison: {str(e)}",
+                'metrics_compared': {},
+                'notable_differences': []
+            }, status=status.HTTP_400_BAD_REQUEST)
     except Exception as e:
+        logger.error(f"Error in biometric_comparison_by_position: {e}", exc_info=True)
         return Response({
             'error': str(e),
-            'message': 'Failed to retrieve biometric comparison data'
+            'message': 'Failed to retrieve position comparison data',
+            'metrics_compared': {},
+            'notable_differences': []
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 @api_view(['GET'])
@@ -1301,144 +1527,132 @@ def training_optimization(request):
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated, IsCoach])
+@csrf_exempt
 def sync_team_data(request):
-    """Trigger a sync of biometric data for all athletes on the team"""
+    """
+    Sync biometric data for a team and store in the team's cached_biometric_data field
+    """
     try:
+        # Get the coach's team
+        coach = request.user
+        team = None
+        
+        if hasattr(coach, 'coach_profile') and coach.coach_profile.team:
+            team = coach.coach_profile.team
+        elif 'team_id' in request.data:
+            try:
+                team = Team.objects.get(id=request.data.get('team_id'))
+            except Team.DoesNotExist:
+                return Response({"error": "Team not found"}, status=404)
+        
+        if not team:
+            return Response({"error": "No team associated with this coach"}, status=400)
+        
+        # Initialize data sync service
+        service = CoachDataSyncService(team=team)
+        
+        # Get days parameter (default to 7)
         days = int(request.data.get('days', 7))
         force_refresh = request.data.get('force_refresh', False)
-        team_id = request.data.get('team_id', None)
-        athlete_ids = request.data.get('athlete_ids', [])
         
-        # Add extensive logging
-        logger.info(f"Sync team data requested by user: {request.user.username}")
-        logger.info(f"Request data: days={days}, force_refresh={force_refresh}, team_id={team_id}, athlete_ids: {len(athlete_ids)}")
+        # Execute sync
+        sync_result = service.sync_team_data(days=days, force_refresh=force_refresh)
         
-        # Get coach object safely
-        coach = None
-        if hasattr(request.user, 'coach_profile'):
-            coach = request.user.coach_profile
-            logger.info(f"Found coach via coach_profile: {coach.id if coach else 'None'}")
-        elif hasattr(request.user, 'coach'):
-            coach = request.user.coach
-            logger.info(f"Found coach via coach attr: {coach.id if coach else 'None'}")
-        
-        # Add debug logging to inspect coach user
-        logger.info(f"User: {request.user}, has coach_profile: {hasattr(request.user, 'coach_profile')}, has coach attr: {hasattr(request.user, 'coach')}")
-        
-        if not coach:
-            logger.error(f"No coach object found for user {request.user.username}")
-            return Response({
-                'message': 'User is not a coach'
-            }, status=status.HTTP_403_FORBIDDEN)
-        
-        # Try to find team if not already set
-        coach_team = None
-        if coach.team:
-            coach_team = coach.team
-        elif team_id:
-            try:
-                from .models import Team
-                coach_team = Team.objects.get(id=team_id)
-                logger.info(f"Found team by ID: {coach_team.name} ({coach_team.id})")
-                
-                # Update coach with this team if not set
-                if not coach.team:
-                    coach.team = coach_team
-                    coach.save()
-                    logger.info(f"Updated coach with team: {coach_team.name}")
-            except Exception as e:
-                logger.error(f"Failed to set team for coach: {e}")
-        
-        # Log team information
-        if coach_team:
-            logger.info(f"Coach team: {coach_team.name} ({coach_team.id})")
-        else:
-            logger.info(f"Coach has no team assigned")
-            return Response({
-                'message': 'No team found for coach'
-            }, status=status.HTTP_400_BAD_REQUEST)
-        
-        # Try different ways to get athletes
-        athletes = []
-        athlete_ids_to_sync = []
-        
-        # First check team's athletes_array if available
-        if hasattr(coach_team, 'athletes_array') and coach_team.athletes_array:
-            athlete_ids_to_sync = coach_team.athletes_array
-            logger.info(f"Found {len(athlete_ids_to_sync)} athlete IDs in team's athletes_array")
-            
-            # Load athlete objects
-            try:
-                athletes = list(Athlete.objects.filter(id__in=athlete_ids_to_sync))
-                logger.info(f"Loaded {len(athletes)} athlete objects from athletes_array")
-            except Exception as e:
-                logger.error(f"Error loading athletes from athletes_array: {e}")
-        
-        # If no athletes found in athletes_array, try using coach.athletes ManyToMany first
-        if not athletes and hasattr(coach, 'athletes') and coach.athletes.count() > 0:
-            athletes = list(coach.athletes.all())
-            athlete_ids_to_sync = [str(athlete.id) for athlete in athletes]
-            logger.info(f"Found {len(athletes)} athletes via coach.athletes")
-            
-        # If no athletes found and coach has a team, try getting by team
-        if not athletes and coach_team:
-            from .models import Athlete
-            team_athletes = Athlete.objects.filter(team=coach_team)
-            athletes = list(team_athletes)
-            athlete_ids_to_sync = [str(athlete.id) for athlete in athletes]
-            logger.info(f"Found {len(athletes)} athletes via team {coach_team.name}")
-            
-            # If we found athletes but the coach.athletes ManyToMany is empty, populate it
-            if athletes and hasattr(coach, 'athletes'):
-                try:
-                    coach.athletes.add(*athletes)
-                    logger.info(f"Added {len(athletes)} athletes to coach.athletes from team")
-                except Exception as e:
-                    logger.error(f"Error adding team athletes to coach: {e}")
-        
-        # If specific athlete_ids were provided and either:
-        # 1. We found no athletes via other methods, or
-        # 2. The provided IDs are a subset of the team's athlete IDs
-        if athlete_ids and (not athletes or all(aid in athlete_ids_to_sync for aid in athlete_ids)):
-            try:
-                from .models import Athlete
-                specified_athletes = Athlete.objects.filter(id__in=athlete_ids)
-                if specified_athletes.exists():
-                    logger.info(f"Using {specified_athletes.count()} specifically requested athletes")
-                    athletes = list(specified_athletes)
-                    athlete_ids_to_sync = athlete_ids
-            except Exception as e:
-                logger.error(f"Error finding specifically requested athletes: {e}")
-        
-        # Update team's athletes_array if needed
-        if coach_team and athletes and hasattr(coach_team, 'athletes_array'):
-            athlete_ids_from_objects = [str(a.id) for a in athletes]
-            if set(athlete_ids_from_objects) != set(coach_team.athletes_array or []):
-                coach_team.athletes_array = athlete_ids_from_objects
-                coach_team.save(update_fields=['athletes_array'])
-                logger.info(f"Updated team {coach_team.name} athletes_array with {len(athlete_ids_from_objects)} athletes")
-        
-        if not athletes:
-            logger.error(f"No athletes found for coach {coach.user.username}, team: {coach_team}")
-            return Response({
-                'message': 'No athletes found or sync failed'
-            }, status=status.HTTP_400_BAD_REQUEST)
-        
-        logger.info(f"Found {len(athletes)} athletes to sync")
-        
-        service = CoachDataSyncService(coach=coach)
-        success = service.sync_team_biometric_data(days=days, force_refresh=force_refresh)
-        
-        if success:
-            return Response({'message': f'Team data sync initiated successfully for {len(athletes)} athletes'})
-        else:
-            return Response({
-                'message': 'No athletes found or sync failed'
-            }, status=status.HTTP_400_BAD_REQUEST)
+        return Response(sync_result)
     except Exception as e:
-        logger.error(f"Error in sync_team_data: {e}", exc_info=True)
+        logger.error(f"Error syncing team data: {str(e)}", exc_info=True)
+        return Response({"error": str(e)}, status=500)
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated, IsCoach])
+def team_cached_biometrics(request):
+    """
+    Retrieve cached biometric data for a team
+    """
+    try:
+        # Get the coach's team
+        coach = request.user
+        team = None
+        
+        if hasattr(coach, 'coach_profile') and coach.coach_profile.team:
+            team = coach.coach_profile.team
+        elif 'team_id' in request.GET:
+            try:
+                team = Team.objects.get(id=request.GET.get('team_id'))
+            except Team.DoesNotExist:
+                return Response({"error": "Team not found"}, status=404)
+        
+        if not team:
+            return Response({"error": "No team associated with this coach"}, status=400)
+        
+        # Initialize service
+        service = CoachDataSyncService(team=team)
+        
+        # Try to get cached data
+        cached_data = service.get_cached_team_data()
+        
+        if not cached_data:
+            # If no cache or stale cache, trigger sync and return fresh data
+            sync_result = service.sync_team_data(days=7)
+            cached_data = service.get_cached_team_data()
+            
+            if not cached_data:
+                return Response({
+                    "error": "Failed to retrieve or generate team data",
+                    "sync_result": sync_result
+                }, status=500)
+        
         return Response({
-            'error': str(e),
-            'message': 'Failed to sync team data'
-        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            "success": True,
+            "cached_data": cached_data,
+            "last_updated": cached_data.get('last_updated', 'unknown')
+        })
+    
+    except Exception as e:
+        logger.error(f"Error retrieving cached team biometrics: {str(e)}", exc_info=True)
+        return Response({"error": str(e)}, status=500)
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def coach_api_debug(request):
+    """Debug endpoint for coach API structure"""
+    coach =None # get_coach_from_request(request)
+    if not coach: 
+        return Response({"error": "Not authorized as coach"}, status=401)
+    
+    # Get team info
+    team = None
+    if hasattr(coach, 'team'):
+        team = coach.team
+    
+    # Get a sample of athletes
+    from .services.coach_data_sync_service import CoachDataSyncService
+    service = CoachDataSyncService(team=team, coach=coach)
+    athletes = service.get_team_athletes()[:5]  # Just get first 5 for sample
+    
+    # Build a debug response
+    response = {
+        "api_info": {
+            "position_biometrics_endpoint": "/api/coach/position-biometrics/",
+            "position_athletes_endpoint": "/api/coach/position/{position_name}/athletes/",
+            "athlete_biometrics_endpoint": "/api/coach/athlete/{athlete_id}/biometrics/",
+        },
+        "team_info": {
+            "id": str(team.id) if team else None,
+            "name": team.name if team else None,
+            "athletes_count": len(team.athletes_array) if team and hasattr(team, 'athletes_array') else 0,
+        },
+        "sample_athletes": [
+            {
+                "id": str(athlete.id),
+                "user_id": str(athlete.user.id) if hasattr(athlete, 'user') else None,
+                "username": athlete.user.username if hasattr(athlete, 'user') else None,
+                "position": athlete.position,
+            }
+            for athlete in athletes
+        ],
+        "sample_positions": [p for p in set(a.position for a in athletes if a.position)]
+    }
+    
+    return Response(response)
 

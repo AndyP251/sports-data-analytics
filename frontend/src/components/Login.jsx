@@ -144,7 +144,8 @@ const Login = ({ setIsAuthenticated }) => {
       // Only send required fields for registration
       const requestData = isLoginMode ? {
         username: formData.username,
-        password: formData.password
+        password: formData.password,
+        skip_sync: true  // Add this parameter to skip immediate sync
       } : {
         username: formData.username,
         password: formData.password,

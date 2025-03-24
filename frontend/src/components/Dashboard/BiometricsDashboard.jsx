@@ -3000,6 +3000,36 @@ const BiometricsDashboard = ({ username }) => {
     return defaultValue;
   };
 
+  useEffect(() => {
+    // Initial data fetch and setup
+    const initialSetup = async () => {
+      try {
+        await ensureCSRFToken();
+        await fetchActiveSources();
+        await fetchData();
+        
+        // Check if we need to sync data after login
+        const needsInitialSync = localStorage.getItem('needsInitialSync') === 'true';
+        if (needsInitialSync) {
+          // Remove the flag and trigger background sync
+          localStorage.removeItem('needsInitialSync');
+          // Add a message to inform user that sync is happening
+          addSyncMessage('Your data is being updated in the background');
+          // Start sync in background
+          syncData(null, false);
+        }
+      } catch (error) {
+        handleError(error);
+      }
+    };
+    
+    initialSetup();
+    
+    // Set up window event listeners, etc.
+    // ... existing setup code ...
+    
+  }, []);
+
   return (
     <Box className={`biometrics-dashboard ${darkMode ? '' : 'light-mode'}`}>
       {/* Updated header and navigation */}

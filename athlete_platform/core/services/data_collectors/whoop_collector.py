@@ -116,8 +116,30 @@ class WhoopCollector(BaseDataCollector):
             wait_time = self.rate_limit_reset_time - current_time
             logger.info(f"Waiting for {wait_time} seconds for rate limit to reset...")
             
-            # Replace asyncio with a simple sleep
-            time.sleep(wait_time + 2)  # Add 2 seconds buffer
+            # TODO: CRUCIAL - This implementation is blocking the web worker and risks timeouts.
+            # This should be refactored to use a background task system (Celery/Redis/etc.)
+            # that can handle long-running operations outside the HTTP request cycle.
+            
+            # Break up the wait into smaller chunks to avoid Gunicorn worker timeout
+            # Most Gunicorn configs have 30 second timeouts
+            MAX_SAFE_WAIT = 25  # Keeping below typical 30s Gunicorn timeout
+            remaining_wait = wait_time
+            
+            while remaining_wait > 0:
+                chunk_wait = min(remaining_wait, MAX_SAFE_WAIT)
+                logger.info(f"Waiting for {chunk_wait}s (part of total {wait_time}s wait)...")
+                time.sleep(chunk_wait)
+                remaining_wait -= chunk_wait
+                
+                # Check if we should continue waiting or if request was interrupted
+                try:
+                    # This is a simple check to see if the worker is still alive
+                    # If this raises an exception, the worker is being shut down
+                    import signal
+                    signal.getsignal(signal.SIGTERM)
+                except Exception:
+                    logger.warning("Wait interrupted, worker may be shutting down")
+                    break
             
             # Reset rate limiting after wait
             self.rate_limited = False

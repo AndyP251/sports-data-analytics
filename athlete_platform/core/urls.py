@@ -13,7 +13,7 @@ from .api_views.auth import (
 from .api_views.coach_auth import (
     coach_login_view, coach_register_view, check_coach_auth
 )
-from .views import dashboard_data, sync_biometric_data, get_biometric_data, get_current_user, activate_source, get_garmin_profiles, get_raw_biometric_data, active_sources, verify_dev_password, get_db_info, generate_insights, get_insight_categories, get_insight_trends, get_recommendations, submit_insight_feedback, get_teams, get_team_athletes, disconnect_source, frontend_view, team_biometric_summary, position_biometric_summary, position_athletes_data, athlete_biometric_data, biometric_comparison_by_position, training_optimization, sync_team_data
+from .views import dashboard_data, sync_biometric_data, get_biometric_data, get_current_user, activate_source, get_garmin_profiles, get_raw_biometric_data, active_sources, verify_dev_password, get_db_info, generate_insights, get_insight_categories, get_insight_trends, get_recommendations, submit_insight_feedback, get_teams, get_team_athletes, disconnect_source, frontend_view, team_biometric_summary, position_biometric_summary, position_athletes_data, athlete_biometric_data, biometric_comparison_by_position, training_optimization, sync_team_data, team_cached_biometrics
 from .api_views.oauth import (
     WhoopOAuthView, WhoopCallbackView, WhoopWebhookView
 )
@@ -72,6 +72,7 @@ urlpatterns = [
     path('api/coach/position-comparison/', biometric_comparison_by_position, name='biometric_comparison_by_position'),
     path('api/coach/training-optimization/', training_optimization, name='training_optimization'),
     path('api/coach/sync-team-data/', sync_team_data, name='sync_team_data'),
+    path('api/coach/team-cached-biometrics/', team_cached_biometrics, name='team_cached_biometrics'),
     
     # Catch-all route for React frontend
     # This must be the last route to ensure API routes are handled correctly

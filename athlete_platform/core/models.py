@@ -162,6 +162,10 @@ class Team(models.Model):
         default=list,
         help_text="Array of athlete IDs associated with this team, used for data syncing"
     )
+    cached_biometric_data = models.JSONField(
+        default=list,
+        help_text="Cached biometric data for this team, used for data syncing"
+    )
 
     def __str__(self):
         return self.name

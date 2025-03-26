@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   LineChart, Line, AreaChart, Area, BarChart, Bar,
@@ -77,6 +77,11 @@ import AddIcon from '@mui/icons-material/Add';
 import CloseIcon from '@mui/icons-material/Close';
 import ArrowForwardIosIcon from '@mui/icons-material/ArrowForwardIos';
 import RefreshIcon from '@mui/icons-material/Refresh';
+import whoopBlackPuck from '../../assets/whoop-black-hollow.png';
+import whoopWhiteCircle from '../../assets/whoop-white-circle.png';
+import whoopBlack from '../../assets/whoop-black.png';
+import whoopWhite from '../../assets/whoop-white.png';
+import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 
 // Modern, professional color palette
 const colors = {
@@ -91,6 +96,19 @@ const colors = {
   success: '#2ECC71',   // Green
   warning: '#F39C12',   // Orange
   error: '#E74C3C',     // Red
+  // WHOOP brand colors
+  whoopBlack: '#000000',
+  whoopWhite: '#FFFFFF',
+  whoopTeal: '#00F19F',
+  whoopStrain: '#0093E7',
+  whoopSleep: '#7BA1BB',
+  whoopRecoveryBlue: '#67AEE6',
+  whoopRecoveryHigh: '#16EC06',
+  whoopRecoveryMedium: '#FFDE00',
+  whoopRecoveryLow: '#FF0026',
+  whoopBackground: '#283339',
+  whoopBackgroundDark: '#101518',
+  whoopCardBackground: 'rgba(52, 152, 219, 0.1)',
 };
 
 // Add this constant for developer-only fields
@@ -263,6 +281,128 @@ const getSourceDescription = (source) => {
   }
 };
 
+// Add this at the top level before any components
+const createLogCollector = () => {
+  const logGroups = {};
+  let isExpanded = false;
+  
+  // Toggle function that can be called from console
+  window.toggleDetailedLogs = () => {
+    isExpanded = !isExpanded;
+    console.log(`Detailed logs are now ${isExpanded ? 'EXPANDED' : 'COLLAPSED'}`);
+    if (isExpanded) {
+      // Print all collected logs when expanded
+      Object.keys(logGroups).forEach(group => {
+        console.groupCollapsed(`${group} (${logGroups[group].length} entries)`);
+        logGroups[group].forEach(entry => console.log(entry));
+        console.groupEnd();
+      });
+    }
+  };
+  
+  return {
+    collect: (groupName, message) => {
+      if (!logGroups[groupName]) {
+        logGroups[groupName] = [];
+      }
+      logGroups[groupName].push(message);
+      
+      // Only log the first occurrence of each group type
+      if (logGroups[groupName].length === 1) {
+        console.log(`${groupName}: 1 entry (call window.toggleDetailedLogs() to see all ${groupName} logs)`);
+      } else if (logGroups[groupName].length % 10 === 0) {
+        // Periodically update count
+        console.log(`${groupName}: ${logGroups[groupName].length} entries collected`);
+      }
+    }
+  };
+};
+
+// Create the log collector
+const logCollector = createLogCollector();
+
+// Add this WHOOP detection utility
+const whoopDetector = {
+  detected: false,
+  // Check once if WHOOP is available in data
+  checkInData: (data) => {
+    if (!whoopDetector.detected && data) {
+      const whoopItems = Object.values(data).flat().filter(item => 
+        item && item.source === 'whoop'
+      );
+      if (whoopItems.length > 0) {
+        whoopDetector.detected = true;
+      }
+    }
+    return whoopDetector.detected;
+  },
+  // Check once if WHOOP is in active sources
+  checkInSources: (sources) => {
+    if (!whoopDetector.detected && sources && sources.length) {
+      if (sources.some(source => source.id === "whoop")) {
+        whoopDetector.detected = true;
+      }
+    }
+    return whoopDetector.detected;
+  }
+};
+
+// Suppress verbose logs
+const suppressVerboseLogs = () => {
+  // Store original console methods
+  const originalConsoleLog = console.log;
+  const originalConsoleError = console.error;
+  
+  // Create a log suppression system
+  const suppressedGroups = {
+    'sleep_conversion': {
+      patterns: [
+        /Unusually high sleep hours/,
+        /Raw item data/,
+        /Converting from milliseconds/,
+        /Sleep hours adjusted/,
+        /Using conversion factor/,
+        /Sleep hours fixed/
+      ],
+      count: 0,
+      lastReported: 0
+    }
+  };
+  
+  // Replace console.log
+  console.log = function(...args) {
+    if (args.length > 0 && typeof args[0] === 'string') {
+      // Check if message matches any suppression pattern
+      for (const [group, config] of Object.entries(suppressedGroups)) {
+        const matches = config.patterns.some(pattern => pattern.test(args[0]));
+        if (matches) {
+          config.count++;
+          // Only report periodically
+          if (config.count === 1 || config.count % 30 === 0) {
+            originalConsoleLog.apply(console, [`${group}: ${config.count} logs suppressed (see window.showSuppressedLogSummary())`]);
+            config.lastReported = config.count;
+          }
+          return; // Skip logging this message
+        }
+      }
+    }
+    // If we get here, log normally
+    originalConsoleLog.apply(console, args);
+  };
+  
+  // Add method to view summary
+  window.showSuppressedLogSummary = () => {
+    originalConsoleLog.call(console, "=== Suppressed Log Summary ===");
+    for (const [group, config] of Object.entries(suppressedGroups)) {
+      originalConsoleLog.call(console, `${group}: ${config.count} logs suppressed`);
+    }
+    originalConsoleLog.call(console, "============================");
+  };
+};
+
+// Initialize log suppression
+suppressVerboseLogs();
+
 const BiometricsDashboard = ({ username }) => {
   const navigate = useNavigate();
   const theme = useTheme();
@@ -315,6 +455,18 @@ const BiometricsDashboard = ({ username }) => {
   // Add this near the beginning of the component where other state variables are defined
   const [scrolled, setScrolled] = useState(false);
   const [dashboardTab, setDashboardTab] = useState(0); // New state for dashboard tabs
+  // Add a state variable to track WHOOP data presence
+  const [whoopDataPresent, setWhoopDataPresent] = useState(false);
+  // Add a state variable to track WHOOP data presence
+  const [hasWhoopData, setHasWhoopData] = useState(false);
+  // Add state for WHOOP design mode
+  const [whoopDesignActive, setWhoopDesignActive] = useState(false);
+
+  // Use a ref instead of state to avoid re-renders
+  const whoopRef = useRef({
+    detected: false,
+    checked: false
+  });
 
   // Update localStorage when dark mode changes
   useEffect(() => {
@@ -761,6 +913,17 @@ const BiometricsDashboard = ({ username }) => {
       return value;
     };
     
+    // Look for WHOOP data and set state if found
+    const whoopItems = Object.values(data).flat().filter(item => 
+      item && (item.source === 'whoop' || (item.metadata && item.metadata.source === 'whoop'))
+    );
+    
+    // Only set state if WHOOP data is found and state hasn't been set yet
+    if (whoopItems.length > 0 && !whoopRef.current.detected) {
+      whoopRef.current.detected = true;
+      whoopRef.current.checked = true;
+    }
+    
     return data.map(item => {
       try {
         // Enhance source detection logic
@@ -959,6 +1122,36 @@ const BiometricsDashboard = ({ username }) => {
 
       return totalScore;
     }
+  };
+
+  // Add this helper function to get health score explanation for tooltip
+  const getHealthScoreExplanation = (source) => {
+    if (source === 'whoop') {
+      return `WHOOP Health Score Calculation:
+• If available, uses WHOOP's native recovery score
+• Otherwise calculated with these weights:
+  - Sleep quality: 30%
+  - Heart Rate Variability (HRV): 30%
+  - Respiratory rate: 20%
+  - Resting heart rate: 20%`;
+    } else if (source === 'oura') {
+      return `Oura Health Score Calculation:
+• Primarily based on Oura's readiness score
+• Factors include: sleep quality, HRV, resting heart rate, and recovery index`;
+    } else if (source === 'garmin') {
+      return `Garmin Health Score Calculation:
+• Based on Body Battery and other Garmin metrics
+• Factors include: sleep quality, stress level, and activity`;
+    } else if (source === 'fitbit') {
+      return `Fitbit Health Score Calculation:
+• Based on Fitbit's Daily Readiness score when available
+• Otherwise calculated from: sleep score (40%), resting heart rate (30%), and activity level (30%)`;
+    }
+    return `Health Score Calculation:
+• Sleep quality: 35%
+• Recovery metrics (HRV, resting HR): 35%
+• Activity balance: 30%
+• Score ranges from 0-100, with higher being better`;
   };
 
   const handleLogout = async () => {
@@ -1540,23 +1733,81 @@ const BiometricsDashboard = ({ username }) => {
       }
     };
 
+    // Add console logs to check if WHOOP is detected as an active source
+    console.log("Active sources in footer:", activeSources);
+    console.log("Is WHOOP active?", activeSources.includes('whoop'));
+
+    // Helper function to check if a source is active
+    const isSourceActive = (sourceId) => {
+      console.log("Checking if source is active:", sourceId, activeSources);
+      return activeSources.some(source => 
+        source.id === sourceId || source.source === sourceId || source.name === sourceId
+      );
+    };
+
+    // Log the full structure of activeSources and check more explicitly for WHOOP
+    console.log("Active sources in footer:", activeSources);
+    
+    // DIRECT check for WHOOP by ID
+    const hasWhoop = activeSources.some(source => source.id === "whoop");
+    console.log("Has WHOOP source by direct ID check:", hasWhoop);
+
     return (
       <Box
-        className="footer"
         sx={{
-          mt: 4,
-          pt: 2,
+          marginTop: 4,
+          marginBottom: 4,
           display: 'flex',
           flexDirection: 'column',
-          alignItems: 'center'
+          alignItems: 'center',
+          gap: 2,
+          width: '100%',
         }}
       >
-        <Button
-          variant="outlined"
+        {/* Add WHOOP attribution if design mode is active */}
+        {whoopDesignActive && (
+          <Box sx={{ 
+            display: 'flex', 
+            flexDirection: 'column', 
+            alignItems: 'center',
+            mb: 2 
+          }}>
+            <Box 
+              component="img" 
+              src={darkMode ? whoopWhiteCircle : whoopBlackPuck} 
+              alt="WHOOP" 
+        sx={{ 
+                height: '50px', 
+                width: 'auto',
+                mb: 1
+              }} 
+            />
+            <Typography 
+              variant="body2" 
+              sx={{ 
+                  textAlign: 'center',
+                fontFamily: "'Proxima Nova', 'Helvetica Neue', Helvetica, Arial, sans-serif",
+                letterSpacing: '0.05em',
+              }}
+            >
+              Powered by WHOOP
+                </Typography>
+              </Box>
+        )}
+        
+        {/* Existing raw data button */}
+                <Button
+                                  variant="outlined"
           color="primary"
           size="small"
           onClick={handleRawDataDownload}
-          sx={{ mb: 2 }}
+          sx={{ 
+            mb: 2,
+            ...(whoopDesignActive && {
+              borderColor: colors.whoopTeal,
+              color: colors.whoopTeal,
+            })
+          }}
           disabled={loading || !activeSources || activeSources.length === 0}
           startIcon={<BarChartIcon />}
         >
@@ -1567,7 +1818,10 @@ const BiometricsDashboard = ({ username }) => {
           className="footer-text"
           sx={{
             display: 'block',
-            mb: 1
+            mb: 1,
+            fontFamily: whoopDesignActive ? 
+              "'Proxima Nova', 'Helvetica Neue', Helvetica, Arial, sans-serif" : 
+              'inherit',
           }}
         >
           Developed by Andrew Prince and Pulse Project LLC 2025
@@ -1647,8 +1901,27 @@ const BiometricsDashboard = ({ username }) => {
             <YAxis yAxisId="right" orientation="right" domain={[0, 100]} />
             <Tooltip />
             <Legend />
-            <Bar dataKey="recovery_score" name="Recovery Score" fill="#27AE60" yAxisId="right" />
-            <Line type="monotone" dataKey="resting_heart_rate" name="Resting HR" stroke="#e74c3c" yAxisId="left" strokeWidth={2} />
+            <Bar 
+              dataKey="recovery_score" 
+              name="Recovery Score" 
+              fill={whoopDesignActive ? colors.whoopRecoveryBlue : "#27AE60"} 
+              yAxisId="right" 
+            >
+              {whoopDesignActive && data.map((entry, index) => (
+                <Cell 
+                  key={`cell-${index}`} 
+                  fill={getWhoopRecoveryColor(entry.recovery_score)} 
+                />
+              ))}
+            </Bar>
+            <Line 
+              type="monotone" 
+              dataKey="resting_heart_rate" 
+              name="Resting HR" 
+              stroke={whoopDesignActive ? colors.whoopRecoveryBlue : "#e74c3c"} 
+              yAxisId="left" 
+              strokeWidth={2} 
+            />
           </ComposedChart>
         )
       },
@@ -1667,8 +1940,19 @@ const BiometricsDashboard = ({ username }) => {
             <YAxis yAxisId="right" orientation="right" />
             <Tooltip />
             <Legend />
-            <Bar dataKey="hrv_ms" name="HRV (ms)" fill="#3498DB" yAxisId="left" />
-            <Line type="monotone" dataKey="strain" name="Strain" stroke="#E74C3C" yAxisId="right" />
+            <Bar 
+              dataKey="hrv_ms" 
+              name="HRV (ms)" 
+              fill={whoopDesignActive ? colors.whoopRecoveryBlue : "#3498DB"} 
+              yAxisId="left" 
+            />
+            <Line 
+              type="monotone" 
+              dataKey="strain" 
+              name="Strain" 
+              stroke={whoopDesignActive ? colors.whoopStrain : "#E74C3C"} 
+              yAxisId="right" 
+            />
           </ComposedChart>
         )
       },
@@ -1686,9 +1970,21 @@ const BiometricsDashboard = ({ username }) => {
             <YAxis domain={[0, 100]} />
             <Tooltip />
             <Legend />
-            <Bar dataKey="sleep_efficiency" name="Sleep Efficiency" fill="#3498DB" />
-            <Bar dataKey="sleep_consistency" name="Sleep Consistency" fill="#F1C40F" />
-            <Bar dataKey="sleep_performance" name="Sleep Performance" fill="#27AE60" />
+            <Bar 
+              dataKey="sleep_efficiency" 
+              name="Sleep Efficiency" 
+              fill={whoopDesignActive ? colors.whoopSleep : "#3498DB"} 
+            />
+            <Bar 
+              dataKey="sleep_consistency" 
+              name="Sleep Consistency" 
+              fill={whoopDesignActive ? colors.whoopTeal : "#F1C40F"} 
+            />
+            <Bar 
+              dataKey="sleep_performance" 
+              name="Sleep Performance" 
+              fill={whoopDesignActive ? colors.whoopRecoveryBlue : "#27AE60"} 
+            />
           </ComposedChart>
         )
       },
@@ -1931,17 +2227,21 @@ const BiometricsDashboard = ({ username }) => {
                     const data = payload[0].payload;
                     return (
                       <Box sx={{ 
-                        bgcolor: 'background.paper', 
                         p: 1.5, 
                         border: '1px solid #ccc',
                         borderRadius: 1,
-                        boxShadow: 2
+                        boxShadow: 2,
+                        color: 'white',
+                        backgroundColor: whoopDesignActive ? colors.whoopBackgroundDark : 'rgba(44, 62, 80, 0.95)',
+                        ...(whoopDesignActive && {
+                          borderColor: 'rgba(255, 255, 255, 0.2)',
+                        })
                       }}>
-                        <Typography variant="subtitle2">{data.date}</Typography>
+                        <Typography variant="subtitle2" sx={{ color: 'white' }}>{data.date}</Typography>
                         <Typography variant="body2" sx={{ fontWeight: 'bold', color: data.load_color }}>
                           Load: {data.training_load} ({data.load_category})
                         </Typography>
-                        <Typography variant="caption" sx={{ display: 'block', mt: 0.5 }}>
+                        <Typography variant="caption" sx={{ display: 'block', mt: 0.5, color: 'rgba(255, 255, 255, 0.8)' }}>
                           {data.load_details}
                         </Typography>
                       </Box>
@@ -2066,11 +2366,12 @@ const BiometricsDashboard = ({ username }) => {
                     const data = payload[0].payload;
                     return (
                       <Box sx={{ 
-                        bgcolor: 'background.paper', 
                         p: 1.5, 
                         border: '1px solid #ccc',
                         borderRadius: 1,
-                        boxShadow: 2
+                        boxShadow: 2,
+                        backgroundColor: 'black'
+                        
                       }}>
                         <Typography variant="subtitle2">{data.date}</Typography>
                         <Typography variant="body2" sx={{ fontWeight: 'bold', color: data.readiness_color }}>
@@ -2285,9 +2586,59 @@ const BiometricsDashboard = ({ username }) => {
             alignItems: 'center',
             mb: 2 
           }}>
-            <Typography variant="h5" sx={{ color: darkMode ? 'white' : colors.primary }}>
+            <Typography 
+              variant="h5" 
+              sx={{ 
+                color: darkMode ? 'white' : colors.primary,
+                fontFamily: whoopDesignActive ? 
+                  "'Proxima Nova', 'Helvetica Neue', Helvetica, Arial, sans-serif" : 
+                  'inherit',
+                fontWeight: whoopDesignActive ? 'bold' : 600,
+                letterSpacing: whoopDesignActive ? '0.1em' : 'inherit',
+                textTransform: whoopDesignActive ? 'uppercase' : 'none'
+              }}
+            >
               Biometrics Dashboard
+              {whoopDesignActive && (
+                <Box 
+                  component="span" 
+                  sx={{ 
+                    display: 'inline-flex', 
+                    alignItems: 'center', 
+                    ml: 1, 
+                    fontSize: '0.5em', 
+                    opacity: 0.7 
+                  }}
+                >Powered by 
+                  <Box 
+                    component="img" 
+                    src={darkMode ? whoopBlack : whoopWhite} 
+                    alt="WHOOP" 
+                    sx={{ 
+                      height: '24px', 
+                      width: 'auto',
+                      mr: 0.5,
+                      filter: darkMode ? 'invert(1)' : 'none' 
+                    }} 
+                  />
+                  
+                </Box>
+              )}
             </Typography>
+            
+            {/* Show WHOOP design indicator in dev mode */}
+            {whoopDesignActive && devMode && (
+              <Chip 
+                label="WHOOP Design Active" 
+                color="secondary"
+                size="small"
+                sx={{ 
+                  mr: 2, 
+                  backgroundColor: colors.whoopTeal,
+                  color: 'black'
+                }}
+              />
+            )}
             
             <Box>
               {editModeEnabled ? (
@@ -2296,7 +2647,11 @@ const BiometricsDashboard = ({ username }) => {
                   color="primary" 
                   onClick={() => setEditModeEnabled(false)}
                   startIcon={<CheckIcon />}
-                  sx={{ mr: 1 }}
+                  sx={{ 
+                    mr: 1,
+                    backgroundColor: whoopDesignActive ? colors.whoopTeal : undefined,
+                    color: whoopDesignActive ? 'black' : undefined,
+                  }}
                 >
                   Done Editing
                 </Button>
@@ -2306,7 +2661,11 @@ const BiometricsDashboard = ({ username }) => {
                   color="primary" 
                   onClick={() => setEditModeEnabled(true)}
                   startIcon={<EditIcon />}
-                  sx={{ mr: 1 }}
+                  sx={{ 
+                    mr: 1,
+                    borderColor: whoopDesignActive ? colors.whoopTeal : undefined,
+                    color: whoopDesignActive ? colors.whoopTeal : undefined,
+                  }}
                 >
                   Customize Dashboard
                 </Button>
@@ -2330,13 +2689,24 @@ const BiometricsDashboard = ({ username }) => {
             ? data 
             : getSourceSpecificData(data, module.source);
           
+          // Determine data type for WHOOP attribution
+          const dataType = module.id.includes('recovery') ? 'recovery' :
+                         module.id.includes('sleep') ? 'sleep' :
+                         module.id.includes('strain') ? 'strain' : null;
+          
+          // Apply WHOOP background to ALL cards when design is active
+          const cardBackground = whoopDesignActive
+            ? `linear-gradient(135deg, ${colors.whoopBackground} 0%, ${colors.whoopBackgroundDark} 100%)`
+            : undefined;
+          
           return (
             <Grid item xs={12} md={6} key={module.id}>
               <Card sx={{ 
                 p: 2, 
                 height: '100%',
                 position: 'relative',
-                overflow: 'hidden' // Add this to prevent scrollbars
+                overflow: 'hidden',
+                background: cardBackground,
               }}>
                 {/* Module header with title and action menu */}
                 <Box sx={{ 
@@ -2346,9 +2716,12 @@ const BiometricsDashboard = ({ username }) => {
                   mb: 1
                 }}>
                   <Box>
-                    <Typography variant="h6" gutterBottom sx={{ color: colors.headings }}>
-                      {module.title}
-                    </Typography>
+                    {whoopDesignActive ? 
+                      renderChartHeader(module.title, dataType) :
+                      <Typography variant="h6" gutterBottom sx={{ color: colors.headings }}>
+                        {module.title}
+                      </Typography>
+                    }
                     {(devMode || editModeEnabled) && 
                       <Typography variant="caption" sx={{ display: 'block', mb: 1, color: 'text.secondary' }}>
                         Source: {module.source === 'all' ? 'Combined Sources' : module.source.toUpperCase()}
@@ -2368,7 +2741,7 @@ const BiometricsDashboard = ({ username }) => {
                 </Box>
                 
                 {/* Module visualization */}
-                <Box sx={{ overflow: 'hidden' }}> {/* Add this wrapper with overflow hidden */}
+                <Box sx={{ overflow: 'hidden' }}>
                   <ResponsiveContainer width="100%" height={module.height || 300} style={{ overflow: 'visible', maxHeight: '100%' }}>
                     {module.render(moduleData)}
                   </ResponsiveContainer>
@@ -2738,6 +3111,19 @@ const BiometricsDashboard = ({ username }) => {
       .recharts-tooltip-wrapper {
         filter: ${darkMode ? 'invert(0.85) hue-rotate(180deg)' : 'none'};
       }
+      
+      /* Fix for Recovery Readiness labels */
+      .recharts-tooltip-wrapper .recharts-default-tooltip {
+        background-color: white !important;
+        border-radius: 5px;
+        padding: 8px !important;
+        box-shadow: 0px 3px 8px rgba(0, 0, 0, 0.15);
+      }
+      
+      /* Make sure text is visible */
+      .recharts-tooltip-wrapper .recharts-default-tooltip .recharts-tooltip-item-list {
+        color: rgba(0, 0, 0, 0.87);
+      }
     `;
     document.head.appendChild(styleTag);
     
@@ -3030,6 +3416,317 @@ const BiometricsDashboard = ({ username }) => {
     
   }, []);
 
+  // Use a memoized value to check if WHOOP is an active source
+  const isWhoopActive = useMemo(() => {
+    return hasWhoopData || activeSources.some(source => source.id === "whoop");
+  }, [activeSources, hasWhoopData]);
+
+  // Simple function to check WHOOP status (not called each render)
+  const checkWhoopStatus = useCallback(() => {
+    // Only perform this check once
+    if (!whoopRef.current.checked) {
+      whoopRef.current.checked = true;
+      
+      // Check activeSources for WHOOP
+      if (activeSources.some(source => source.id === "whoop")) {
+        whoopRef.current.detected = true;
+      }
+    }
+    return whoopRef.current.detected;
+  }, [activeSources]);
+  
+  // Update useEffect to set WHOOP detection when data is processed
+  useEffect(() => {
+    if (biometricData && !whoopRef.current.checked) {
+      // If we have any WHOOP data items, mark WHOOP as detected
+      const hasWhoopData = Object.values(biometricData)
+        .some(dataset => 
+          Array.isArray(dataset) && 
+          dataset.some(item => item && item.source === 'whoop')
+        );
+      
+      if (hasWhoopData) {
+        whoopRef.current.detected = true;
+        whoopRef.current.checked = true;
+      }
+    }
+  }, [biometricData]);
+
+  // Check for WHOOP when activeSources changes
+  useEffect(() => {
+    whoopDetector.checkInSources(activeSources);
+  }, [activeSources]);
+
+  // Add this useEffect to detect WHOOP and activate design mode
+  useEffect(() => {
+    const isWhoopActive = activeSources && activeSources.some(source => {
+      return source && (source.id === "whoop" || source === "whoop");
+    });
+    
+    setWhoopDesignActive(isWhoopActive);
+    
+    if (isWhoopActive && devMode) {
+      console.log("WHOOP design guidelines activated");
+      // Add a notification for dev mode
+      addSyncMessage("WHOOP design guidelines activated", "info");
+    }
+  }, [activeSources, devMode]);
+
+  // Helper function to get the appropriate recovery color based on WHOOP guidelines
+  const getWhoopRecoveryColor = (recoveryScore) => {
+    if (recoveryScore >= 67) return colors.whoopRecoveryHigh;
+    if (recoveryScore >= 34) return colors.whoopRecoveryMedium;
+    return colors.whoopRecoveryLow;
+  };
+
+  // Helper function to add WHOOP attribution to chart headers
+  const renderChartHeader = (title, dataType = null) => {
+    if (!whoopDesignActive) {
+      return <Typography variant="h6" gutterBottom>{title}</Typography>;
+    }
+    
+    const whoopAttributionText = dataType === 'recovery' ? 'Data by' : 
+                               dataType === 'sleep' ? 'Imported from' :
+                               'Powered by';
+    
+    return (
+      <Box sx={{ display: 'flex', flexDirection: 'column', mb: 1 }}>
+        <Typography 
+          variant="h6" 
+          gutterBottom 
+          sx={{ 
+            fontFamily: "'Proxima Nova', 'Helvetica Neue', Helvetica, Arial, sans-serif",
+            fontWeight: 'bold',
+            letterSpacing: '0.1em',
+            textTransform: whoopDesignActive ? 'uppercase' : 'none',
+            color: 'white'
+          }}
+        >
+          {title}
+        </Typography>
+        <Box sx={{ display: 'flex', alignItems: 'center', mt: 0.5 }}>
+          <Typography 
+            variant="caption" 
+            sx={{ 
+              color: 'text.secondary',
+              mr: 1,
+              fontFamily: "'Proxima Nova', 'Helvetica Neue', Helvetica, Arial, sans-serif",
+            }}
+          >
+            {whoopAttributionText}
+          </Typography>
+          <Box 
+            component="img" 
+            src={whoopBlackPuck} 
+            alt="WHOOP" 
+            sx={{ 
+              height: '20px', 
+              width: 'auto',
+              filter: 'invert(1)'
+            }} 
+          />
+        </Box>
+      </Box>
+    );
+  };
+
+  // Force dark mode when WHOOP design is active
+  useEffect(() => {
+    if (whoopDesignActive && !darkMode) {
+      setDarkMode(true);
+      if (devMode) {
+        addSyncMessage("Dark mode enforced to comply with WHOOP design guidelines", "info");
+      }
+    }
+  }, [whoopDesignActive]);
+  
+  // Modified dark mode toggle handler
+  const handleDarkModeToggle = () => {
+    if (whoopDesignActive) {
+      // Create a more visible notification that isn't tied to the component state
+      const notification = document.createElement('div');
+      notification.className = 'whoop-dark-mode-warning';
+      notification.style.cssText = `
+        position: fixed;
+        top: 70px;
+        left: 50%;
+        transform: translateX(-50%);
+        background-color: #FF9800;
+        color: white;
+        padding: 12px 20px;
+        border-radius: 8px;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+        z-index: 9999;
+        font-family: 'Roboto', sans-serif;
+        font-weight: 500;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        max-width: 90%;
+        animation: fadeIn 0.3s ease-out;
+      `;
+      
+      // Add warning icon and text
+      notification.innerHTML = `
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="white">
+          <path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"></path>
+        </svg>
+        <span>Light mode is disabled when using WHOOP design guidelines</span>
+      `;
+      document.body.appendChild(notification);
+      
+      // Remove after 3 seconds
+      setTimeout(() => {
+        notification.style.animation = 'fadeOut 0.3s ease-out';
+        setTimeout(() => {
+          document.body.removeChild(notification);
+        }, 300);
+      }, 3000);
+      
+      // Also add to sync messages for permanent record
+      addSyncMessage("Light mode is not permitted when using WHOOP design guidelines", "warning");
+    } else {
+      setDarkMode(!darkMode);
+    }
+  };
+
+  // Add CSS animations to the document
+  useEffect(() => {
+    const styleTag = document.createElement('style');
+    styleTag.innerHTML = `
+      @keyframes fadeIn {
+        from { opacity: 0; transform: translate(-50%, -20px); }
+        to { opacity: 1; transform: translate(-50%, 0); }
+      }
+      
+      @keyframes fadeOut {
+        from { opacity: 1; transform: translate(-50%, 0); }
+        to { opacity: 0; transform: translate(-50%, -20px); }
+      }
+      
+      /* Force text colors on integration cards */
+      [role="tabpanel"]:nth-of-type(2) .MuiCard-root {
+        color: ${darkMode ? 'white' : 'inherit'} !important;
+      }
+      
+      [role="tabpanel"]:nth-of-type(2) .MuiTypography-root {
+        color: ${darkMode ? 'white' : 'inherit'} !important;
+      }
+      
+      [role="tabpanel"]:nth-of-type(2) .MuiTypography-body2 {
+        color: ${darkMode ? 'rgba(255, 255, 255, 0.7)' : 'rgba(0, 0, 0, 0.6)'} !important;
+      }
+      
+      [role="tabpanel"]:nth-of-type(2) .MuiAlert-standardInfo .MuiAlert-message {
+        color: ${darkMode ? 'rgba(255, 255, 255, 0.9)' : 'inherit'} !important;
+      }
+    `;
+    document.head.appendChild(styleTag);
+    
+    return () => {
+      document.head.removeChild(styleTag);
+    };
+  }, [darkMode]);
+
+  // Use this in your rendering code where the health score is displayed
+  // For example, in the health score card/component:
+
+  const renderHealthScoreCard = (data, source) => {
+    const score = calculateHealthScore(data);
+    const dataSource = source || (data && data.length > 0 ? data[data.length - 1].source : null);
+    
+    return (
+      <Card sx={{ 
+        height: '100%', 
+        borderRadius: '12px',
+        ...(whoopDesignActive && { backgroundColor: colors.whoopCardBackground })
+      }}>
+        <CardContent>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+            <Typography variant="h6" sx={{ mb: 2, color: whoopDesignActive ? 'white' : 'inherit' }}>
+              Health Score
+              <Tooltip 
+                title={
+                  <Typography variant="body2" style={{ whiteSpace: 'pre-line' }}>
+                    {getHealthScoreExplanation(dataSource)}
+                  </Typography>
+                }
+                placement="top"
+                enterTouchDelay={0}
+                leaveTouchDelay={3000}
+              >
+                <IconButton size="small" sx={{ ml: 1, p: 0 }}>
+                  <InfoOutlinedIcon fontSize="small" sx={{ color: whoopDesignActive ? 'white' : 'inherit' }}/>
+                </IconButton>
+              </Tooltip>
+            </Typography>
+          </Box>
+          
+          {/* Health score value display */}
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', mt: 2 }}>
+            <CircularProgress 
+              variant="determinate" 
+              value={score} 
+              size={120}
+              thickness={5}
+              sx={{
+                color: getScoreColor(score),
+                '& .MuiCircularProgress-circle': {
+                  strokeLinecap: 'round',
+                },
+              }}
+            />
+            <Box sx={{ 
+              position: 'absolute', 
+              display: 'flex', 
+              flexDirection: 'column',
+              alignItems: 'center', 
+              justifyContent: 'center'
+            }}>
+              <Typography variant="h4" sx={{ fontWeight: 'bold', color: whoopDesignActive ? 'white' : 'inherit' }}>
+                {Math.round(score)}
+              </Typography>
+              <Typography variant="caption" sx={{ color: whoopDesignActive ? 'rgba(255,255,255,0.7)' : 'text.secondary' }}>
+                /100
+              </Typography>
+            </Box>
+          </Box>
+        </CardContent>
+      </Card>
+    );
+  };
+
+  // Helper function to determine color based on score value
+  const getScoreColor = (score) => {
+    if (score >= 80) return colors.whoopDesignActive ? colors.whoopRecoveryHigh : '#2ecc71';
+    if (score >= 60) return colors.whoopDesignActive ? colors.whoopRecoveryMedium : '#f39c12';
+    return colors.whoopDesignActive ? colors.whoopRecoveryLow : '#e74c3c';
+  };
+
+  // If there's a custom tooltip component for the Recovery Readiness chart
+  const CustomTooltip = ({ active, payload, label }) => {
+    if (active && payload && payload.length) {
+      return (
+        <Box 
+          sx={{ 
+            backgroundColor: 'white',
+            padding: 1.5,
+            borderRadius: 1,
+            boxShadow: '0px 3px 8px rgba(0, 0, 0, 0.15)',
+            border: '1px solid rgba(0, 0, 0, 0.12)'
+          }}
+        >
+          <Typography variant="body2">{label}</Typography>
+          <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
+            Readiness: ({payload[0].value > 0 ? 'Good' : 'Poor'})
+          </Typography>
+          <Typography variant="body2">{payload[0].value}</Typography>
+        </Box>
+      );
+    }
+    return null;
+  };
+
   return (
     <Box className={`biometrics-dashboard ${darkMode ? '' : 'light-mode'}`}>
       {/* Updated header and navigation */}
@@ -3052,7 +3749,21 @@ const BiometricsDashboard = ({ username }) => {
           </IconButton>
           
           <Typography variant="h5" className="header-title" sx={{ fontWeight: 600 }}>
+            {whoopDesignActive ? (
+              <>
+                <Box component="span" sx={{ display: 'flex', alignItems: 'center' }}>
             Pulse
+                            <Box 
+                              component="img" 
+                    src={whoopWhiteCircle}
+                              alt="WHOOP" 
+                    sx={{ height: '22px', width: 'auto', ml: 1 }}
+                  />
+                </Box>
+              </>
+            ) : (
+              <>Pulse</>
+            )}
             <Box component="span" sx={{ 
               fontWeight: 300, 
               opacity: 0.8,
@@ -3066,7 +3777,7 @@ const BiometricsDashboard = ({ username }) => {
           </Typography>
         </Box>
 
-        {/* Header controls */}
+        {/* Header controls with modified dark mode toggle */}
         <Box className="header-controls">
           {/* Dark mode toggle */}
           <Box 
@@ -3074,6 +3785,9 @@ const BiometricsDashboard = ({ username }) => {
               display: 'flex',
               alignItems: 'center',
               gap: '8px',
+              opacity: whoopDesignActive ? 0.5 : 1,
+              pointerEvents: whoopDesignActive ? 'none' : 'auto',
+              position: 'relative'
             }}
           >
             <Brightness4Icon 
@@ -3085,8 +3799,59 @@ const BiometricsDashboard = ({ username }) => {
             />
             <Box 
               className={`toggle-switch ${darkMode ? 'active' : ''}`}
-              onClick={() => setDarkMode(!darkMode)}
-              sx={{ cursor: 'pointer' }}
+              onClick={() => {
+                if (whoopDesignActive) {
+                  // Create and show warning directly on click
+                  const notification = document.createElement('div');
+                  notification.className = 'whoop-dark-mode-warning';
+                  notification.style.cssText = `
+                    position: fixed;
+                    top: 70px;
+                    left: 50%;
+                    transform: translateX(-50%);
+                    background-color: #FF9800;
+                    color: white;
+                    padding: 12px 20px;
+                    border-radius: 8px;
+                    box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+                    z-index: 9999;
+                    font-family: 'Roboto', sans-serif;
+                    font-weight: 500;
+                    display: flex;
+                    align-items: center;
+                    gap: 8px;
+                    max-width: 90%;
+                    animation: fadeIn 0.3s ease-out;
+                  `;
+                  
+                  // Add warning icon and text
+                  notification.innerHTML = `
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="white">
+                      <path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"></path>
+                    </svg>
+                    <span>Light mode is disabled when using WHOOP design guidelines</span>
+                  `;
+                  document.body.appendChild(notification);
+                  
+                  // Remove after 3 seconds
+                  setTimeout(() => {
+                    notification.style.animation = 'fadeOut 0.3s ease-out';
+                    setTimeout(() => {
+                      document.body.removeChild(notification);
+                    }, 300);
+                  }, 3000);
+                  
+                  // Also add to sync messages for permanent record
+                  addSyncMessage("Light mode is not permitted when using WHOOP design guidelines", "warning");
+                } else {
+                  setDarkMode(!darkMode);
+                }
+              }}
+              sx={{ 
+                cursor: whoopDesignActive ? 'not-allowed' : 'pointer',
+                position: 'relative'
+              }}
+              data-whoop-active={whoopDesignActive ? "true" : "false"}
             ></Box>
             <Brightness7Icon 
               sx={{ 
@@ -3095,6 +3860,28 @@ const BiometricsDashboard = ({ username }) => {
                 opacity: darkMode ? 0.5 : 1
               }} 
             />
+            {whoopDesignActive && (
+              <MuiTooltip 
+                title={
+                  <Typography sx={{ color: 'white' }}>
+                    Light mode is disabled when using WHOOP design guidelines
+                  </Typography>
+                } 
+                arrow
+                componentsProps={{
+                  tooltip: {
+                    sx: {
+                      bgcolor: 'rgba(0, 0, 0, 0.9)',
+                      '& .MuiTooltip-arrow': {
+                        color: 'rgba(0, 0, 0, 0.9)'
+                      }
+                    }
+                  }
+                }}
+              >
+                <InfoIcon sx={{ ml: 1, fontSize: '0.9rem', color: '#FF9800', opacity: 1 }} />
+              </MuiTooltip>
+            )}
           </Box>
 
           {/* Dev Mode indicator */}
@@ -3144,7 +3931,29 @@ const BiometricsDashboard = ({ username }) => {
                     sx={{ 
                       mb: 1,
                       borderRadius: '10px',
-                      boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)'
+                      boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
+                      ...(whoopDesignActive && {
+                        backgroundColor: message.type === 'success' ? 'rgba(22, 236, 6, 0.2)' :
+                                 message.type === 'error' ? 'rgba(255, 0, 38, 0.2)' :
+                                 message.type === 'warning' ? 'rgba(255, 222, 0, 0.2)' :
+                                 'rgba(0, 241, 159, 0.2)', // info and default
+                        // Add a border for better contrast in dark mode
+                        border: message.type === 'success' ? '1px solid rgba(22, 236, 6, 0.5)' :
+                                message.type === 'error' ? '1px solid rgba(255, 0, 38, 0.5)' :
+                                message.type === 'warning' ? '1px solid rgba(255, 222, 0, 0.5)' :
+                                '1px solid rgba(0, 241, 159, 0.5)', // info and default
+                  }),
+                  '& .MuiAlert-message': {
+                        color: whoopDesignActive ? 'rgba(255, 255, 255, 0.95)' : 
+                              (darkMode ? 'rgba(255, 255, 255, 0.9)' : 'inherit')
+                  },
+                  '& .MuiAlert-icon': {
+                        color: whoopDesignActive ? 
+                             (message.type === 'success' ? colors.whoopRecoveryHigh :
+                              message.type === 'error' ? colors.whoopRecoveryLow :
+                              message.type === 'warning' ? colors.whoopRecoveryMedium :
+                              colors.whoopTeal) : 'inherit'
+                      }
                     }}
                     onClose={() => {
                       const newMessages = [...syncMessage];
@@ -3176,11 +3985,11 @@ const BiometricsDashboard = ({ username }) => {
                   }}
                 >
                   <Box sx={{ position: 'relative', zIndex: 1 }}>
-                    <Typography variant="h4" sx={{ mb: 2, fontWeight: 600 }}>
+                    <Typography variant="h4" sx={{ mb: 2, fontWeight: 600, color: darkMode ? 'white' : 'inherit' }}>
                       Welcome, {username.charAt(0).toUpperCase() + username.slice(1)}
                     </Typography>
                     
-                    <Typography variant="body1" sx={{ mb: 3, opacity: 0.9, maxWidth: '700px' }}>
+                    <Typography variant="body1" sx={{ mb: 3, opacity: 0.9, maxWidth: '700px', color: darkMode ? 'rgba(255, 255, 255, 0.7)' : 'rgba(0, 0, 0, 0.6)' }}>
                       Your personal biometrics dashboard provides a comprehensive view of your health and fitness data, 
                       allowing you to track trends and gain insights into your well-being.
                     </Typography>
@@ -3230,7 +4039,7 @@ const BiometricsDashboard = ({ username }) => {
                 </Box>
                             
                 {/* Stats overview cards */}
-                <Typography variant="h5" sx={{ mb: 2, fontWeight: 600 }}>
+                <Typography variant="h5" sx={{ mb: 2, fontWeight: 600, color: darkMode ? 'white' : 'inherit' }}>
                   Your Health Snapshot
                 </Typography>
                 
@@ -3244,17 +4053,40 @@ const BiometricsDashboard = ({ username }) => {
                       '&:hover': {
                         transform: 'translateY(-5px)',
                         boxShadow: '0 10px 20px rgba(0,0,0,0.2)'
-                      }
+                      },
+                      ...(whoopDesignActive && {
+                        background: `linear-gradient(135deg, ${colors.whoopBackground} 0%, ${colors.whoopBackgroundDark} 100%)`
+                      })
                     }}>
                       <CardContent sx={{ p: 3 }}>
                         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
-                          <Typography variant="subtitle1" color="textSecondary">Resting Heart Rate</Typography>
-                          <MonitorHeartIcon sx={{ color: '#E74C3C' }} />
+                          <Typography 
+                            variant="subtitle1" 
+                            color="textSecondary"
+                            sx={{ 
+                              fontFamily: whoopDesignActive ? 
+                                "'Proxima Nova', 'Helvetica Neue', Helvetica, Arial, sans-serif" : 
+                                'inherit',
+                              color: darkMode ? 'rgba(255, 255, 255, 0.7)' : 'rgba(0, 0, 0, 0.6)'
+                            }}
+                          >
+                            Resting Heart Rate
+                          </Typography>
+                          <MonitorHeartIcon sx={{ color: whoopDesignActive ? colors.whoopRecoveryBlue : '#E74C3C' }} />
                         </Box>
-                        <Typography variant="h3" sx={{ mb: 0, fontWeight: 700 }}>
+                        <Typography 
+                          variant="h3" 
+                          sx={{ 
+                            mb: 0, 
+                            fontWeight: 700,
+                            fontFamily: whoopDesignActive ? 
+                              "'DINPro', 'Helvetica Neue', Helvetica, Arial, sans-serif" : 
+                              'inherit',
+                            color: darkMode ? 'white' : 'inherit'
+                          }}
+                        >
                           {filteredData.length > 0 ? 
                             (() => {
-                              // Use the getLatestMetricValue function for resting heart rate
                               const restingHR = getLatestMetricValue('resting_heart_rate');
                               if (restingHR !== '—') {
                                 return Math.round(restingHR);
@@ -3263,9 +4095,26 @@ const BiometricsDashboard = ({ username }) => {
                             })() 
                             : '—'}
                         </Typography>
-                        <Typography variant="body2" color="textSecondary">
+                        <Typography variant="body2" color="textSecondary" sx={{ color: darkMode ? 'rgba(255, 255, 255, 0.7)' : 'rgba(0, 0, 0, 0.6)' }}>
                           BPM
                         </Typography>
+                        {whoopDesignActive && selectedDataSource === 'whoop' && (
+                          <Box sx={{ display: 'flex', alignItems: 'center', mt: 1 }}>
+                            <Typography variant="caption" sx={{ color: 'text.secondary', mr: 0.5 }}>
+                              Data by
+                            </Typography>
+                            <Box 
+                              component="img" 
+                              src={whoopBlackPuck} 
+                              alt="WHOOP" 
+                              sx={{ 
+                                height: '16px', 
+                                width: 'auto',
+                                filter: darkMode ? 'invert(1)' : 'none'
+                              }} 
+                            />
+                          </Box>
+                        )}
                       </CardContent>
                     </Card>
                   </Grid>
@@ -3279,13 +4128,35 @@ const BiometricsDashboard = ({ username }) => {
                       '&:hover': {
                         transform: 'translateY(-5px)',
                         boxShadow: '0 10px 20px rgba(0,0,0,0.2)'
-                      }
+                      },
+                      ...(whoopDesignActive && {
+                        background: `linear-gradient(135deg, ${colors.whoopBackground} 0%, ${colors.whoopBackgroundDark} 100%)`
+                      })
                     }}>
                       <CardContent sx={{ p: 3 }}>
                         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
-                          <Typography variant="subtitle1" color="textSecondary">Recovery Score</Typography>
+                          <Typography 
+                            variant="subtitle1" 
+                            color="textSecondary"
+                            sx={{ 
+                              fontFamily: whoopDesignActive ? 
+                                "'Proxima Nova', 'Helvetica Neue', Helvetica, Arial, sans-serif" : 
+                                'inherit',
+                              color: darkMode ? 'rgba(255, 255, 255, 0.7)' : 'rgba(0, 0, 0, 0.6)'
+                            }}
+                          >
+                            Recovery Score
+                          </Typography>
                           <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                            <SpeedIcon sx={{ color: '#2ECC71' }} />
+                            <SpeedIcon sx={{ 
+                              color: whoopDesignActive ? (() => {
+                                const recoveryScore = getLatestMetricValue('recovery_score');
+                                if (recoveryScore !== '—') {
+                                  return getWhoopRecoveryColor(Math.round(recoveryScore));
+                                }
+                                return colors.whoopTeal;
+                              })() : '#2ECC71' 
+                            }} />
                             {selectedDataSource === 'whoop' && (
                               <Tooltip title="Recovery Score from WHOOP">
                                 <Chip 
@@ -3295,18 +4166,33 @@ const BiometricsDashboard = ({ username }) => {
                                     ml: 1, 
                                     height: '18px',
                                     fontSize: '10px',
-                                    backgroundColor: '#33D154',
-                                    color: 'white'
+                                    backgroundColor: whoopDesignActive ? colors.whoopTeal : '#33D154',
+                                    color: 'black'
                                   }} 
                                 />
                               </Tooltip>
                             )}
                           </Box>
                         </Box>
-                        <Typography variant="h3" sx={{ mb: 0, fontWeight: 700 }}>
+                        <Typography 
+                          variant="h3" 
+                          sx={{ 
+                            mb: 0, 
+                            fontWeight: 700,
+                            fontFamily: whoopDesignActive ? 
+                              "'DINPro', 'Helvetica Neue', Helvetica, Arial, sans-serif" : 
+                              'inherit',
+                            color: whoopDesignActive ? (() => {
+                              const recoveryScore = getLatestMetricValue('recovery_score');
+                              if (recoveryScore !== '—') {
+                                return getWhoopRecoveryColor(Math.round(recoveryScore));
+                              }
+                              return 'inherit';
+                            })() : (darkMode ? 'white' : 'inherit')
+                          }}
+                        >
                           {filteredData.length > 0 ? 
                             (() => {
-                              // Use the getLatestMetricValue function for recovery score
                               const recoveryScore = getLatestMetricValue('recovery_score');
                               if (recoveryScore !== '—') {
                                 return Math.round(recoveryScore);
@@ -3315,9 +4201,26 @@ const BiometricsDashboard = ({ username }) => {
                             })() 
                             : '—'}
                         </Typography>
-                        <Typography variant="body2" color="textSecondary">
+                        <Typography variant="body2" color="textSecondary" sx={{ color: darkMode ? 'rgba(255, 255, 255, 0.7)' : 'rgba(0, 0, 0, 0.6)' }}>
                           out of 100
                         </Typography>
+                        {whoopDesignActive && selectedDataSource === 'whoop' && (
+                          <Box sx={{ display: 'flex', alignItems: 'center', mt: 1 }}>
+                            <Typography variant="caption" sx={{ color: 'text.secondary', mr: 0.5 }}>
+                              Data by
+                            </Typography>
+                            <Box 
+                              component="img" 
+                              src={whoopBlackPuck} 
+                              alt="WHOOP" 
+                              sx={{ 
+                                height: '16px', 
+                                width: 'auto',
+                                filter: darkMode ? 'invert(1)' : 'none'
+                              }} 
+                            />
+                          </Box>
+                        )}
                       </CardContent>
                     </Card>
                   </Grid>
@@ -3331,14 +4234,38 @@ const BiometricsDashboard = ({ username }) => {
                       '&:hover': {
                         transform: 'translateY(-5px)',
                         boxShadow: '0 10px 20px rgba(0,0,0,0.2)'
-                      }
+                      },
+                      ...(whoopDesignActive && {
+                        background: `linear-gradient(135deg, ${colors.whoopBackground} 0%, ${colors.whoopBackgroundDark} 100%)`
+                      })
                     }}>
                       <CardContent sx={{ p: 3 }}>
                         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
-                          <Typography variant="subtitle1" color="textSecondary">Sleep Duration</Typography>
-                          <NightsStayIcon sx={{ color: '#9B59B6' }} />
+                          <Typography 
+                            variant="subtitle1" 
+                            color="textSecondary"
+                            sx={{ 
+                              fontFamily: whoopDesignActive ? 
+                                "'Proxima Nova', 'Helvetica Neue', Helvetica, Arial, sans-serif" : 
+                                'inherit',
+                              color: darkMode ? 'rgba(255, 255, 255, 0.7)' : 'rgba(0, 0, 0, 0.6)'
+                            }}
+                          >
+                            Sleep Duration
+                          </Typography>
+                          <NightsStayIcon sx={{ color: whoopDesignActive ? colors.whoopSleep : '#9B59B6' }} />
                         </Box>
-                        <Typography variant="h3" sx={{ mb: 0, fontWeight: 700 }}>
+                        <Typography 
+                          variant="h3" 
+                          sx={{ 
+                            mb: 0, 
+                            fontWeight: 700,
+                            fontFamily: whoopDesignActive ? 
+                              "'DINPro', 'Helvetica Neue', Helvetica, Arial, sans-serif" : 
+                              'inherit',
+                            color: darkMode ? 'white' : 'inherit'
+                          }}
+                        >
                           {filteredData.length > 0 ? 
                             (() => {
                               // Use the getLatestMetricValue function for sleep hours
@@ -3357,9 +4284,26 @@ const BiometricsDashboard = ({ username }) => {
                             })() 
                             : '—'}
                         </Typography>
-                        <Typography variant="body2" color="textSecondary">
+                        <Typography variant="body2" color="textSecondary" sx={{ color: darkMode ? 'rgba(255, 255, 255, 0.7)' : 'rgba(0, 0, 0, 0.6)' }}>
                           hours
                         </Typography>
+                        {whoopDesignActive && selectedDataSource === 'whoop' && (
+                          <Box sx={{ display: 'flex', alignItems: 'center', mt: 1 }}>
+                            <Typography variant="caption" sx={{ color: 'text.secondary', mr: 0.5 }}>
+                              Imported from
+                            </Typography>
+                            <Box 
+                              component="img" 
+                              src={whoopBlackPuck} 
+                              alt="WHOOP" 
+                              sx={{ 
+                                height: '16px', 
+                                width: 'auto',
+                                filter: darkMode ? 'invert(1)' : 'none'
+                              }} 
+                            />
+                          </Box>
+                        )}
                       </CardContent>
                     </Card>
                   </Grid>
@@ -3373,11 +4317,14 @@ const BiometricsDashboard = ({ username }) => {
                       '&:hover': {
                         transform: 'translateY(-5px)',
                         boxShadow: '0 10px 20px rgba(0,0,0,0.2)'
-                      }
+                      },
+                      ...(whoopDesignActive && {
+                        background: `linear-gradient(135deg, ${colors.whoopBackground} 0%, ${colors.whoopBackgroundDark} 100%)`
+                      })
                     }}>
                       <CardContent sx={{ p: 3 }}>
                         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
-                          <Typography variant="subtitle1" color="textSecondary">Daily Steps</Typography>
+                          <Typography variant="subtitle1" color="textSecondary" sx={{ color: darkMode ? 'rgba(255, 255, 255, 0.7)' : 'rgba(0, 0, 0, 0.6)' }}>Daily Steps</Typography>
                           <Box sx={{ display: 'flex', alignItems: 'center' }}>
                             <DirectionsRunIcon sx={{ color: '#3498DB' }} />
                             {selectedDataSource === 'garmin' && (
@@ -3397,7 +4344,7 @@ const BiometricsDashboard = ({ username }) => {
                             )}
                           </Box>
                         </Box>
-                        <Typography variant="h3" sx={{ mb: 0, fontWeight: 700 }}>
+                        <Typography variant="h3" sx={{ mb: 0, fontWeight: 700, color: darkMode ? 'white' : 'inherit' }}>
                           {filteredData.length > 0 ? 
                             (() => {
                               // Try both steps and total_steps fields
@@ -3415,7 +4362,7 @@ const BiometricsDashboard = ({ username }) => {
                             })() 
                             : '—'}
                         </Typography>
-                        <Typography variant="body2" color="textSecondary">
+                        <Typography variant="body2" color="textSecondary" sx={{ color: darkMode ? 'rgba(255, 255, 255, 0.7)' : 'rgba(0, 0, 0, 0.6)' }}>
                           steps
                         </Typography>
                       </CardContent>
@@ -3425,13 +4372,19 @@ const BiometricsDashboard = ({ username }) => {
                 
                 {/* Data Tabs - keep existing tabValue structure */}
                 <Box sx={{ width: '100%', mb: 3 }}>
-                  <Typography variant="h5" sx={{ mb: 2, fontWeight: 600 }}>
+                  <Typography variant="h5" sx={{ mb: 2, fontWeight: 600, color: darkMode ? 'white' : 'inherit' }}>
                     Detailed Analytics
                   </Typography>
                   
                   {/* Add current source display */}
                   <Box sx={{ mb: 1 }}>
-                    <Typography variant="subtitle1" color="textSecondary">
+                    <Typography 
+                      variant="subtitle1" 
+                      color="textSecondary" 
+                      sx={{ 
+                        color: whoopDesignActive ? 'rgba(255, 255, 255, 0.8)' : (darkMode ? 'rgba(255, 255, 255, 0.7)' : 'rgba(0, 0, 0, 0.6)')
+                      }}
+                    >
                       {selectedDataSource && selectedDataSource !== 'all' 
                         ? `Viewing data from: ${
                             typeof selectedDataSource === 'string'
@@ -3456,7 +4409,21 @@ const BiometricsDashboard = ({ username }) => {
                         value={selectedDataSource || 'all'}
                         onChange={(e) => setSelectedDataSource(e.target.value)}
                         displayEmpty
-                        sx={{ borderRadius: '8px' }}
+                        sx={{ 
+                          borderRadius: '8px',
+                          ...(whoopDesignActive && {
+                            '& .MuiOutlinedInput-notchedOutline': {
+                              borderColor: 'rgba(255, 255, 255, 0.5)'
+                            },
+                            '&:hover .MuiOutlinedInput-notchedOutline': {
+                              borderColor: 'rgba(255, 255, 255, 0.7)'
+                            },
+                            '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+                              borderColor: colors.whoopTeal
+                            },
+                            color: 'white'
+                          })
+                        }}
                       >
                         <MenuItem value="all">All Sources</MenuItem>
                         {activeSources && Array.isArray(activeSources) && activeSources.map((source) => {
@@ -3476,7 +4443,7 @@ const BiometricsDashboard = ({ username }) => {
                     {loading && (
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                         <CircularProgress size={20} />
-                        <Typography variant="body2" color="textSecondary">Loading data...</Typography>
+                        <Typography variant="body2" color="textSecondary" sx={{ color: darkMode ? 'rgba(255, 255, 255, 0.7)' : 'rgba(0, 0, 0, 0.6)' }}>Loading data...</Typography>
                       </Box>
                     )}
                     
@@ -3545,8 +4512,8 @@ const BiometricsDashboard = ({ username }) => {
                         <Grid container spacing={3}>
                           {shouldShowVisualization('whoop', ['sleep_efficiency', 'sleep_consistency', 'sleep_performance']) && (
                             <Grid item xs={12}>
-                              <Card sx={{ p: 2 }}>
-                                <Typography variant="h6" gutterBottom>Sleep Quality Metrics</Typography>
+                              <Card sx={{ p: 2, bgcolor: darkMode ? 'rgba(44, 62, 80, 0.4)' : 'inherit' }}>
+                                <Typography variant="h6" gutterBottom sx={{ color: darkMode ? 'white' : 'inherit' }}>Sleep Quality Metrics</Typography>
                                 <ResponsiveContainer width="100%" height={300}>
                                   <BarChart data={filteredData}>
                                     <CartesianGrid strokeDasharray="3 3" />
@@ -3564,8 +4531,8 @@ const BiometricsDashboard = ({ username }) => {
                           )}
                           
                           <Grid item xs={12} md={6}>
-                            <Card sx={{ p: 2, boxShadow: '0 4px 20px rgba(0,0,0,0.1)', borderRadius: '12px', height: '100%' }}>
-                              <Typography variant="h6" sx={{ mb: 2, fontWeight: 600 }}>Sleep Composition</Typography>
+                            <Card sx={{ p: 2, boxShadow: '0 4px 20px rgba(0,0,0,0.1)', borderRadius: '12px', height: '100%', bgcolor: darkMode ? 'rgba(44, 62, 80, 0.4)' : 'inherit' }}>
+                              <Typography variant="h6" sx={{ mb: 2, fontWeight: 600, color: darkMode ? 'white' : 'inherit' }}>Sleep Composition</Typography>
                               <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
                                 <ResponsiveContainer width="100%" height={280}>
                                   <PieChart>
@@ -3607,7 +4574,7 @@ const BiometricsDashboard = ({ username }) => {
                                   </PieChart>
                                 </ResponsiveContainer>
                                 <Box sx={{ mt: 'auto', textAlign: 'center', pt: 2 }}>
-                                  <Typography variant="subtitle2" color="text.secondary">
+                                  <Typography variant="subtitle2" color="text.secondary" sx={{ color: darkMode ? 'rgba(255, 255, 255, 0.7)' : 'rgba(0, 0, 0, 0.6)' }}>
                                     Most recent sleep composition breakdown
                                   </Typography>
                                 </Box>
@@ -3616,8 +4583,8 @@ const BiometricsDashboard = ({ username }) => {
                           </Grid>
                           
                           <Grid item xs={12} md={6}>
-                            <Card sx={{ p: 2, boxShadow: '0 4px 20px rgba(0,0,0,0.1)', borderRadius: '12px', height: '100%' }}>
-                              <Typography variant="h6" sx={{ mb: 2, fontWeight: 600 }}>Sleep Trends</Typography>
+                            <Card sx={{ p: 2, boxShadow: '0 4px 20px rgba(0,0,0,0.1)', borderRadius: '12px', height: '100%', bgcolor: darkMode ? 'rgba(44, 62, 80, 0.4)' : 'inherit' }}>
+                              <Typography variant="h6" sx={{ mb: 2, fontWeight: 600, color: darkMode ? 'white' : 'inherit' }}>Sleep Trends</Typography>
                               <ResponsiveContainer width="100%" height={280}>
                                 <LineChart
                                   data={filteredData}
@@ -3644,8 +4611,8 @@ const BiometricsDashboard = ({ username }) => {
                           </Grid>
                           
                           <Grid item xs={12}>
-                            <Card sx={{ p: 2, boxShadow: '0 4px 20px rgba(0,0,0,0.1)', borderRadius: '12px' }}>
-                              <Typography variant="h6" sx={{ mb: 2, fontWeight: 600 }}>Sleep Duration</Typography>
+                            <Card sx={{ p: 2, boxShadow: '0 4px 20px rgba(0,0,0,0.1)', borderRadius: '12px', bgcolor: darkMode ? 'rgba(44, 62, 80, 0.4)' : 'inherit' }}>
+                              <Typography variant="h6" sx={{ mb: 2, fontWeight: 600, color: darkMode ? 'white' : 'inherit' }}>Sleep Duration</Typography>
                               <ResponsiveContainer width="100%" height={350}>
                                 <BarChart 
                                   data={filteredData} 
@@ -3700,8 +4667,8 @@ const BiometricsDashboard = ({ username }) => {
                       <TabPanel value={tabValue} index={2}>
                         <Grid container spacing={3}>
                           <Grid item xs={12}>
-                            <Card sx={{ p: 2 }}>
-                              <Typography variant="h6" gutterBottom>Steps & Distance</Typography>
+                            <Card sx={{ p: 2, bgcolor: darkMode ? 'rgba(44, 62, 80, 0.4)' : 'inherit' }}>
+                              <Typography variant="h6" gutterBottom sx={{ color: darkMode ? 'white' : 'inherit' }}>Steps & Distance</Typography>
                               <ResponsiveContainer width="100%" height={300}>
                                 <ComposedChart data={filteredData}>
                                   <CartesianGrid strokeDasharray="3 3" />
@@ -3718,8 +4685,8 @@ const BiometricsDashboard = ({ username }) => {
                           </Grid>
                           
                           <Grid item xs={12} md={6}>
-                            <Card sx={{ p: 2 }}>
-                              <Typography variant="h6" gutterBottom>Heart Rate</Typography>
+                            <Card sx={{ p: 2, bgcolor: darkMode ? 'rgba(44, 62, 80, 0.4)' : 'inherit' }}>
+                              <Typography variant="h6" gutterBottom sx={{ color: darkMode ? 'white' : 'inherit' }}>Heart Rate</Typography>
                               <ResponsiveContainer width="100%" height={300}>
                                 <LineChart data={filteredData}>
                                   <CartesianGrid strokeDasharray="3 3" />
@@ -3735,8 +4702,8 @@ const BiometricsDashboard = ({ username }) => {
                           </Grid>
                           
                           <Grid item xs={12} md={6}>
-                            <Card sx={{ p: 2 }}>
-                              <Typography variant="h6" gutterBottom>Calories</Typography>
+                            <Card sx={{ p: 2, bgcolor: darkMode ? 'rgba(44, 62, 80, 0.4)' : 'inherit' }}>
+                              <Typography variant="h6" gutterBottom sx={{ color: darkMode ? 'white' : 'inherit' }}>Calories</Typography>
                               <ResponsiveContainer width="100%" height={300}>
                                 <AreaChart data={filteredData}>
                                   <CartesianGrid strokeDasharray="3 3" />
@@ -3775,8 +4742,8 @@ const BiometricsDashboard = ({ username }) => {
                       <TabPanel value={tabValue} index={3}>
                         <Grid container spacing={3}>
                           <Grid item xs={12}>
-                            <Card sx={{ p: 2 }}>
-                              <Typography variant="h6" gutterBottom>Health Score</Typography>
+                            <Card sx={{ p: 2, bgcolor: darkMode ? 'rgba(44, 62, 80, 0.4)' : 'inherit' }}>
+                              <Typography variant="h6" gutterBottom sx={{ color: darkMode ? 'white' : 'inherit' }}>Health Score</Typography>
                               <Box sx={{ display: 'flex', flexDirection: { xs: 'column', md: 'row' } }}>
                                 <Box sx={{ flex: 1, minHeight: '300px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                                   <ResponsiveContainer width="100%" height={300}>
@@ -3801,6 +4768,7 @@ const BiometricsDashboard = ({ username }) => {
                                         className="progress-label"
                                         fontSize="36"
                                         fontWeight="bold"
+                                        fill={darkMode ? 'white' : 'inherit'}
                                       >
                                         {calculateHealthScore(filteredData)}
                                       </text>
@@ -3808,8 +4776,8 @@ const BiometricsDashboard = ({ username }) => {
                                   </ResponsiveContainer>
                                 </Box>
                                 <Box sx={{ flex: 1, p: 2 }}>
-                                  <Typography variant="h4" gutterBottom>Health Score Analysis</Typography>
-                                  <Typography variant="body1" paragraph>
+                                  <Typography variant="h4" gutterBottom sx={{ color: darkMode ? 'white' : 'inherit' }}>Health Score Analysis</Typography>
+                                  <Typography variant="body1" paragraph sx={{ color: darkMode ? 'rgba(255, 255, 255, 0.7)' : 'rgba(0, 0, 0, 0.6)' }}>
                                     Your health score is calculated based on multiple factors including sleep quality, 
                                     activity levels, heart rate variability, and recovery metrics.
                                   </Typography>
@@ -3819,6 +4787,7 @@ const BiometricsDashboard = ({ username }) => {
                                       <ListItemText 
                                         primary="Heart Health" 
                                         secondary="Based on resting heart rate and heart rate variability" 
+                                        sx={{ color: darkMode ? 'rgba(255, 255, 255, 0.7)' : 'rgba(0, 0, 0, 0.6)' }}
                                       />
                                     </ListItem>
                                     <ListItem>
@@ -3826,6 +4795,7 @@ const BiometricsDashboard = ({ username }) => {
                                       <ListItemText 
                                         primary="Sleep Quality" 
                                         secondary="Based on sleep duration and composition" 
+                                        sx={{ color: darkMode ? 'rgba(255, 255, 255, 0.7)' : 'rgba(0, 0, 0, 0.6)' }}
                                       />
                                     </ListItem>
                                     <ListItem>
@@ -3833,6 +4803,7 @@ const BiometricsDashboard = ({ username }) => {
                                       <ListItemText 
                                         primary="Activity Level" 
                                         secondary="Based on step count and activity minutes" 
+                                        sx={{ color: darkMode ? 'rgba(255, 255, 255, 0.7)' : 'rgba(0, 0, 0, 0.6)' }}
                                       />
                                     </ListItem>
                                   </List>
@@ -3845,9 +4816,9 @@ const BiometricsDashboard = ({ username }) => {
                       
                       {/* Raw Data Tab */}
                       <TabPanel value={tabValue} index={4}>
-                        <Card sx={{ p: 2, mb: 3 }}>
+                        <Card sx={{ p: 2, mb: 3, bgcolor: darkMode ? 'rgba(44, 62, 80, 0.4)' : 'inherit' }}>
                           <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2 }}>
-                            <Typography variant="h6">Raw Biometric Data</Typography>
+                            <Typography variant="h6" sx={{ color: darkMode ? 'white' : 'inherit' }}>Raw Biometric Data</Typography>
                             <FormControlLabel
                               control={<Switch checked={devMode} onChange={(e) => setDevMode(e.target.checked)} />}
                               label="Developer Mode"
@@ -3940,7 +4911,7 @@ const BiometricsDashboard = ({ username }) => {
                                     key={insight.id}
                                     expanded={expandedInsightId === insight.id}
                                     onChange={handleInsightAccordionChange(insight.id)}
-                                    sx={{ mb: 2 }}
+                                    sx={{ mb: 2, bgcolor: darkMode ? 'rgba(44, 62, 80, 0.4)' : 'inherit' }}
                                   >
                                     <AccordionSummary expandIcon={<ExpandMoreIcon />}>
                                       <Box sx={{ display: 'flex', alignItems: 'center', width: '100%' }}>
@@ -3948,7 +4919,7 @@ const BiometricsDashboard = ({ username }) => {
                                           {getIconByName(insight.icon)}
                                         </Box>
                                         <Box sx={{ flex: 1 }}>
-                                          <Typography variant="subtitle1">{insight.title}</Typography>
+                                          <Typography variant="subtitle1" sx={{ color: darkMode ? 'white' : 'inherit' }}>{insight.title}</Typography>
                                           <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
                                             <Chip 
                                               label={insight.category} 
@@ -3976,7 +4947,7 @@ const BiometricsDashboard = ({ username }) => {
                                       </Box>
                                     </AccordionSummary>
                                     <AccordionDetails>
-                                      <Typography variant="body1" paragraph>
+                                      <Typography variant="body1" paragraph sx={{ color: darkMode ? 'rgba(255, 255, 255, 0.7)' : 'rgba(0, 0, 0, 0.6)' }}>
                                         {insight.description}
                                       </Typography>
                                       <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1 }}>
@@ -3999,7 +4970,7 @@ const BiometricsDashboard = ({ username }) => {
                                   </Accordion>
                                 ))
                               ) : (
-                                <Alert severity="info">
+                                <Alert severity="info" sx={{ bgcolor: darkMode ? 'rgba(44, 62, 80, 0.4)' : 'inherit' }}>
                                   No insights available for the selected filters. Try a different category or sync more data.
                                 </Alert>
                               )}
@@ -4022,13 +4993,14 @@ const BiometricsDashboard = ({ username }) => {
                                         '&:hover': {
                                           transform: 'translateY(-5px)',
                                           boxShadow: '0 8px 30px rgba(0, 0, 0, 0.15)'
-                                        }
+                                        },
+                                        bgcolor: darkMode ? 'rgba(44, 62, 80, 0.4)' : 'inherit'
                                       }}>
                                         <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
                                           <LightbulbIcon sx={{ color: '#F39C12', mr: 1.5 }} />
-                                          <Typography variant="h6">{recommendation.title}</Typography>
+                                          <Typography variant="h6" sx={{ color: darkMode ? 'white' : 'inherit' }}>{recommendation.title}</Typography>
                                         </Box>
-                                        <Typography variant="body2" sx={{ mb: 2, flex: 1 }}>
+                                        <Typography variant="body2" sx={{ mb: 2, flex: 1, color: darkMode ? 'rgba(255, 255, 255, 0.7)' : 'rgba(0, 0, 0, 0.6)' }}>
                                           {recommendation.description}
                                         </Typography>
                                         <Box sx={{ display: 'flex', alignItems: 'center', mt: 'auto' }}>
@@ -4044,7 +5016,7 @@ const BiometricsDashboard = ({ username }) => {
                                             variant="outlined"
                                             sx={{ mr: 1 }}
                                           />
-                                          <Typography variant="caption" sx={{ color: 'text.secondary', ml: 'auto' }}>
+                                          <Typography variant="caption" sx={{ color: darkMode ? 'rgba(255, 255, 255, 0.7)' : 'rgba(0, 0, 0, 0.6)', ml: 'auto' }}>
                                             Based on your {recommendation.dataPoint} data
                                           </Typography>
                                         </Box>
@@ -4053,7 +5025,7 @@ const BiometricsDashboard = ({ username }) => {
                                   ))}
                                 </Grid>
                               ) : (
-                                <Alert severity="info">
+                                <Alert severity="info" sx={{ bgcolor: darkMode ? 'rgba(44, 62, 80, 0.4)' : 'inherit' }}>
                                   No recommendations available yet. Sync more data or try again later.
                                 </Alert>
                               )}
@@ -4067,18 +5039,18 @@ const BiometricsDashboard = ({ username }) => {
                                 <Grid container spacing={3}>
                                   {Object.entries(insightTrends).map(([metric, trend], index) => (
                                     <Grid item xs={12} md={4} key={index}>
-                                      <Card sx={{ p: 2 }}>
+                                      <Card sx={{ p: 2, bgcolor: darkMode ? 'rgba(44, 62, 80, 0.4)' : 'inherit' }}>
                                         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-                                          <Typography variant="h6">
+                                          <Typography variant="h6" sx={{ color: darkMode ? 'white' : 'inherit' }}>
                                             {metric.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}
                                           </Typography>
                                           {getTrendIcon(trend.direction)}
                                         </Box>
-                                        <Typography variant="body2">
+                                        <Typography variant="body2" sx={{ color: darkMode ? 'rgba(255, 255, 255, 0.7)' : 'rgba(0, 0, 0, 0.6)' }}>
                                           {trend.description}
                                         </Typography>
                                         <Box sx={{ mt: 2, pt: 2, borderTop: '1px solid rgba(0,0,0,0.1)' }}>
-                                          <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                                          <Typography variant="caption" sx={{ color: darkMode ? 'rgba(255, 255, 255, 0.7)' : 'rgba(0, 0, 0, 0.6)' }}>
                                             {trend.percentage}% {trend.direction === 'increasing' ? 'increase' : 
                                                             trend.direction === 'decreasing' ? 'decrease' : 'change'} in the last {trend.period} days
                                           </Typography>
@@ -4088,7 +5060,7 @@ const BiometricsDashboard = ({ username }) => {
                                   ))}
                                 </Grid>
                               ) : (
-                                <Alert severity="info">
+                                <Alert severity="info" sx={{ bgcolor: darkMode ? 'rgba(44, 62, 80, 0.4)' : 'inherit' }}>
                                   No trend data available yet. Continue syncing data to see trends.
                                 </Alert>
                               )}
@@ -4121,11 +5093,11 @@ const BiometricsDashboard = ({ username }) => {
               >
                 <DevicesOutlinedIcon sx={{ fontSize: '80px', color: darkMode ? 'white' : '#3498DB', opacity: 0.8 }} />
                 
-                <Typography variant="h4" component="h2" sx={{ fontWeight: 600 }} gutterBottom>
+                <Typography variant="h4" component="h2" sx={{ fontWeight: 600, color: darkMode ? 'white' : 'inherit' }} gutterBottom>
                   No Active Data Sources
                 </Typography>
                 
-                <Typography variant="body1" color="text.secondary" sx={{ mb: 2, maxWidth: '600px' }}>
+                <Typography variant="body1" color="text.secondary" sx={{ mb: 2, maxWidth: '600px', color: darkMode ? 'rgba(255, 255, 255, 0.7)' : 'rgba(0, 0, 0, 0.6)' }}>
                   To begin tracking your health and fitness metrics, connect at least one data source.
                   This will allow you to visualize trends, receive personalized insights, and monitor your progress.
                 </Typography>
@@ -4145,7 +5117,7 @@ const BiometricsDashboard = ({ username }) => {
                   Connect a Data Source
                 </Button>
                 
-                <Typography variant="caption" sx={{ mt: 3, opacity: 0.7 }}>
+                <Typography variant="caption" sx={{ mt: 3, opacity: 0.7, color: darkMode ? 'rgba(255, 255, 255, 0.7)' : 'rgba(0, 0, 0, 0.6)' }}>
                   Supported integrations include Garmin, WHOOP, Fitbit, and more.
                 </Typography>
               </Box>
@@ -4171,11 +5143,11 @@ const BiometricsDashboard = ({ username }) => {
               }}
             >
               <Box sx={{ position: 'relative', zIndex: 1 }}>
-                <Typography variant="h4" sx={{ mb: 2, fontWeight: 600 }}>
+                <Typography variant="h4" sx={{ mb: 2, fontWeight: 600, color: darkMode ? 'white' : 'inherit' }}>
                   Hardware Integrations
                 </Typography>
                 
-                <Typography variant="body1" sx={{ mb: 3, opacity: 0.9, maxWidth: '700px' }}>
+                <Typography variant="body1" sx={{ mb: 3, opacity: 0.9, maxWidth: '700px', color: darkMode ? 'rgba(255, 255, 255, 0.7)' : 'rgba(0, 0, 0, 0.6)' }}>
                   Connect your wearables and fitness trackers to sync biometric data. 
                   Your data is securely stored and only accessible to you.
                 </Typography>
@@ -4194,7 +5166,7 @@ const BiometricsDashboard = ({ username }) => {
             </Box>
             
             {/* Active Integrations Section */}
-            <Typography variant="h5" sx={{ mb: 2, fontWeight: 600 }}>
+            <Typography variant="h5" sx={{ mb: 2, fontWeight: 600, color: darkMode ? 'white' : 'inherit' }}>
               Your Connected Devices
             </Typography>
             
@@ -4205,7 +5177,10 @@ const BiometricsDashboard = ({ username }) => {
                   sx={{ 
                     mb: 3, 
                     borderRadius: '10px',
-                    boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)'
+                    boxShadow: '0 4px 12px rgba(255, 255, 255, 0.1)',
+                    '& .MuiAlert-message': {
+                      color: darkMode ? 'rgba(0, 0, 0, 0.9)' : 'inherit'
+                    }
                   }}
                 >
                   Note: Newly connected data sources may take up to a minute to fully register and display data. If your data doesn't appear immediately, please be patient or try syncing manually.
@@ -4241,6 +5216,15 @@ const BiometricsDashboard = ({ username }) => {
                           '&:hover': {
                             transform: 'translateY(-5px)',
                             boxShadow: '0 10px 20px rgba(0,0,0,0.2)'
+                          },
+                          bgcolor: darkMode ? 'rgba(44, 62, 80, 0.4)' : 'inherit',
+                          // Ensure text is visible in both modes
+                          '& .MuiTypography-root': {
+                            color: darkMode ? 'white' : 'inherit'
+                          },
+                          // Fix secondary text color
+                          '& .MuiTypography-colorTextSecondary': {
+                            color: darkMode ? 'rgba(255, 255, 255, 0.7)' : 'rgba(0, 0, 0, 0.6)'
                           }
                         }}>
                           <CardContent sx={{ p: 3 }}>
@@ -4264,7 +5248,7 @@ const BiometricsDashboard = ({ username }) => {
                             </Box>
                             
                             {source.profile_type && (
-                              <Typography variant="body2" color="textSecondary" sx={{ mb: 2 }}>
+                              <Typography variant="body2" color="textSecondary" sx={{ mb: 2, color: darkMode ? 'rgba(255, 255, 255, 0.7)' : 'rgba(0, 0, 0, 0.6)' }}>
                                 Profile: {source.profile_type}
                               </Typography>
                             )}
@@ -4328,7 +5312,17 @@ const BiometricsDashboard = ({ username }) => {
                 sx={{ 
                   mb: 4, 
                   borderRadius: '10px',
-                  boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)'
+                  boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
+                  ...(whoopDesignActive && {
+                    backgroundColor: 'rgba(0, 241, 159, 0.1)',
+                    border: '1px solid rgba(0, 241, 159, 0.3)',
+                  }),
+                  '& .MuiAlert-message': {
+                    color: whoopDesignActive ? 'rgba(255, 255, 255, 0.95)' : (darkMode ? 'rgba(255, 255, 255, 0.9)' : 'inherit')
+                  },
+                  '& .MuiAlert-icon': {
+                    color: whoopDesignActive ? colors.whoopTeal : 'inherit'
+                  }
                 }}
               >
                 No active data sources yet. Click "Connect New Device" to get started. Please note that after connecting a source, it may take up to a minute for it to register in the system.
@@ -4336,7 +5330,7 @@ const BiometricsDashboard = ({ username }) => {
             )}
             
             {/* Available Integrations Section */}
-            <Typography variant="h5" sx={{ mb: 2, fontWeight: 600 }}>
+            <Typography variant="h5" sx={{ mb: 2, fontWeight: 600, color: darkMode ? 'white' : 'inherit' }}>
               Available Integrations
             </Typography>
             
@@ -4356,11 +5350,26 @@ const BiometricsDashboard = ({ username }) => {
                       '&:hover': {
                         transform: 'translateY(-5px)',
                         boxShadow: '0 10px 20px rgba(0,0,0,0.2)'
-                      }
+                      },
+                      bgcolor: darkMode ? 'rgba(44, 62, 80, 0.4)' : 'inherit',
+                      // Fix text colors when WHOOP design is active
+                      ...(whoopDesignActive && {
+                        '& .MuiTypography-root': {
+                          color: 'white !important'
+                        },
+                        '& .MuiTypography-body2': {
+                          color: 'rgba(255, 255, 255, 0.7) !important'
+                        },
+                        '& .MuiChip-label': {
+                          color: isActive ? 'rgba(46, 204, 113, 0.9) !important' : 'rgba(255, 255, 255, 0.9) !important'
+                        }
+                      })
                     }}>
                       <CardContent sx={{ p: 3 }}>
                         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-                          <Typography variant="h6">
+                          <Typography variant="h6" sx={{ 
+                            color: whoopDesignActive ? 'white !important' : (darkMode ? 'white' : 'inherit')
+                          }}>
                             {source.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}
                           </Typography>
                           {isActive ? (
@@ -4369,19 +5378,40 @@ const BiometricsDashboard = ({ username }) => {
                               color="success" 
                               variant="outlined" 
                               size="small" 
-                              sx={{ height: '24px' }} 
+                              sx={{ 
+                                height: '24px',
+                                ...(whoopDesignActive && {
+                                  borderColor: colors.whoopRecoveryHigh,
+                                  color: colors.whoopRecoveryHigh,
+                                  '& .MuiChip-label': {
+                                    color: colors.whoopRecoveryHigh
+                                  }
+                                })
+                              }} 
                             />
                           ) : (
                             <Chip 
                               label="Available" 
                               variant="outlined" 
                               size="small" 
-                              sx={{ height: '24px' }} 
+                              sx={{ 
+                                height: '24px',
+                                ...(whoopDesignActive && {
+                                  borderColor: colors.whoopTeal,
+                                  color: 'white',
+                                  '& .MuiChip-label': {
+                                    color: 'white'
+                                  }
+                                })
+                              }} 
                             />
                           )}
                         </Box>
                         
-                        <Typography variant="body2" color="textSecondary" sx={{ mb: 2 }}>
+                        <Typography variant="body2" color="textSecondary" sx={{ 
+                          mb: 2,
+                          color: whoopDesignActive ? 'rgba(255, 255, 255, 0.7) !important' : (darkMode ? 'rgba(255, 255, 255, 0.7)' : 'rgba(0, 0, 0, 0.6)')
+                        }}>
                           {getSourceDescription(source)}
                         </Typography>
                         

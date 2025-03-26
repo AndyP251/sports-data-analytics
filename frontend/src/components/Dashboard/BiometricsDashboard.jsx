@@ -2261,7 +2261,8 @@ const BiometricsDashboard = ({ username }) => {
               </Bar>
               <Line 
                 type="monotone" 
-                dataKey="training_load" 
+                dataKey="training_load"
+                name="Sum" 
                 stroke="#8884d8" 
                 strokeWidth={2}
                 dot={{ stroke: '#8884d8', strokeWidth: 2, r: 4 }}
@@ -4519,11 +4520,11 @@ const BiometricsDashboard = ({ username }) => {
                                     <CartesianGrid strokeDasharray="3 3" />
                                     <XAxis dataKey="date" />
                                     <YAxis yAxisId="left" domain={[0, 100]} tickFormatter={(value) => `${value}%`} />
-                                    <Tooltip formatter={(value) => [`${value}%`, null]} />
+                                    <Tooltip formatter={(value, name) => [`${value} hours`, name]} />
                                     <Legend />
-                                    <Bar yAxisId="left" dataKey="sleep_efficiency" name="Sleep Efficiency" fill="#3498DB" radius={[4, 4, 0, 0]} />
-                                    <Bar yAxisId="left" dataKey="sleep_consistency" name="Sleep Consistency" fill="#2ecc71" radius={[4, 4, 0, 0]} />
-                                    <Bar yAxisId="left" dataKey="sleep_performance" name="Sleep Performance" fill="#8e44ad" radius={[4, 4, 0, 0]} />
+                                    <Bar yAxisId="left" dataKey="sleep_efficiency" name="Sleep Efficiency" fill="#5192C3" radius={[4, 4, 0, 0]} />
+                                    <Bar yAxisId="left" dataKey="sleep_consistency" name="Sleep Consistency" fill="#7BA1BB" radius={[4, 4, 0, 0]} />
+                                    <Bar yAxisId="left" dataKey="sleep_performance" name="Sleep Performance" fill="#16748C" radius={[4, 4, 0, 0]} />
                                   </BarChart>
                                 </ResponsiveContainer>
                               </Card>
@@ -4534,29 +4535,29 @@ const BiometricsDashboard = ({ username }) => {
                             <Card sx={{ p: 2, boxShadow: '0 4px 20px rgba(0,0,0,0.1)', borderRadius: '12px', height: '100%', bgcolor: darkMode ? 'rgba(44, 62, 80, 0.4)' : 'inherit' }}>
                               <Typography variant="h6" sx={{ mb: 2, fontWeight: 600, color: darkMode ? 'white' : 'inherit' }}>Sleep Composition</Typography>
                               <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-                                <ResponsiveContainer width="100%" height={280}>
+                                <ResponsiveContainer width="100%" height={280}  >
                                   <PieChart>
                                     <Pie
                                       data={[
                                         { 
                                           name: 'Deep Sleep', 
                                           value: filteredData.length > 0 ? filteredData[0].deep_sleep || 0 : 0,
-                                          fill: '#2c3e50'
+                                          fill: '#5192C3'
                                         },
                                         { 
                                           name: 'Light Sleep', 
                                           value: filteredData.length > 0 ? filteredData[0].light_sleep || 0 : 0,
-                                          fill: '#16a085'
+                                          fill: '#7BA1BB'
                                         },
                                         { 
                                           name: 'REM Sleep', 
                                           value: filteredData.length > 0 ? filteredData[0].rem_sleep || 0 : 0,
-                                          fill: '#3498db'
+                                          fill: '#16748C'
                                         },
                                         { 
                                           name: 'Awake', 
                                           value: filteredData.length > 0 ? filteredData[0].awake_time || 0 : 0,
-                                          fill: '#e74c3c'
+                                          fill: '#1B85B3'
                                         }
                                       ]}
                                       cx="50%"
@@ -4599,7 +4600,7 @@ const BiometricsDashboard = ({ username }) => {
                                     type="monotone" 
                                     dataKey="sleep_hours" 
                                     name="Total Sleep" 
-                                    stroke="#8e44ad" 
+                                    stroke="#7BA1BB" 
                                     strokeWidth={2}
                                     dot={{ r: 4 }} 
                                   />
@@ -4611,6 +4612,7 @@ const BiometricsDashboard = ({ username }) => {
                           </Grid>
                           
                           <Grid item xs={12}>
+                            
                             <Card sx={{ p: 2, boxShadow: '0 4px 20px rgba(0,0,0,0.1)', borderRadius: '12px', bgcolor: darkMode ? 'rgba(44, 62, 80, 0.4)' : 'inherit' }}>
                               <Typography variant="h6" sx={{ mb: 2, fontWeight: 600, color: darkMode ? 'white' : 'inherit' }}>Sleep Duration</Typography>
                               <ResponsiveContainer width="100%" height={350}>
@@ -4619,6 +4621,7 @@ const BiometricsDashboard = ({ username }) => {
                                   margin={{ top: 10, right: 30, left: 20, bottom: 30 }}
                                   barSize={20}
                                   barGap={2}
+                                   
                                 >
                                   <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.1)" />
                                   <XAxis 
@@ -4634,7 +4637,7 @@ const BiometricsDashboard = ({ username }) => {
                                     tickLine={false}
                                   />
                                   <Tooltip 
-                                    formatter={(value) => [`${value} hours`, null]}
+                                    formatter={(value, name) => [`${value} hours`, name]}
                                     labelFormatter={(label) => `Date: ${label}`}
                                     contentStyle={{ 
                                       backgroundColor: 'rgba(255, 255, 255, 0.9)', 
@@ -4648,13 +4651,13 @@ const BiometricsDashboard = ({ username }) => {
                                     verticalAlign="bottom" 
                                     wrapperStyle={{ paddingTop: '15px' }}
                                   />
-                                  <Bar yAxisId="left" dataKey="sleep_hours" name="Total Sleep" fill="#8e44ad" radius={[4, 4, 0, 0]} />
-                                  <Bar yAxisId="left" dataKey="deep_sleep" name="Deep Sleep" fill="#2c3e50" radius={[4, 4, 0, 0]} />
-                                  <Bar yAxisId="left" dataKey="light_sleep" name="Light Sleep" fill="#16a085" radius={[4, 4, 0, 0]} />
-                                  <Bar yAxisId="left" dataKey="rem_sleep" name="REM Sleep" fill="#3498db" radius={[4, 4, 0, 0]} />
-                                  <Bar yAxisId="left" dataKey="awake_time" name="Awake Time" fill="#e74c3c" radius={[4, 4, 0, 0]} />
+                                  <Bar yAxisId="left" dataKey="sleep_hours" name="Total Sleep" fill="#7BA1BB" radius={[4, 4, 0, 0]} />
+                                  <Bar yAxisId="left" dataKey="deep_sleep" name="Deep Sleep" fill="#5192C3" radius={[4, 4, 0, 0]} />
+                                  <Bar yAxisId="left" dataKey="light_sleep" name="Light Sleep" fill="#3A7FA6" radius={[4, 4, 0, 0]} />
+                                  <Bar yAxisId="left" dataKey="rem_sleep" name="REM Sleep" fill="#0E5B77" radius={[4, 4, 0, 0]} />
+                                  <Bar yAxisId="left" dataKey="awake_time" name="Awake Time" fill="#1B85B3" radius={[4, 4, 0, 0]} />
                                   {filteredData.some(item => item.inBed_time > 0) && (
-                                    <Bar yAxisId="left" dataKey="inBed_time" name="Total In Bed" fill="#34495e" radius={[4, 4, 0, 0]} />
+                                    <Bar yAxisId="left" dataKey="inBed_time" name="Total In Bed" fill="#26708A" radius={[4, 4, 0, 0]} />
                                   )}
                                 </BarChart>
                               </ResponsiveContainer>
@@ -4669,7 +4672,7 @@ const BiometricsDashboard = ({ username }) => {
                           <Grid item xs={12}>
                             <Card sx={{ p: 2, bgcolor: darkMode ? 'rgba(44, 62, 80, 0.4)' : 'inherit' }}>
                               <Typography variant="h6" gutterBottom sx={{ color: darkMode ? 'white' : 'inherit' }}>Steps & Distance</Typography>
-                              <ResponsiveContainer width="100%" height={300}>
+                              <ResponsiveContainer width="100%" height={300}  >
                                 <ComposedChart data={filteredData}>
                                   <CartesianGrid strokeDasharray="3 3" />
                                   <XAxis dataKey="date" />
@@ -4687,7 +4690,7 @@ const BiometricsDashboard = ({ username }) => {
                           <Grid item xs={12} md={6}>
                             <Card sx={{ p: 2, bgcolor: darkMode ? 'rgba(44, 62, 80, 0.4)' : 'inherit' }}>
                               <Typography variant="h6" gutterBottom sx={{ color: darkMode ? 'white' : 'inherit' }}>Heart Rate</Typography>
-                              <ResponsiveContainer width="100%" height={300}>
+                              <ResponsiveContainer width="100%" height={300}  >
                                 <LineChart data={filteredData}>
                                   <CartesianGrid strokeDasharray="3 3" />
                                   <XAxis dataKey="date" />
@@ -4704,7 +4707,7 @@ const BiometricsDashboard = ({ username }) => {
                           <Grid item xs={12} md={6}>
                             <Card sx={{ p: 2, bgcolor: darkMode ? 'rgba(44, 62, 80, 0.4)' : 'inherit' }}>
                               <Typography variant="h6" gutterBottom sx={{ color: darkMode ? 'white' : 'inherit' }}>Calories</Typography>
-                              <ResponsiveContainer width="100%" height={300}>
+                              <ResponsiveContainer width="100%" height={300}  >
                                 <AreaChart data={filteredData}>
                                   <CartesianGrid strokeDasharray="3 3" />
                                   <XAxis dataKey="date" />

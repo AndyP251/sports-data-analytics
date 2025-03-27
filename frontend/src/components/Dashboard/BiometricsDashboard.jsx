@@ -2196,7 +2196,7 @@ const BiometricsDashboard = ({ username }) => {
               <YAxis yAxisId="left" domain={[0, 'dataMax + 2']} tickFormatter={(value) => `${value}h`} />
               <Tooltip formatter={(value) => [`${value} hours`, null]} />
               <Legend />
-              {hasWhoopSleepData && <Bar yAxisId="left" dataKey="whoop_sleep" name="WHOOP Sleep (hrs)" fill="#9b59b6" />}
+              {hasWhoopSleepData && <Bar yAxisId="left" dataKey="whoop_sleep" name="WHOOP Sleep (hrs)" fill="#7BA1BB" />}
               {hasGarminSleepData && <Bar yAxisId="left" dataKey="garmin_sleep" name="Garmin Sleep (hrs)" fill="#3498db" />}
             </BarChart>
           );

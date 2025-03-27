@@ -1902,13 +1902,12 @@ const BiometricsDashboard = ({ username }) => {
             <Bar 
               dataKey="recovery_score" 
               name="Recovery Score" 
-              fill={whoopDesignActive ? colors.whoopRecoveryBlue : "#27AE60"} 
               yAxisId="right" 
             >
-              {whoopDesignActive && data.map((entry, index) => (
+              {data.map((entry, index) => (
                 <Cell 
                   key={`cell-${index}`} 
-                  fill={getWhoopRecoveryColor(entry.recovery_score)} 
+                  fill={getRecoveryColor(entry.recovery_score)} 
                 />
               ))}
             </Bar>
@@ -1916,7 +1915,7 @@ const BiometricsDashboard = ({ username }) => {
               type="monotone" 
               dataKey="resting_heart_rate" 
               name="Resting HR" 
-              stroke={whoopDesignActive ? colors.whoopRecoveryBlue : "#e74c3c"} 
+              stroke="#3498DB" 
               yAxisId="left" 
               strokeWidth={2} 
             />
@@ -3472,10 +3471,10 @@ const BiometricsDashboard = ({ username }) => {
   }, [activeSources, devMode]);
 
   // Helper function to get the appropriate recovery color based on WHOOP guidelines
-  const getWhoopRecoveryColor = (recoveryScore) => {
-    if (recoveryScore >= 67) return colors.whoopRecoveryHigh;
-    if (recoveryScore >= 34) return colors.whoopRecoveryMedium;
-    return colors.whoopRecoveryLow;
+  const getRecoveryColor = (score) => {
+    if (score >= 67) return '#16EC06';  // High Recovery
+    if (score >= 34) return '#FFDE00';  // Medium Recovery
+    return '#FF0026';                   // Low Recovery
   };
 
   // Helper function to add WHOOP attribution to chart headers
@@ -4151,7 +4150,7 @@ const BiometricsDashboard = ({ username }) => {
                               color: whoopDesignActive ? (() => {
                                 const recoveryScore = getLatestMetricValue('recovery_score');
                                 if (recoveryScore !== '—') {
-                                  return getWhoopRecoveryColor(Math.round(recoveryScore));
+                                  return getRecoveryColor(Math.round(recoveryScore));
                                 }
                                 return colors.whoopTeal;
                               })() : '#2ECC71' 
@@ -4184,7 +4183,7 @@ const BiometricsDashboard = ({ username }) => {
                             color: whoopDesignActive ? (() => {
                               const recoveryScore = getLatestMetricValue('recovery_score');
                               if (recoveryScore !== '—') {
-                                return getWhoopRecoveryColor(Math.round(recoveryScore));
+                                return getRecoveryColor(Math.round(recoveryScore));
                               }
                               return 'inherit';
                             })() : (darkMode ? 'white' : 'inherit')

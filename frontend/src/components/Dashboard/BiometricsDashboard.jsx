@@ -979,7 +979,9 @@ const BiometricsDashboard = ({ username }) => {
         // Format date as MM/DD for display
         let formattedDate;
         try {
-          formattedDate = format(new Date(item.date), 'MM/dd');
+          const date = new Date(item.date);
+          date.setDate(date.getDate() + 1); // Add one day
+          formattedDate = format(date, 'MM/dd');
         } catch (error) {
           console.warn(`Error formatting date ${item.date}:`, error);
           formattedDate = item.date; // Fallback to original format

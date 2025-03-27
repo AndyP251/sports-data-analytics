@@ -1,4 +1,3 @@
-
 """
 Django settings for athlete_platform project.
 
@@ -465,3 +464,6 @@ X_FRAME_OPTIONS = 'DENY'  # Prevent clickjacking
 ADMIN_REDIRECT = os.getenv('ADMIN_REDIRECT', 'False');
 
 # print(f"ENCRYPTION_KEY exists: {'ENCRYPTION_KEY' in os.environ}")
+
+# Add Gunicorn settings
+GUNICORN_TIMEOUT = 120  # Increase timeout to 120 seconds

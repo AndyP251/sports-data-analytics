@@ -1060,66 +1060,171 @@ const BiometricsDashboard = ({ username }) => {
     const latestData = data[data.length - 1];
     const maxScore = 100;
 
-    // Check if it's Whoop data
-    if (latestData.source === 'whoop') {
-      
-      // Weight factors for different Whoop metrics
-      const weights = {
-        sleep: 0.3,
-        hrv: 0.3,
-        respiratory: 0.2,
-        restingHR: 0.2
-      };
+    // Define base weights and initialize scores
+    let weights = {
+      recovery: 0.25,    // Recovery metrics (HRV, resting HR, etc.)
+      sleep: 0.25,       // Sleep quality and duration
+      activity: 0.25,    // Physical activity and movement
+      strain: 0.25       // Training load and stress
+    };
 
-      // Calculate sleep score (based on efficiency and consistency)
-      const sleepScore = ((latestData.sleep_efficiency || 80) / 100 * 100) * weights.sleep;
+    let scores = {};
+    let validCategories = [];
 
-      // Calculate HRV score (normalized to 0-100)
-      const hrvScore = Math.min((latestData.hrv_ms / 100) * 100, 100) * weights.hrv;
-
-      // Calculate respiratory score (15-18 is normal range)
-      const respScore = (1 - Math.abs((latestData.respiratory_rate - 16.5) / 5)) * 100 * weights.respiratory;
-
-      // Calculate resting heart rate score (lower is better, assuming 40-80 range)
-      const hrScore = (1 - ((latestData.resting_heart_rate - 40) / 40)) * 100 * weights.restingHR;
-
-      // Calculate total score
-      const totalScore = Math.min(
-        Math.round(sleepScore + hrvScore + respScore + hrScore),
-        maxScore
-      );
-
-      return totalScore;
+    // 1. Recovery Score Calculation
+    if (latestData.source === 'whoop' && latestData.recovery_score > 0) {
+      scores.recovery = latestData.recovery_score;
+      validCategories.push('recovery');
     } else {
-      // Original calculation for Garmin data
-      // Weight factors for different metrics
-      const weights = {
-        sleep: 0.3,
-        activity: 0.3,
-        stress: 0.2,
-        heartRate: 0.2
-      };
+      // Calculate from HRV and resting heart rate if available
+      const hasValidHRV = latestData.hrv_ms && latestData.hrv_ms > 0;
+      const hasValidRHR = latestData.resting_heart_rate && latestData.resting_heart_rate > 30 && latestData.resting_heart_rate < 200;
+      
+      if (hasValidHRV || hasValidRHR) {
+        let recoveryScore = 0;
+        let recoveryComponents = 0;
 
-      // Calculate sleep score
-      const sleepScore = (latestData.sleep_hours / 8) * 100 * weights.sleep;
+        if (hasValidHRV) {
+          recoveryScore += Math.min((latestData.hrv_ms / 100) * 100, 100);
+          recoveryComponents++;
+        }
 
-      // Calculate activity score
-      const activityScore = Math.min((latestData.steps / 10000) * 100, 100) * weights.activity;
+        if (hasValidRHR) {
+          // Optimal RHR range: 40-80 bpm
+          const rhrScore = Math.max(0, 100 - Math.abs(latestData.resting_heart_rate - 60) * 2);
+          recoveryScore += rhrScore;
+          recoveryComponents++;
+        }
 
-      // Calculate stress score
-      const stressScore = (100 - latestData.stress_level) * weights.stress;
-
-      // Calculate heart rate score
-      const hrvScore = (latestData.hrv / 100) * 100 * weights.heartRate;
-
-      // Calculate total score
-      const totalScore = Math.min(
-        Math.round(sleepScore + activityScore + stressScore + hrvScore),
-        maxScore
-      );
-
-      return totalScore;
+        if (recoveryComponents > 0) {
+          scores.recovery = recoveryScore / recoveryComponents;
+          validCategories.push('recovery');
+        }
+      }
     }
+
+    // 2. Sleep Score Calculation
+    const hasValidSleepData = (
+      (latestData.sleep_performance > 0) ||
+      (latestData.sleep_hours > 0 && latestData.sleep_hours < 24) ||
+      (latestData.sleep_efficiency > 0 && latestData.sleep_efficiency <= 100)
+    );
+
+    if (hasValidSleepData) {
+      if (latestData.sleep_performance > 0) {
+        scores.sleep = latestData.sleep_performance;
+      } else {
+        let sleepScore = 0;
+        let sleepComponents = 0;
+
+        // Sleep duration (optimal: 8 hours)
+        if (latestData.sleep_hours > 0 && latestData.sleep_hours < 24) {
+          const sleepDurationScore = Math.min((latestData.sleep_hours / 8) * 100, 100);
+          sleepScore += sleepDurationScore;
+          sleepComponents++;
+        }
+
+        // Sleep efficiency
+        if (latestData.sleep_efficiency > 0 && latestData.sleep_efficiency <= 100) {
+          sleepScore += latestData.sleep_efficiency;
+          sleepComponents++;
+        }
+
+        // Sleep composition (deep sleep and REM)
+        if (latestData.deep_sleep > 0 && latestData.deep_sleep < latestData.sleep_hours) {
+          const deepSleepScore = Math.min((latestData.deep_sleep / 2) * 100, 100);
+          sleepScore += deepSleepScore;
+          sleepComponents++;
+        }
+
+        if (latestData.rem_sleep > 0 && latestData.rem_sleep < latestData.sleep_hours) {
+          const remSleepScore = Math.min((latestData.rem_sleep / 2) * 100, 100);
+          sleepScore += remSleepScore;
+          sleepComponents++;
+        }
+
+        if (sleepComponents > 0) {
+          scores.sleep = sleepScore / sleepComponents;
+          validCategories.push('sleep');
+        }
+      }
+    }
+
+    // 3. Activity Score Calculation
+    const hasValidActivityData = (
+      (latestData.steps > 0 && latestData.steps < 100000) ||
+      (latestData.active_calories > 0 && latestData.active_calories < 5000) ||
+      (latestData.total_calories > 0 && latestData.total_calories < 10000)
+    );
+
+    if (hasValidActivityData) {
+      let activityScore = 0;
+      let activityComponents = 0;
+
+      // Steps score (goal: 10000)
+      if (latestData.steps > 0 && latestData.steps < 100000) {
+        const stepScore = Math.min((latestData.steps / 10000) * 100, 100);
+        activityScore += stepScore;
+        activityComponents++;
+      }
+
+      // Calories score
+      if (latestData.active_calories > 0 && latestData.active_calories < 5000) {
+        const calorieScore = Math.min((latestData.active_calories / 500) * 100, 100);
+        activityScore += calorieScore;
+        activityComponents++;
+      }
+
+      if (activityComponents > 0) {
+        scores.activity = activityScore / activityComponents;
+        validCategories.push('activity');
+      }
+    }
+
+    // 4. Strain/Stress Score Calculation
+    if (latestData.strain > 0 && latestData.strain <= 21) {
+      scores.strain = (latestData.strain / 21) * 100;
+      validCategories.push('strain');
+    } else if (latestData.stress_level >= 0 && latestData.stress_level <= 100) {
+      scores.strain = 100 - latestData.stress_level;
+      validCategories.push('strain');
+    } else if (scores.activity) {
+      // Use activity as proxy for strain if no direct measures available
+      scores.strain = scores.activity;
+      validCategories.push('strain');
+    }
+
+    // Rebalance weights based on available data
+    if (validCategories.length > 0) {
+      const weightPerCategory = 1 / validCategories.length;
+      weights = Object.keys(weights).reduce((acc, key) => {
+        acc[key] = validCategories.includes(key) ? weightPerCategory : 0;
+        return acc;
+      }, {});
+    }
+
+    // Calculate weighted average of valid scores
+    const totalScore = Math.round(
+      Object.keys(weights).reduce((sum, category) => {
+        if (scores[category] !== undefined) {
+          return sum + (scores[category] * weights[category]);
+        }
+        return sum;
+      }, 0)
+    );
+
+    // Log scoring details if in development mode
+    if (window.devMode) {
+      console.log('Health Score Calculation:', {
+        validCategories,
+        weights,
+        scores,
+        totalScore
+      });
+    }
+
+    // Ensure score stays within 0-100 range
+    return Math.min(Math.max(totalScore, 0), maxScore);
   };
 
   // Add this helper function to get health score explanation for tooltip
@@ -1894,7 +1999,7 @@ const BiometricsDashboard = ({ username }) => {
         render: (data) => (
           <ComposedChart data={data}>
             <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey="date" />
+            <XAxis dataKey="date" stroke="#b0b0b0" tick={{ fill: '#b0b0b0', fontSize: 12 }} />
             <YAxis yAxisId="left" />
             <YAxis yAxisId="right" orientation="right" domain={[0, 100]} />
             <Tooltip />
@@ -1902,13 +2007,12 @@ const BiometricsDashboard = ({ username }) => {
             <Bar 
               dataKey="recovery_score" 
               name="Recovery Score" 
-              fill={whoopDesignActive ? colors.whoopRecoveryBlue : "#27AE60"} 
               yAxisId="right" 
             >
-              {whoopDesignActive && data.map((entry, index) => (
+              {data.map((entry, index) => (
                 <Cell 
                   key={`cell-${index}`} 
-                  fill={getWhoopRecoveryColor(entry.recovery_score)} 
+                  fill={getRecoveryColor(entry.recovery_score)} 
                 />
               ))}
             </Bar>
@@ -1916,7 +2020,7 @@ const BiometricsDashboard = ({ username }) => {
               type="monotone" 
               dataKey="resting_heart_rate" 
               name="Resting HR" 
-              stroke={whoopDesignActive ? colors.whoopRecoveryBlue : "#e74c3c"} 
+              stroke="#3498DB" 
               yAxisId="left" 
               strokeWidth={2} 
             />
@@ -1933,7 +2037,7 @@ const BiometricsDashboard = ({ username }) => {
         render: (data) => (
           <ComposedChart data={data}>
             <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey="date" />
+            <XAxis dataKey="date" stroke="#b0b0b0" tick={{ fill: '#b0b0b0', fontSize: 12 }} />
             <YAxis yAxisId="left" />
             <YAxis yAxisId="right" orientation="right" />
             <Tooltip />
@@ -1964,7 +2068,7 @@ const BiometricsDashboard = ({ username }) => {
         render: (data) => (
           <ComposedChart data={data}>
             <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey="date" />
+            <XAxis dataKey="date" stroke="#b0b0b0" tick={{ fill: '#b0b0b0', fontSize: 12 }} />
             <YAxis domain={[0, 100]} />
             <Tooltip />
             <Legend />
@@ -1996,7 +2100,7 @@ const BiometricsDashboard = ({ username }) => {
         render: (data) => (
           <LineChart data={data}>
             <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey="date" />
+            <XAxis dataKey="date" stroke="#b0b0b0" tick={{ fill: '#b0b0b0', fontSize: 12 }} />
             <YAxis />
             <Tooltip />
             <Legend />
@@ -2016,7 +2120,7 @@ const BiometricsDashboard = ({ username }) => {
         render: (data) => (
           <BarChart data={data}>
             <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey="date" />
+            <XAxis dataKey="date" stroke="#b0b0b0" tick={{ fill: '#b0b0b0', fontSize: 12 }} />
             <YAxis yAxisId="left" domain={[0, 'dataMax + 2']} tickFormatter={(value) => `${value}h`} />
             <Tooltip formatter={(value) => [`${value} hours`, 'Sleep']} />
             <Bar yAxisId="left" dataKey="sleep_hours" name="Sleep Hours" fill="#3498db" />
@@ -2033,7 +2137,7 @@ const BiometricsDashboard = ({ username }) => {
         render: (data) => (
           <ComposedChart data={data}>
             <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey="date" />
+            <XAxis dataKey="date" stroke="#b0b0b0" tick={{ fill: '#b0b0b0', fontSize: 12 }} />
             <YAxis yAxisId="left" />
             <YAxis yAxisId="right" orientation="right" />
             <Tooltip />
@@ -2045,7 +2149,7 @@ const BiometricsDashboard = ({ username }) => {
       },
       {
         id: 'combined-sleep',
-        title: 'Sleep Comparison (All Sources)',
+        title: 'Sleep Comparison',
         description: 'Compare sleep duration across different data sources',
         source: 'all',
         requiredFields: [],
@@ -2088,7 +2192,7 @@ const BiometricsDashboard = ({ username }) => {
           return (
             <BarChart data={combinedData}>
               <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="date" />
+              <XAxis dataKey="date" stroke="#b0b0b0" tick={{ fill: '#b0b0b0', fontSize: 12 }} />
               <YAxis yAxisId="left" domain={[0, 'dataMax + 2']} tickFormatter={(value) => `${value}h`} />
               <Tooltip formatter={(value) => [`${value} hours`, null]} />
               <Legend />
@@ -2133,7 +2237,7 @@ const BiometricsDashboard = ({ username }) => {
           return (
             <LineChart data={combinedData}>
               <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="date" />
+              <XAxis dataKey="date" stroke="#b0b0b0" tick={{ fill: '#b0b0b0', fontSize: 12 }} />
               <YAxis domain={['dataMin - 5', 'dataMax + 5']} />
               <Tooltip />
               <Legend />
@@ -2217,7 +2321,7 @@ const BiometricsDashboard = ({ username }) => {
           return (
             <ComposedChart data={recentData}>
               <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="date" />
+              <XAxis dataKey="date" stroke="#b0b0b0" tick={{ fill: '#b0b0b0', fontSize: 12 }} />
               <YAxis />
               <Tooltip 
                 content={({ active, payload }) => {
@@ -2357,7 +2461,7 @@ const BiometricsDashboard = ({ username }) => {
           return (
             <ComposedChart data={recentData}>
               <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="date" />
+              <XAxis dataKey="date" stroke="#b0b0b0" tick={{ fill: '#b0b0b0', fontSize: 12 }} />
               <YAxis domain={[0, 100]} />
               <Tooltip 
                 content={({ active, payload }) => {
@@ -2376,24 +2480,23 @@ const BiometricsDashboard = ({ username }) => {
                         <Typography variant="body2" sx={{ fontWeight: 'bold', color: data.readiness_color }}>
                           Readiness: {data.readiness_score}% ({data.readiness_category})
                         </Typography>
-                        {data.readiness_factors && (
-                          <Typography variant="caption" sx={{ display: 'block', mt: 0.5 }}>
-                            {data.readiness_factors}
-                          </Typography>
-                        )}
                       </Box>
                     );
                   }
                   return null;
                 }}
               />
-              <Legend />
+              <Legend payload={[
+                { value: 'Recovery Readiness', type: 'line', id: '1', color: '#67AEE6' },
+                { value: 'Poor', type: 'line', id: '2', color: '#e74c3c', strokeDasharray: '3 3' },
+                { value: 'Moderate', type: 'line', id: '3', color: '#f39c12', strokeDasharray: '3 3' },
+              ]}/>
               <Area 
                 type="monotone" 
                 dataKey="readiness_score" 
                 name="Recovery Readiness" 
-                stroke="#8884d8"
-                fill="#8884d8"
+                stroke="#67AEE6"
+                fill="#67AEE6"
                 fillOpacity={0.3}
               />
               <ReferenceLine y={33} stroke="#e74c3c" strokeDasharray="3 3" />
@@ -2489,15 +2592,40 @@ const BiometricsDashboard = ({ username }) => {
           processedData.sort((a, b) => new Date(a.date) - new Date(b.date));
           
           return (
-            <LineChart data={processedData}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="date" />
-              <YAxis domain={[0, 100]} />
-              <Tooltip />
-              <Legend />
-              <Line type="monotone" dataKey="health_score" name="Health Score" stroke="#8884d8" strokeWidth={2} />
-              <ReferenceLine y={70} label="Target" stroke="green" strokeDasharray="3 3" />
-            </LineChart>
+           <ComposedChart data={processedData}>
+              <CartesianGrid strokeDasharray="2 4" stroke="#2f2f2f" />
+              <XAxis dataKey="date" stroke="#b0b0b0" tick={{ fill: '#b0b0b0', fontSize: 12 }} />
+              <YAxis domain={[0, 100]}/>
+              <Tooltip 
+                contentStyle={{ backgroundColor: '#1e1e1e', borderColor: '#444' }} 
+                itemStyle={{ color: '#ffffff' }} 
+                labelStyle={{ color: '#999999' }}
+              />
+              <Legend wrapperStyle={{ color: '#ffffff' }} payload={[
+                { value: 'Contextualized Health Score', type: 'line', id: '1', color: '#00c2ff' },
+                { value: 'Performance Threshold', type: 'line', id: '2', color: '#00ff95', strokeDasharray: '4 4' },
+              ]}/>
+              
+              {/* Health Score Line */}
+              <Area 
+                type="monotone" 
+                dataKey="health_score" 
+                name="Contextualized Health Score" 
+                stroke="#00c2ff" 
+                fill="#00c2ff" 
+                fillOpacity={0.15} 
+                strokeWidth={2.5}
+                dot={{ stroke: '#00c2ff', strokeWidth: 1, r: 3 }}
+                activeDot={{ r: 6, stroke: '#ffffff', strokeWidth: 2 }}
+              />
+
+              {/* Baseline / Threshold */}
+              <ReferenceLine 
+                y={70} 
+                stroke="#00ff95" 
+                strokeDasharray="4 4" 
+              />
+          </ComposedChart>
           );
         }
       }
@@ -3472,10 +3600,10 @@ const BiometricsDashboard = ({ username }) => {
   }, [activeSources, devMode]);
 
   // Helper function to get the appropriate recovery color based on WHOOP guidelines
-  const getWhoopRecoveryColor = (recoveryScore) => {
-    if (recoveryScore >= 67) return colors.whoopRecoveryHigh;
-    if (recoveryScore >= 34) return colors.whoopRecoveryMedium;
-    return colors.whoopRecoveryLow;
+  const getRecoveryColor = (score) => {
+    if (score >= 67) return '#16EC06';  // High Recovery
+    if (score >= 34) return '#FFDE00';  // Medium Recovery
+    return '#FF0026';                   // Low Recovery
   };
 
   // Helper function to add WHOOP attribution to chart headers
@@ -4151,7 +4279,7 @@ const BiometricsDashboard = ({ username }) => {
                               color: whoopDesignActive ? (() => {
                                 const recoveryScore = getLatestMetricValue('recovery_score');
                                 if (recoveryScore !== '—') {
-                                  return getWhoopRecoveryColor(Math.round(recoveryScore));
+                                  return getRecoveryColor(Math.round(recoveryScore));
                                 }
                                 return colors.whoopTeal;
                               })() : '#2ECC71' 
@@ -4184,7 +4312,7 @@ const BiometricsDashboard = ({ username }) => {
                             color: whoopDesignActive ? (() => {
                               const recoveryScore = getLatestMetricValue('recovery_score');
                               if (recoveryScore !== '—') {
-                                return getWhoopRecoveryColor(Math.round(recoveryScore));
+                                return getRecoveryColor(Math.round(recoveryScore));
                               }
                               return 'inherit';
                             })() : (darkMode ? 'white' : 'inherit')

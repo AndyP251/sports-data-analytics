@@ -933,12 +933,12 @@ const BiometricsDashboard = ({ username }) => {
         }
         
         // Convert seconds to hours and handle null/undefined values
-        const sleepHours = (item.total_sleep_seconds || 0) / 3600;
-        const deepSleepHours = (item.deep_sleep_seconds || 0) / 3600;
-        const lightSleepHours = (item.light_sleep_seconds || 0) / 3600;
-        const remSleepHours = (item.rem_sleep_seconds || 0) / 3600;
-        const awakeHours = (item.awake_seconds || 0) / 3600;
-        const inBedHours = (item.total_in_bed_seconds || 0) / 3600;
+        const sleepHours = (item.total_sleep_seconds || 0);
+        const deepSleepHours = (item.deep_sleep_seconds || 0);
+        const lightSleepHours = (item.light_sleep_seconds || 0);
+        const remSleepHours = (item.rem_sleep_seconds || 0);
+        const awakeHours = (item.awake_seconds || 0);
+        const inBedHours = (item.total_in_bed_seconds || 0);
         
         // Debug unusual sleep values
         if (sleepHours > 24) {
@@ -954,7 +954,7 @@ const BiometricsDashboard = ({ username }) => {
                                item.rem_sleep_seconds > 20000;
 
         // Apply appropriate conversion factor
-        const conversionFactor = isMilliseconds ? 3600000 : 3600;
+        const conversionFactor = isMilliseconds ? (1000 * 60 * 60) : 3600;
 
         // Convert values using the correct factor
         const fixedSleepHours = (item.total_sleep_seconds || 0) / conversionFactor;
@@ -979,7 +979,9 @@ const BiometricsDashboard = ({ username }) => {
         // Format date as MM/DD for display
         let formattedDate;
         try {
-          formattedDate = format(new Date(item.date), 'MM/dd');
+          const date = new Date(item.date);
+          date.setDate(date.getDate() + 1); // Add one day
+          formattedDate = format(date, 'MM/dd');
         } catch (error) {
           console.warn(`Error formatting date ${item.date}:`, error);
           formattedDate = item.date; // Fallback to original format
@@ -1060,11 +1062,7 @@ const BiometricsDashboard = ({ username }) => {
 
     // Check if it's Whoop data
     if (latestData.source === 'whoop') {
-      // For Whoop, use their recovery score if available, otherwise calculate
-      if (latestData.recovery_score) {
-        return latestData.recovery_score;
-      }
-
+      
       // Weight factors for different Whoop metrics
       const weights = {
         sleep: 0.3,
@@ -4728,7 +4726,7 @@ const BiometricsDashboard = ({ username }) => {
                                       yAxisId="left"
                                       type="monotone" 
                                       dataKey="whoop_calories" 
-                                      name="WHOOP Calories" 
+                                      name="Total Calories V2" 
                                       stroke="#8E44AD" 
                                       fill="#8E44AD" 
                                       fillOpacity={0.3} 

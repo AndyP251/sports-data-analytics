@@ -1894,7 +1894,7 @@ const BiometricsDashboard = ({ username }) => {
         render: (data) => (
           <ComposedChart data={data}>
             <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey="date" />
+            <XAxis dataKey="date" stroke="#b0b0b0" tick={{ fill: '#b0b0b0', fontSize: 12 }} />
             <YAxis yAxisId="left" />
             <YAxis yAxisId="right" orientation="right" domain={[0, 100]} />
             <Tooltip />
@@ -1932,7 +1932,7 @@ const BiometricsDashboard = ({ username }) => {
         render: (data) => (
           <ComposedChart data={data}>
             <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey="date" />
+            <XAxis dataKey="date" stroke="#b0b0b0" tick={{ fill: '#b0b0b0', fontSize: 12 }} />
             <YAxis yAxisId="left" />
             <YAxis yAxisId="right" orientation="right" />
             <Tooltip />
@@ -1963,7 +1963,7 @@ const BiometricsDashboard = ({ username }) => {
         render: (data) => (
           <ComposedChart data={data}>
             <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey="date" />
+            <XAxis dataKey="date" stroke="#b0b0b0" tick={{ fill: '#b0b0b0', fontSize: 12 }} />
             <YAxis domain={[0, 100]} />
             <Tooltip />
             <Legend />
@@ -1995,7 +1995,7 @@ const BiometricsDashboard = ({ username }) => {
         render: (data) => (
           <LineChart data={data}>
             <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey="date" />
+            <XAxis dataKey="date" stroke="#b0b0b0" tick={{ fill: '#b0b0b0', fontSize: 12 }} />
             <YAxis />
             <Tooltip />
             <Legend />
@@ -2015,7 +2015,7 @@ const BiometricsDashboard = ({ username }) => {
         render: (data) => (
           <BarChart data={data}>
             <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey="date" />
+            <XAxis dataKey="date" stroke="#b0b0b0" tick={{ fill: '#b0b0b0', fontSize: 12 }} />
             <YAxis yAxisId="left" domain={[0, 'dataMax + 2']} tickFormatter={(value) => `${value}h`} />
             <Tooltip formatter={(value) => [`${value} hours`, 'Sleep']} />
             <Bar yAxisId="left" dataKey="sleep_hours" name="Sleep Hours" fill="#3498db" />
@@ -2032,7 +2032,7 @@ const BiometricsDashboard = ({ username }) => {
         render: (data) => (
           <ComposedChart data={data}>
             <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey="date" />
+            <XAxis dataKey="date" stroke="#b0b0b0" tick={{ fill: '#b0b0b0', fontSize: 12 }} />
             <YAxis yAxisId="left" />
             <YAxis yAxisId="right" orientation="right" />
             <Tooltip />
@@ -2044,7 +2044,7 @@ const BiometricsDashboard = ({ username }) => {
       },
       {
         id: 'combined-sleep',
-        title: 'Sleep Comparison (All Sources)',
+        title: 'Sleep Comparison',
         description: 'Compare sleep duration across different data sources',
         source: 'all',
         requiredFields: [],
@@ -2087,7 +2087,7 @@ const BiometricsDashboard = ({ username }) => {
           return (
             <BarChart data={combinedData}>
               <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="date" />
+              <XAxis dataKey="date" stroke="#b0b0b0" tick={{ fill: '#b0b0b0', fontSize: 12 }} />
               <YAxis yAxisId="left" domain={[0, 'dataMax + 2']} tickFormatter={(value) => `${value}h`} />
               <Tooltip formatter={(value) => [`${value} hours`, null]} />
               <Legend />
@@ -2132,7 +2132,7 @@ const BiometricsDashboard = ({ username }) => {
           return (
             <LineChart data={combinedData}>
               <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="date" />
+              <XAxis dataKey="date" stroke="#b0b0b0" tick={{ fill: '#b0b0b0', fontSize: 12 }} />
               <YAxis domain={['dataMin - 5', 'dataMax + 5']} />
               <Tooltip />
               <Legend />
@@ -2216,7 +2216,7 @@ const BiometricsDashboard = ({ username }) => {
           return (
             <ComposedChart data={recentData}>
               <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="date" />
+              <XAxis dataKey="date" stroke="#b0b0b0" tick={{ fill: '#b0b0b0', fontSize: 12 }} />
               <YAxis />
               <Tooltip 
                 content={({ active, payload }) => {
@@ -2356,7 +2356,7 @@ const BiometricsDashboard = ({ username }) => {
           return (
             <ComposedChart data={recentData}>
               <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="date" />
+              <XAxis dataKey="date" stroke="#b0b0b0" tick={{ fill: '#b0b0b0', fontSize: 12 }} />
               <YAxis domain={[0, 100]} />
               <Tooltip 
                 content={({ active, payload }) => {
@@ -2375,24 +2375,23 @@ const BiometricsDashboard = ({ username }) => {
                         <Typography variant="body2" sx={{ fontWeight: 'bold', color: data.readiness_color }}>
                           Readiness: {data.readiness_score}% ({data.readiness_category})
                         </Typography>
-                        {data.readiness_factors && (
-                          <Typography variant="caption" sx={{ display: 'block', mt: 0.5 }}>
-                            {data.readiness_factors}
-                          </Typography>
-                        )}
                       </Box>
                     );
                   }
                   return null;
                 }}
               />
-              <Legend />
+              <Legend payload={[
+                { value: 'Recovery Readiness', type: 'line', id: '1', color: '#67AEE6' },
+                { value: 'Poor', type: 'line', id: '2', color: '#e74c3c', strokeDasharray: '3 3' },
+                { value: 'Moderate', type: 'line', id: '3', color: '#f39c12', strokeDasharray: '3 3' },
+              ]}/>
               <Area 
                 type="monotone" 
                 dataKey="readiness_score" 
                 name="Recovery Readiness" 
-                stroke="#8884d8"
-                fill="#8884d8"
+                stroke="#67AEE6"
+                fill="#67AEE6"
                 fillOpacity={0.3}
               />
               <ReferenceLine y={33} stroke="#e74c3c" strokeDasharray="3 3" />
@@ -2488,15 +2487,40 @@ const BiometricsDashboard = ({ username }) => {
           processedData.sort((a, b) => new Date(a.date) - new Date(b.date));
           
           return (
-            <LineChart data={processedData}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="date" />
-              <YAxis domain={[0, 100]} />
-              <Tooltip />
-              <Legend />
-              <Line type="monotone" dataKey="health_score" name="Health Score" stroke="#8884d8" strokeWidth={2} />
-              <ReferenceLine y={70} label="Target" stroke="green" strokeDasharray="3 3" />
-            </LineChart>
+           <ComposedChart data={processedData}>
+              <CartesianGrid strokeDasharray="2 4" stroke="#2f2f2f" />
+              <XAxis dataKey="date" stroke="#b0b0b0" tick={{ fill: '#b0b0b0', fontSize: 12 }} />
+              <YAxis domain={[0, 100]}/>
+              <Tooltip 
+                contentStyle={{ backgroundColor: '#1e1e1e', borderColor: '#444' }} 
+                itemStyle={{ color: '#ffffff' }} 
+                labelStyle={{ color: '#999999' }}
+              />
+              <Legend wrapperStyle={{ color: '#ffffff' }} payload={[
+                { value: 'Contextualized Health Score', type: 'line', id: '1', color: '#00c2ff' },
+                { value: 'Performance Threshold', type: 'line', id: '2', color: '#00ff95', strokeDasharray: '4 4' },
+              ]}/>
+              
+              {/* Health Score Line */}
+              <Area 
+                type="monotone" 
+                dataKey="health_score" 
+                name="Contextualized Health Score" 
+                stroke="#00c2ff" 
+                fill="#00c2ff" 
+                fillOpacity={0.15} 
+                strokeWidth={2.5}
+                dot={{ stroke: '#00c2ff', strokeWidth: 1, r: 3 }}
+                activeDot={{ r: 6, stroke: '#ffffff', strokeWidth: 2 }}
+              />
+
+              {/* Baseline / Threshold */}
+              <ReferenceLine 
+                y={70} 
+                stroke="#00ff95" 
+                strokeDasharray="4 4" 
+              />
+          </ComposedChart>
           );
         }
       }

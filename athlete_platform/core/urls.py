@@ -72,8 +72,7 @@ urlpatterns = [
     path('api/coach/position-comparison/', biometric_comparison_by_position, name='biometric_comparison_by_position'),
     path('api/coach/training-optimization/', training_optimization, name='training_optimization'),
     path('api/coach/sync-team-data/', sync_team_data, name='sync_team_data'),
-    path('api/coach/team-cached-biometrics/', team_cached_biometrics, name='team_cached_biometrics'),
-    
+
     # Catch-all route for React frontend
     # This must be the last route to ensure API routes are handled correctly
     re_path(r'^(?P<path>.*)$', frontend_view, name='frontend'),

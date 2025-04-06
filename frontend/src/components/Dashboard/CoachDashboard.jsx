@@ -1385,8 +1385,182 @@ const CoachDashboard = () => {
                 } else {
                   console.warn(`No athletes array found or empty in response for position ${position}`);
                   
-                  // Create a mock athlete entry based on position summary if athlete_count > 0
-                  if (athletesData.athlete_count > 0 || data.positions[position].athlete_count > 0) {
+                  // Try to find athletes who should be in this position from coachInfo
+                  const knownAthletes = coachInfo.team_athletes || [];
+                  // If position is UNKNOWN, try to match any athlete, otherwise match by position
+                  const matchingAthletes = position === 'UNKNOWN' ? 
+                    knownAthletes : 
+                    knownAthletes.filter(athlete => 
+                      (athlete.position || "UNKNOWN").toUpperCase() === position
+                    );
+                    
+                  if (matchingAthletes.length > 0) {
+                    console.log(`Found ${matchingAthletes.length} known athletes for position ${position} in coachInfo:`, matchingAthletes);
+                    
+                    // Use real athlete data for position
+                    matchingAthletes.forEach(athlete => {
+                      const username = athlete.username;
+                      console.log(`Creating data for known athlete ${username} with position ${position}`);
+                      
+                      newRawPlayerData[username] = {
+                        source: 'api',
+                        message: `Generated from position summary for ${position}`,
+                        athlete: {
+                          id: athlete.id,
+                          username: username,
+                          position: athlete.position || position
+                        },
+                        averages: {
+                          resting_heart_rate: data.positions[position].metrics?.resting_heart_rate?.avg || 0,
+                          hrv_ms: data.positions[position].metrics?.hrv_ms?.avg || 0,
+                          recovery_score: data.positions[position].metrics?.recovery_score?.avg || 0,
+                          sleep_hours: convertSleepIfNeeded(data.positions[position].metrics?.sleep_hours?.avg),
+                          total_steps: data.positions[position].metrics?.total_steps?.avg || 0,
+                          max_heart_rate: data.positions[position].metrics?.max_heart_rate?.avg || 0,
+                          training_load: data.positions[position].metrics?.training_load?.avg || 0,
+                          readiness_score: data.positions[position].metrics?.readiness_score?.avg || 0
+                        }
+                      };
+                      
+                      // Add player entry
+                      newPlayersByPosition[position].push({
+                        id: athlete.id,
+                        firstName: username.split(' ')[0] || '',
+                        lastName: username.split(' ').slice(1).join(' ') || '',
+                        username: username,
+                        position: athlete.position || position,
+                        restingHeartRate: data.positions[position].metrics?.resting_heart_rate?.avg || 0,
+                        hrv: data.positions[position].metrics?.hrv_ms?.avg || 0,
+                        recoveryScore: data.positions[position].metrics?.recovery_score?.avg || 0,
+                        sleepHours: convertSleepIfNeeded(data.positions[position].metrics?.sleep_hours?.avg),
+                        steps: data.positions[position].metrics?.total_steps?.avg || 0,
+                        maxHeartRate: data.positions[position].metrics?.max_heart_rate?.avg || 0,
+                        trainingLoad: data.positions[position].metrics?.training_load?.avg || 0,
+                        readiness: data.positions[position].metrics?.readiness_score?.avg || 0
+                      });
+                      
+                      playerList.push(username);
+                    });
+                  } else {
+                    // Create a mock athlete entry based on position summary if athlete_count > 0
+                    if (athletesData.athlete_count > 0 || data.positions[position].athlete_count > 0) {
+                      const positionSummary = data.positions[position];
+                      const positionKey = `${position}_Athlete`;
+                      
+                      // Create a representative athlete from position data
+                      newRawPlayerData[positionKey] = {
+                        source: 'api',
+                        message: `Position summary data for ${position}`,
+                        data: positionSummary,
+                        athlete: {
+                          username: positionKey,
+                          position: position
+                        },
+                        averages: {
+                          resting_heart_rate: positionSummary.metrics?.resting_heart_rate?.avg || 0,
+                          hrv_ms: positionSummary.metrics?.hrv_ms?.avg || 0,
+                          recovery_score: positionSummary.metrics?.recovery_score?.avg || 0,
+                          sleep_hours: convertSleepIfNeeded(positionSummary.metrics?.sleep_hours?.avg),
+                          total_steps: positionSummary.metrics?.total_steps?.avg || 0,
+                          max_heart_rate: positionSummary.metrics?.max_heart_rate?.avg || 0,
+                          training_load: positionSummary.metrics?.training_load?.avg || 0,
+                          readiness_score: positionSummary.metrics?.readiness_score?.avg || 0
+                        }
+                      };
+                      
+                      // Add player entry
+                      newPlayersByPosition[position].push({
+                        id: `${position}-summary`,
+                        firstName: position,
+                        lastName: "Athlete",
+                        username: positionKey,
+                        position: position,
+                        restingHeartRate: positionSummary.metrics?.resting_heart_rate?.avg || 0,
+                        hrv: positionSummary.metrics?.hrv_ms?.avg || 0,
+                        recoveryScore: positionSummary.metrics?.recovery_score?.avg || 0,
+                        sleepHours: convertSleepIfNeeded(positionSummary.metrics?.sleep_hours?.avg),
+                        steps: positionSummary.metrics?.total_steps?.avg || 0,
+                        maxHeartRate: positionSummary.metrics?.max_heart_rate?.avg || 0,
+                        trainingLoad: positionSummary.metrics?.training_load?.avg || 0,
+                        readiness: positionSummary.metrics?.readiness_score?.avg || 0
+                      });
+                      
+                      playerList.push(positionKey);
+                    }
+                  }
+                  
+                  // Also add position summary data
+                  const positionSummary = data.positions[position];
+                  const positionKey = `${position}_Summary`;
+                  newRawPlayerData[positionKey] = {
+                    source: 'api',
+                    message: `Position summary data for ${position}`,
+                    data: positionSummary
+                  };
+                  playerList.push(positionKey);
+                }
+              } else {
+                console.warn(`Failed to fetch athletes for position ${position}: ${athletesResponse.status}`);
+                
+                // Try to find athletes who should be in this position from coachInfo
+                const knownAthletes = coachInfo.team_athletes || [];
+                // If position is UNKNOWN, try to match any athlete, otherwise match by position
+                const matchingAthletes = position === 'UNKNOWN' ? 
+                  knownAthletes : 
+                  knownAthletes.filter(athlete => 
+                    (athlete.position || "UNKNOWN").toUpperCase() === position
+                  );
+                  
+                if (matchingAthletes.length > 0) {
+                  console.log(`Found ${matchingAthletes.length} known athletes for position ${position} in coachInfo:`, matchingAthletes);
+                  
+                  // Use real athlete data for position
+                  matchingAthletes.forEach(athlete => {
+                    const username = athlete.username;
+                    console.log(`Creating data for known athlete ${username} with position ${position}`);
+                    
+                    newRawPlayerData[username] = {
+                      source: 'api',
+                      message: `Generated from position summary for ${position}`,
+                      athlete: {
+                        id: athlete.id,
+                        username: username,
+                        position: athlete.position || position
+                      },
+                      averages: {
+                        resting_heart_rate: data.positions[position].metrics?.resting_heart_rate?.avg || 0,
+                        hrv_ms: data.positions[position].metrics?.hrv_ms?.avg || 0,
+                        recovery_score: data.positions[position].metrics?.recovery_score?.avg || 0,
+                        sleep_hours: convertSleepIfNeeded(data.positions[position].metrics?.sleep_hours?.avg),
+                        total_steps: data.positions[position].metrics?.total_steps?.avg || 0,
+                        max_heart_rate: data.positions[position].metrics?.max_heart_rate?.avg || 0,
+                        training_load: data.positions[position].metrics?.training_load?.avg || 0,
+                        readiness_score: data.positions[position].metrics?.readiness_score?.avg || 0
+                      }
+                    };
+                    
+                    // Add player entry
+                    newPlayersByPosition[position].push({
+                      id: athlete.id,
+                      firstName: username.split(' ')[0] || '',
+                      lastName: username.split(' ').slice(1).join(' ') || '',
+                      username: username,
+                      position: athlete.position || position,
+                      restingHeartRate: data.positions[position].metrics?.resting_heart_rate?.avg || 0,
+                      hrv: data.positions[position].metrics?.hrv_ms?.avg || 0,
+                      recoveryScore: data.positions[position].metrics?.recovery_score?.avg || 0,
+                      sleepHours: convertSleepIfNeeded(data.positions[position].metrics?.sleep_hours?.avg),
+                      steps: data.positions[position].metrics?.total_steps?.avg || 0,
+                      maxHeartRate: data.positions[position].metrics?.max_heart_rate?.avg || 0,
+                      trainingLoad: data.positions[position].metrics?.training_load?.avg || 0,
+                      readiness: data.positions[position].metrics?.readiness_score?.avg || 0
+                    });
+                    
+                    playerList.push(username);
+                  });
+                } else {
+                  // Create a mock athlete entry based on position summary
+                  if (data.positions[position].athlete_count > 0) {
                     const positionSummary = data.positions[position];
                     const positionKey = `${position}_Athlete`;
                     
@@ -1403,7 +1577,7 @@ const CoachDashboard = () => {
                         resting_heart_rate: positionSummary.metrics?.resting_heart_rate?.avg || 0,
                         hrv_ms: positionSummary.metrics?.hrv_ms?.avg || 0,
                         recovery_score: positionSummary.metrics?.recovery_score?.avg || 0,
-                        sleep_hours: positionSummary.metrics?.sleep_hours?.avg || 0,
+                        sleep_hours: convertSleepIfNeeded(positionSummary.metrics?.sleep_hours?.avg),
                         total_steps: positionSummary.metrics?.total_steps?.avg || 0,
                         max_heart_rate: positionSummary.metrics?.max_heart_rate?.avg || 0,
                         training_load: positionSummary.metrics?.training_load?.avg || 0,
@@ -1421,7 +1595,7 @@ const CoachDashboard = () => {
                       restingHeartRate: positionSummary.metrics?.resting_heart_rate?.avg || 0,
                       hrv: positionSummary.metrics?.hrv_ms?.avg || 0,
                       recoveryScore: positionSummary.metrics?.recovery_score?.avg || 0,
-                      sleepHours: positionSummary.metrics?.sleep_hours?.avg || 0,
+                      sleepHours: convertSleepIfNeeded(positionSummary.metrics?.sleep_hours?.avg),
                       steps: positionSummary.metrics?.total_steps?.avg || 0,
                       maxHeartRate: positionSummary.metrics?.max_heart_rate?.avg || 0,
                       trainingLoad: positionSummary.metrics?.training_load?.avg || 0,
@@ -1430,64 +1604,6 @@ const CoachDashboard = () => {
                     
                     playerList.push(positionKey);
                   }
-                  
-                  // Also add position summary data
-                  const positionSummary = data.positions[position];
-                  const positionKey = `${position}_Summary`;
-                  newRawPlayerData[positionKey] = {
-                    source: 'api',
-                    message: `Position summary data for ${position}`,
-                    data: positionSummary
-                  };
-                  playerList.push(positionKey);
-                }
-              } else {
-                console.warn(`Failed to fetch athletes for position ${position}: ${athletesResponse.status}`);
-                
-                // Create a mock athlete entry based on position summary
-                if (data.positions[position].athlete_count > 0) {
-                  const positionSummary = data.positions[position];
-                  const positionKey = `${position}_Athlete`;
-                  
-                  // Create a representative athlete from position data
-                  newRawPlayerData[positionKey] = {
-                    source: 'api',
-                    message: `Position summary data for ${position}`,
-                    data: positionSummary,
-                    athlete: {
-                      username: positionKey,
-                      position: position
-                    },
-                    averages: {
-                      resting_heart_rate: positionSummary.metrics?.resting_heart_rate?.avg || 0,
-                      hrv_ms: positionSummary.metrics?.hrv_ms?.avg || 0,
-                      recovery_score: positionSummary.metrics?.recovery_score?.avg || 0,
-                      sleep_hours: positionSummary.metrics?.sleep_hours?.avg || 0,
-                      total_steps: positionSummary.metrics?.total_steps?.avg || 0,
-                      max_heart_rate: positionSummary.metrics?.max_heart_rate?.avg || 0,
-                      training_load: positionSummary.metrics?.training_load?.avg || 0,
-                      readiness_score: positionSummary.metrics?.readiness_score?.avg || 0
-                    }
-                  };
-                  
-                  // Add player entry
-                  newPlayersByPosition[position].push({
-                    id: `${position}-summary`,
-                    firstName: position,
-                    lastName: "Athlete",
-                    username: positionKey,
-                    position: position,
-                    restingHeartRate: positionSummary.metrics?.resting_heart_rate?.avg || 0,
-                    hrv: positionSummary.metrics?.hrv_ms?.avg || 0,
-                    recoveryScore: positionSummary.metrics?.recovery_score?.avg || 0,
-                    sleepHours: positionSummary.metrics?.sleep_hours?.avg || 0,
-                    steps: positionSummary.metrics?.total_steps?.avg || 0,
-                    maxHeartRate: positionSummary.metrics?.max_heart_rate?.avg || 0,
-                    trainingLoad: positionSummary.metrics?.training_load?.avg || 0,
-                    readiness: positionSummary.metrics?.readiness_score?.avg || 0
-                  });
-                  
-                  playerList.push(positionKey);
                 }
                 
                 // Also add position summary data
@@ -1519,49 +1635,108 @@ const CoachDashboard = () => {
           if (playerList.length === 0 && Object.keys(data.positions).length > 0) {
             console.log("No player data found in position endpoints, creating representative players from position data");
             
+            // First attempt to match with known athletes from coachInfo
+            const knownAthletes = coachInfo.team_athletes || [];
+            console.log("Known athletes from coach info:", knownAthletes);
+            
             for (const position of Object.keys(data.positions)) {
               const positionSummary = data.positions[position];
               if (positionSummary.athlete_count > 0) {
-                const positionKey = `${position}_Representative`;
+                // Find athletes with this position in coachInfo
+                const matchingAthletes = knownAthletes.filter(athlete => 
+                  (athlete.position || "UNKNOWN").toUpperCase() === position
+                );
                 
-                // Create a representative athlete from position data
-                newRawPlayerData[positionKey] = {
-                  source: 'api',
-                  message: `Generated from position summary for ${position}`,
-                  athlete: {
+                if (matchingAthletes.length > 0) {
+                  // Use real athlete data for position
+                  matchingAthletes.forEach(athlete => {
+                    const username = athlete.username;
+                    console.log(`Creating data for known athlete ${username} with position ${position}`);
+                    
+                    newRawPlayerData[username] = {
+                      source: 'api',
+                      message: `Generated from position summary for ${position}`,
+                      athlete: {
+                        id: athlete.id,
+                        username: username,
+                        position: position
+                      },
+                      averages: {
+                        resting_heart_rate: positionSummary.metrics?.resting_heart_rate?.avg || 0,
+                        hrv_ms: positionSummary.metrics?.hrv_ms?.avg || 0,
+                        recovery_score: positionSummary.metrics?.recovery_score?.avg || 0,
+                        sleep_hours: convertSleepIfNeeded(positionSummary.metrics?.sleep_hours?.avg),
+                        total_steps: positionSummary.metrics?.total_steps?.avg || 0,
+                        max_heart_rate: positionSummary.metrics?.max_heart_rate?.avg || 0,
+                        training_load: positionSummary.metrics?.training_load?.avg || 0,
+                        readiness_score: positionSummary.metrics?.readiness_score?.avg || 0
+                      }
+                    };
+                    
+                    // Add player entry
+                    newPlayersByPosition[position] = newPlayersByPosition[position] || [];
+                    newPlayersByPosition[position].push({
+                      id: athlete.id,
+                      firstName: username.split(' ')[0] || '',
+                      lastName: username.split(' ').slice(1).join(' ') || '',
+                      username: username,
+                      position: position,
+                      restingHeartRate: positionSummary.metrics?.resting_heart_rate?.avg || 0,
+                      hrv: positionSummary.metrics?.hrv_ms?.avg || 0,
+                      recoveryScore: positionSummary.metrics?.recovery_score?.avg || 0,
+                      sleepHours: convertSleepIfNeeded(positionSummary.metrics?.sleep_hours?.avg),
+                      steps: positionSummary.metrics?.total_steps?.avg || 0,
+                      maxHeartRate: positionSummary.metrics?.max_heart_rate?.avg || 0,
+                      trainingLoad: positionSummary.metrics?.training_load?.avg || 0,
+                      readiness: positionSummary.metrics?.readiness_score?.avg || 0
+                    });
+                    
+                    playerList.push(username);
+                  });
+                } else {
+                  // No matching athletes, create a generic one
+                  const positionKey = `${position}_Representative`;
+                  
+                  // Create a representative athlete from position data
+                  newRawPlayerData[positionKey] = {
+                    source: 'api',
+                    message: `Generated from position summary for ${position}`,
+                    athlete: {
+                      username: positionKey,
+                      position: position
+                    },
+                    averages: {
+                      resting_heart_rate: positionSummary.metrics?.resting_heart_rate?.avg || 0,
+                      hrv_ms: positionSummary.metrics?.hrv_ms?.avg || 0,
+                      recovery_score: positionSummary.metrics?.recovery_score?.avg || 0,
+                      sleep_hours: convertSleepIfNeeded(positionSummary.metrics?.sleep_hours?.avg),
+                      total_steps: positionSummary.metrics?.total_steps?.avg || 0,
+                      max_heart_rate: positionSummary.metrics?.max_heart_rate?.avg || 0,
+                      training_load: positionSummary.metrics?.training_load?.avg || 0,
+                      readiness_score: positionSummary.metrics?.readiness_score?.avg || 0
+                    }
+                  };
+                  
+                  // Add player entry
+                  newPlayersByPosition[position] = newPlayersByPosition[position] || [];
+                  newPlayersByPosition[position].push({
+                    id: `${position}-representative`,
+                    firstName: position,
+                    lastName: "Player",
                     username: positionKey,
-                    position: position
-                  },
-                  averages: {
-                    resting_heart_rate: positionSummary.metrics?.resting_heart_rate?.avg || 0,
-                    hrv_ms: positionSummary.metrics?.hrv_ms?.avg || 0,
-                    recovery_score: positionSummary.metrics?.recovery_score?.avg || 0,
-                    sleep_hours: positionSummary.metrics?.sleep_hours?.avg || 0,
-                    total_steps: positionSummary.metrics?.total_steps?.avg || 0,
-                    max_heart_rate: positionSummary.metrics?.max_heart_rate?.avg || 0,
-                    training_load: positionSummary.metrics?.training_load?.avg || 0,
-                    readiness_score: positionSummary.metrics?.readiness_score?.avg || 0
-                  }
-                };
-                
-                // Add player entry
-                newPlayersByPosition[position].push({
-                  id: `${position}-representative`,
-                  firstName: position,
-                  lastName: "Player",
-                  username: positionKey,
-                  position: position,
-                  restingHeartRate: positionSummary.metrics?.resting_heart_rate?.avg || 0,
-                  hrv: positionSummary.metrics?.hrv_ms?.avg || 0,
-                  recoveryScore: positionSummary.metrics?.recovery_score?.avg || 0,
-                  sleepHours: positionSummary.metrics?.sleep_hours?.avg || 0,
-                  steps: positionSummary.metrics?.total_steps?.avg || 0,
-                  maxHeartRate: positionSummary.metrics?.max_heart_rate?.avg || 0,
-                  trainingLoad: positionSummary.metrics?.training_load?.avg || 0,
-                  readiness: positionSummary.metrics?.readiness_score?.avg || 0
-                });
-                
-                playerList.push(positionKey);
+                    position: position,
+                    restingHeartRate: positionSummary.metrics?.resting_heart_rate?.avg || 0,
+                    hrv: positionSummary.metrics?.hrv_ms?.avg || 0,
+                    recoveryScore: positionSummary.metrics?.recovery_score?.avg || 0,
+                    sleepHours: convertSleepIfNeeded(positionSummary.metrics?.sleep_hours?.avg),
+                    steps: positionSummary.metrics?.total_steps?.avg || 0,
+                    maxHeartRate: positionSummary.metrics?.max_heart_rate?.avg || 0,
+                    trainingLoad: positionSummary.metrics?.training_load?.avg || 0,
+                    readiness: positionSummary.metrics?.readiness_score?.avg || 0
+                  });
+                  
+                  playerList.push(positionKey);
+                }
               }
             }
           }
@@ -2059,7 +2234,6 @@ const CoachDashboard = () => {
         if (data.status === "success") {
           // After successful sync, fetch the latest data
           await fetchDirectAthleteData();
-          
           // Show success in sync error (but with positive styling)
           setSyncError(`${data.message || "Team data sync completed successfully!"}`);
           
@@ -2190,42 +2364,73 @@ const CoachDashboard = () => {
     }
   };
 
+  // Helper function to convert sleep hours from large values (milliseconds) to hours
+  const convertSleepIfNeeded = (sleepValue) => {
+    if (!sleepValue || typeof sleepValue !== 'number') return 0;
+    
+    // If the sleep value is suspiciously large (over 100 hours), assume it's in milliseconds or some other unit
+    if (sleepValue > 100) {
+      // Try to detect the right conversion factor
+      if (sleepValue > 1000000) {
+        // Probably milliseconds, convert to hours (divide by 3600000)
+        return sleepValue / 3600000;
+      } else if (sleepValue > 1000) {
+        // Probably seconds, convert to hours (divide by 3600)
+        return sleepValue / 3600;
+      } else if (sleepValue > 100) {
+        // Probably minutes, convert to hours (divide by 60)
+        return sleepValue / 60;
+      }
+    }
+    
+    return sleepValue;
+  };
+
+  // Helper function to format a metrics object, handling sleep values appropriately
+  const formatMetricsObject = (metrics) => {
+    if (!metrics) return {};
+    
+    const formatted = {};
+    
+    // Format each metric appropriately
+    Object.keys(metrics).forEach(key => {
+      if (!metrics[key]) {
+        formatted[key] = null;
+        return;
+      }
+      
+      if (key === 'sleep_hours') {
+        formatted[key] = {
+          avg: typeof metrics[key].avg === 'number' ? 
+               convertSleepIfNeeded(metrics[key].avg).toFixed(1) + " hrs" : "N/A",
+          min: typeof metrics[key].min === 'number' ? 
+               convertSleepIfNeeded(metrics[key].min).toFixed(1) + " hrs" : "N/A",
+          max: typeof metrics[key].max === 'number' ? 
+               convertSleepIfNeeded(metrics[key].max).toFixed(1) + " hrs" : "N/A"
+        };
+      } else {
+        formatted[key] = {
+          avg: typeof metrics[key].avg === 'number' ? Math.round(metrics[key].avg) : "N/A",
+          min: typeof metrics[key].min === 'number' ? Math.round(metrics[key].min) : "N/A",
+          max: typeof metrics[key].max === 'number' ? Math.round(metrics[key].max) : "N/A"
+        };
+      }
+    });
+    
+    return formatted;
+  };
+
   // Helper function to format raw data for display with proper indentation
   const formatRawData = (data) => {
     try {
       // Special handling for different data types
       if (data && data.data && data.data.metrics) {
         // This is a position summary, format it in a more readable way
-        const metrics = data.data.metrics;
         const formattedData = {
           position: data.data.position,
           athlete_count: data.data.athlete_count,
           athletes_with_data: data.data.athletes_with_data,
-          metrics: {
-            resting_heart_rate: metrics.resting_heart_rate ? {
-              avg: Math.round(metrics.resting_heart_rate.avg),
-              min: Math.round(metrics.resting_heart_rate.min),
-              max: Math.round(metrics.resting_heart_rate.max)
-            } : null,
-            hrv_ms: metrics.hrv_ms ? {
-              avg: Math.round(metrics.hrv_ms.avg),
-              min: Math.round(metrics.hrv_ms.min),
-              max: Math.round(metrics.hrv_ms.max)
-            } : null,
-            recovery_score: metrics.recovery_score ? {
-              avg: Math.round(metrics.recovery_score.avg),
-              min: Math.round(metrics.recovery_score.min),
-              max: Math.round(metrics.recovery_score.max)
-            } : null,
-            sleep_hours: metrics.sleep_hours ? {
-              avg: typeof metrics.sleep_hours.avg === 'number' ? 
-                   metrics.sleep_hours.avg > 1000 ? "⚠️ Invalid value" : metrics.sleep_hours.avg.toFixed(1) : "N/A",
-              min: typeof metrics.sleep_hours.min === 'number' ? 
-                   metrics.sleep_hours.min > 1000 ? "⚠️ Invalid value" : metrics.sleep_hours.min.toFixed(1) : "N/A",
-              max: typeof metrics.sleep_hours.max === 'number' ? 
-                   metrics.sleep_hours.max > 1000 ? "⚠️ Invalid value" : metrics.sleep_hours.max.toFixed(1) : "N/A"
-            } : null
-          }
+          metrics: formatMetricsObject(data.data.metrics)
         };
         return JSON.stringify(formattedData, null, 2);
       }
@@ -2239,25 +2444,41 @@ const CoachDashboard = () => {
             hrv_ms: Math.round(data.averages.hrv_ms) + " ms",
             recovery_score: Math.round(data.averages.recovery_score) + "%",
             sleep_hours: typeof data.averages.sleep_hours === 'number' ? 
-                          data.averages.sleep_hours > 1000 ? "⚠️ Invalid value" : 
-                          data.averages.sleep_hours.toFixed(1) + " hrs" : "N/A",
+                          convertSleepIfNeeded(data.averages.sleep_hours).toFixed(1) + " hrs" : "N/A",
             steps: data.averages.total_steps ? Math.round(data.averages.total_steps).toLocaleString() : "0",
             training_load: data.averages.training_load ? Math.round(data.averages.training_load) : "N/A"
           },
           data_origin: data.message || "Generated data",
-          note: "This data was created from position summary metrics due to missing individual athlete data"
+          note: "This data is derived from position averages"
         };
         return JSON.stringify(formattedData, null, 2);
       }
       
-      // Remove circular references and convert to JSON for other data types
+      // Special handling for raw API data with metrics
+      if (data && data.metrics) {
+        return JSON.stringify({
+          ...data,
+          metrics: formatMetricsObject(data.metrics)
+        }, (key, value) => key === 'source' ? undefined : value, 2);
+      }
+      
+      // For all other cases, just use standard replacer for sleep values
       return JSON.stringify(
         data, 
         (key, value) => {
-          // Special case for sleep_hours which appears to have an invalid large value
-          if (key === 'sleep_hours' && typeof value === 'number' && value > 1000) {
-            return "⚠️ Invalid value (likely encoding error)";
+          // Handle nested sleep_hours objects
+          if (key === 'sleep_hours') {
+            if (typeof value === 'number') {
+              return convertSleepIfNeeded(value).toFixed(1) + " hrs";
+            } else if (value && typeof value === 'object' && 'avg' in value) {
+              return {
+                avg: convertSleepIfNeeded(value.avg).toFixed(1) + " hrs",
+                min: convertSleepIfNeeded(value.min).toFixed(1) + " hrs",
+                max: convertSleepIfNeeded(value.max).toFixed(1) + " hrs"
+              };
+            }
           }
+          
           if (key === 'source') {
             return undefined; // Skip the source property
           }

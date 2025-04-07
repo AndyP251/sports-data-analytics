@@ -153,10 +153,10 @@ const HomePage = () => {
 
   // Stats for counter animation
   const stats = [
-    { label: 'Athletes', value: 5000, suffix: '+' },
-    { label: 'Teams', value: 50, suffix: '+' },
-    { label: 'Data Points', value: 1000000, suffix: '+' },
-    { label: 'Sports', value: 25, suffix: '' }
+    { label: 'Data Fields', value: 2800, suffix: '+' },
+    { label: 'Active Integrations', value: 12, suffix: '' },
+    { label: 'Sport Types', value: 20, suffix: '+' },
+    { label: 'Analytical Models', value: 15, suffix: '' }
   ];
   
   // Integration platforms
@@ -361,52 +361,112 @@ const HomePage = () => {
         boxSizing: 'border-box'
       }}>
         <div className="hero-section" style={{
-          marginTop: isMobile ? '1rem' : '2rem',
-          marginBottom: isMobile ? '3rem' : '4rem',
+          marginTop: isMobile ? '2rem' : '4rem',
+          marginBottom: isMobile ? '4rem' : '6rem',
           display: 'flex',
-          flexDirection: 'column',
+          flexDirection: isMobile ? 'column' : 'row',
           alignItems: 'center',
-          textAlign: 'center'
+          justifyContent: isMobile ? 'center' : 'space-between',
+          gap: isMobile ? '2rem' : '3rem',
+          textAlign: isMobile ? 'center' : 'left'
         }}>
-          <h1 style={{
-            fontSize: isSmallMobile ? '2.5rem' : (isMobile ? '3rem' : '3.5rem'),
-            marginBottom: '1rem',
-            background: 'linear-gradient(90deg, #ffffff 0%, #6e8efb 100%)',
-            WebkitBackgroundClip: 'text',
-            WebkitTextFillColor: 'transparent',
-            lineHeight: '1.2'
-          }}>Unlock Your Athletic Potential</h1>
-          <p style={{ 
-            marginBottom: '1.5rem',
-            maxWidth: '700px',
-            fontSize: isMobile ? '1rem' : '1.1rem',
-            lineHeight: '1.6',
-            color: 'var(--text-secondary)'
+          <div className="hero-content" style={{
+            maxWidth: isMobile ? '100%' : '60%',
           }}>
-            Advanced sports analytics platform that transforms your performance data 
-            into actionable insights, helping you train smarter and achieve your goals faster.
-          </p>
-          <button className="hero-cta-button" onClick={navigateToAthletePortal} style={{
-            padding: isMobile ? '0.9rem 1.8rem' : '1rem 2rem',
-            fontSize: isMobile ? '1rem' : '1.1rem',
-            borderRadius: '30px',
-            background: 'linear-gradient(90deg, #6e8efb, #a777e3)',
-            color: 'white',
-            border: 'none',
-            cursor: 'pointer',
+            <h1 style={{
+              fontSize: isSmallMobile ? '2.5rem' : (isMobile ? '3rem' : '3.5rem'),
+              marginBottom: '1.5rem',
+              color: '#ffffff',
+              fontWeight: '800',
+              lineHeight: '1.2',
+              letterSpacing: '-0.5px',
+              paddingTop: '0.5rem'
+            }}>Sports Analytics <span style={{
+              color: '#6e8efb'
+            }}>Reimagined</span></h1>
+            <p style={{ 
+              marginBottom: '2rem',
+              fontSize: isMobile ? '1.1rem' : '1.2rem',
+              lineHeight: '1.6',
+              color: 'var(--text-secondary)',
+              maxWidth: '600px'
+            }}>
+              Transform your performance data into actionable insights. 
+              Train smarter. Recover faster. Win more consistently.
+            </p>
+            <button 
+              className="hero-cta-button" 
+              onClick={navigateToAthletePortal} 
+              style={{
+                padding: '1rem 2.5rem',
+                fontSize: '1.1rem',
+                background: '#6e8efb',
+                color: 'white',
+                border: 'none',
+                borderRadius: '8px',
+                cursor: 'pointer',
+                fontWeight: '600',
+                boxShadow: '0 4px 15px rgba(110, 142, 251, 0.3)',
+                transition: 'all 0.3s ease'
+              }}
+            >
+              Explore the Platform
+            </button>
+          </div>
+          <div className="hero-graphic" style={{
+            margin: isMobile ? '1rem auto' : '2rem auto',
+            width: isMobile ? '240px' : '300px',
+            height: isMobile ? '240px' : '300px',
             display: 'flex',
             alignItems: 'center',
-            gap: '8px',
-            fontWeight: '600',
-            boxShadow: '0 4px 15px rgba(110, 142, 251, 0.4)',
-            transition: 'all 0.3s ease'
+            justifyContent: 'center',
+            position: 'relative',
+            overflow: 'hidden'
           }}>
-            Start Your Journey
-            <span className="button-arrow" style={{
-              marginLeft: '4px',
-              fontSize: '1.1rem'
-            }}>→</span>
-          </button>
+            {/* Outer glowing circle */}
+            <div style={{
+              position: 'absolute',
+              width: '100%',
+              height: '100%',
+              borderRadius: '50%',
+              background: 'radial-gradient(circle, rgba(110,142,251,0.2) 0%, rgba(16,23,42,0) 70%)',
+              boxShadow: '0 0 40px rgba(110,142,251,0.15)',
+              animation: 'pulse 3s infinite'
+            }}></div>
+            
+            {/* Middle circle with gradient border */}
+            <div style={{
+              position: 'absolute',
+              width: '85%',
+              height: '85%',
+              borderRadius: '50%',
+              border: '1px solid rgba(110,142,251,0.3)',
+              boxShadow: 'inset 0 0 20px rgba(110,142,251,0.1)'
+            }}></div>
+            
+            {/* Inner circle with data visualization */}
+            <div style={{
+              position: 'relative',
+              width: '70%',
+              height: '70%',
+              borderRadius: '50%',
+              background: 'rgba(110,142,251,0.08)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              boxShadow: 'inset 0 0 30px rgba(110,142,251,0.1)'
+            }}>
+              <svg width={isMobile ? "55" : "60"} height={isMobile ? "55" : "60"} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M21 21H3V3" stroke="#6E8EFB" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                <path d="M21 9L15.5 14.5L12.5 11.5L8.5 15.5L3 10" stroke="#6E8EFB" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                <circle cx="19.5" cy="4.5" r="1.5" fill="#A777E3"/>
+                <circle cx="15.5" cy="14.5" r="1.5" fill="#6E8EFB"/>
+                <circle cx="12.5" cy="11.5" r="1.5" fill="#A777E3"/>
+                <circle cx="8.5" cy="15.5" r="1.5" fill="#6E8EFB"/>
+                <circle cx="4.5" cy="10.5" r="1.5" fill="#A777E3"/>
+              </svg>
+            </div>
+          </div>
         </div>
 
         <div className="stats-container" style={{ 
